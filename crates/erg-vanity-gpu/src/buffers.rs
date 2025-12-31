@@ -11,6 +11,12 @@ pub const MAX_HITS: usize = 1024;
 /// Size of entropy in bytes (256-bit for 24-word mnemonic).
 pub const ENTROPY_SIZE: usize = 32;
 
+/// Maximum total size of pattern data (concatenated patterns).
+pub const MAX_PATTERN_DATA: usize = 1024;
+
+/// Maximum number of patterns.
+pub const MAX_PATTERNS: usize = 64;
+
 /// A hit record from the GPU.
 ///
 /// Padded to 64 bytes for clean GPU alignment.
@@ -21,8 +27,12 @@ pub struct GpuHit {
     pub entropy_words: [u32; 8], // 32 bytes
     /// The work item ID that found this hit
     pub work_item_id: u32, // 4 bytes
+    /// The BIP44 address index <i> in m/44'/429'/0'/0/<i>
+    pub address_index: u32, // 4 bytes
+    /// Index into the pattern list that matched
+    pub pattern_index: u32, // 4 bytes
     /// Padding to 64 bytes
-    pub _pad: [u32; 7], // 28 bytes
+    pub _pad: [u32; 5], // 20 bytes
 }
 
 // Required for ocl::Buffer<GpuHit>
@@ -43,12 +53,12 @@ impl GpuHit {
 pub struct GpuBuffers {
     /// Salt for entropy derivation (32 bytes, read-only)
     pub salt: Buffer<u8>,
-    /// Starting counter value (u64, read-only)
-    pub counter_start: Buffer<u64>,
-    /// Pattern to match (variable length, read-only)
-    pub pattern: Buffer<u8>,
-    /// Pattern length
-    pub pattern_len: Buffer<u32>,
+    /// Concatenated patterns (no NUL terminators, max 1KB)
+    pub patterns: Buffer<u8>,
+    /// Offset of each pattern in the patterns buffer
+    pub pattern_offsets: Buffer<u32>,
+    /// Length of each pattern
+    pub pattern_lens: Buffer<u32>,
     /// Hit buffer for matches (write-only from GPU)
     pub hits: Buffer<GpuHit>,
     /// Atomic hit counter (i32 to match kernel's `volatile int*`)
@@ -69,25 +79,25 @@ impl GpuBuffers {
             .len(ENTROPY_SIZE)
             .build()?;
 
-        // Counter start (single u64)
-        let counter_start = Buffer::<u64>::builder()
+        // Patterns buffer (concatenated, max 1KB)
+        let patterns = Buffer::<u8>::builder()
             .queue(queue.clone())
             .flags(MemFlags::new().read_only())
-            .len(1)
+            .len(MAX_PATTERN_DATA)
             .build()?;
 
-        // Pattern buffer (max 64 chars should be plenty)
-        let pattern = Buffer::<u8>::builder()
+        // Pattern offsets (max 64 patterns)
+        let pattern_offsets = Buffer::<u32>::builder()
             .queue(queue.clone())
             .flags(MemFlags::new().read_only())
-            .len(64)
+            .len(MAX_PATTERNS)
             .build()?;
 
-        // Pattern length
-        let pattern_len = Buffer::<u32>::builder()
+        // Pattern lengths (max 64 patterns)
+        let pattern_lens = Buffer::<u32>::builder()
             .queue(queue.clone())
             .flags(MemFlags::new().read_only())
-            .len(1)
+            .len(MAX_PATTERNS)
             .build()?;
 
         // Hit buffer
@@ -106,9 +116,9 @@ impl GpuBuffers {
 
         Ok(Self {
             salt,
-            counter_start,
-            pattern,
-            pattern_len,
+            patterns,
+            pattern_offsets,
+            pattern_lens,
             hits,
             hit_count,
             batch_size,
@@ -121,20 +131,61 @@ impl GpuBuffers {
         Ok(())
     }
 
-    /// Upload counter start to GPU.
-    pub fn upload_counter(&self, start: u64) -> Result<(), GpuError> {
-        self.counter_start.write(&[start][..]).enq()?;
-        Ok(())
-    }
+    /// Upload multiple patterns to GPU.
+    ///
+    /// Validates limits and populates patterns, pattern_offsets, and pattern_lens buffers.
+    /// Returns the number of patterns uploaded.
+    pub fn upload_patterns(&self, patterns: &[String]) -> Result<usize, GpuError> {
+        // Validate number of patterns
+        if patterns.is_empty() {
+            return Err(GpuError::Other("at least one pattern required".to_string()));
+        }
+        if patterns.len() > MAX_PATTERNS {
+            return Err(GpuError::Other(format!(
+                "too many patterns: {} exceeds {} limit",
+                patterns.len(),
+                MAX_PATTERNS
+            )));
+        }
 
-    /// Upload pattern to GPU.
-    pub fn upload_pattern(&self, pattern: &[u8]) -> Result<(), GpuError> {
-        let len = pattern.len().min(64) as u32;
-        let mut padded = [0u8; 64];
-        padded[..pattern.len().min(64)].copy_from_slice(&pattern[..pattern.len().min(64)]);
-        self.pattern.write(&padded[..]).enq()?;
-        self.pattern_len.write(&[len][..]).enq()?;
-        Ok(())
+        // Build concatenated pattern data
+        let mut data = Vec::with_capacity(MAX_PATTERN_DATA);
+        let mut offsets = Vec::with_capacity(patterns.len());
+        let mut lens = Vec::with_capacity(patterns.len());
+
+        for pattern in patterns {
+            let offset = data.len();
+            let len = pattern.len();
+
+            offsets.push(offset as u32);
+            lens.push(len as u32);
+            data.extend_from_slice(pattern.as_bytes());
+        }
+
+        // Validate total size
+        if data.len() > MAX_PATTERN_DATA {
+            return Err(GpuError::Other(format!(
+                "pattern data too large: {} bytes exceeds {} limit",
+                data.len(),
+                MAX_PATTERN_DATA
+            )));
+        }
+
+        // Pad data to buffer size
+        data.resize(MAX_PATTERN_DATA, 0);
+        self.patterns.write(&data).enq()?;
+
+        // Pad and upload offsets
+        let mut offset_data = vec![0u32; MAX_PATTERNS];
+        offset_data[..offsets.len()].copy_from_slice(&offsets);
+        self.pattern_offsets.write(&offset_data).enq()?;
+
+        // Pad and upload lengths
+        let mut len_data = vec![0u32; MAX_PATTERNS];
+        len_data[..lens.len()].copy_from_slice(&lens);
+        self.pattern_lens.write(&len_data).enq()?;
+
+        Ok(patterns.len())
     }
 
     /// Reset hit counter to 0.
@@ -178,11 +229,26 @@ mod tests {
 
     #[test]
     fn test_entropy_bytes_roundtrip() {
-        let mut hit = GpuHit::default();
-        hit.entropy_words = [0x01020304, 0x05060708, 0x090a0b0c, 0x0d0e0f10,
-                            0x11121314, 0x15161718, 0x191a1b1c, 0x1d1e1f20];
+        let hit = GpuHit {
+            entropy_words: [
+                0x01020304, 0x05060708, 0x090a0b0c, 0x0d0e0f10, 0x11121314, 0x15161718, 0x191a1b1c,
+                0x1d1e1f20,
+            ],
+            ..Default::default()
+        };
         let bytes = hit.entropy_bytes();
         assert_eq!(bytes[0], 0x04); // LE: low byte first
         assert_eq!(bytes[3], 0x01);
+    }
+
+    #[test]
+    fn test_gpu_hit_new_fields() {
+        let hit = GpuHit {
+            address_index: 5,
+            pattern_index: 2,
+            ..Default::default()
+        };
+        assert_eq!(hit.address_index, 5);
+        assert_eq!(hit.pattern_index, 2);
     }
 }

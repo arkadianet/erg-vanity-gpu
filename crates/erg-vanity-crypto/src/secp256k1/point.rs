@@ -59,10 +59,7 @@ impl Point {
 
     /// Generator point G.
     pub fn generator() -> Self {
-        Self::from_affine(
-            FieldElement::from_limbs(GX),
-            FieldElement::from_limbs(GY),
-        )
+        Self::from_affine(FieldElement::from_limbs(GX), FieldElement::from_limbs(GY))
     }
 
     /// Check if this is the point at infinity.
@@ -112,9 +109,16 @@ impl Point {
         let y3 = m.mul(&s.sub(&x3)).sub(&y4_8);
 
         // Z3 = 2*Y*Z
-        let z3 = self.y.mul(&self.z).mul(&FieldElement::from_limbs([2, 0, 0, 0]));
+        let z3 = self
+            .y
+            .mul(&self.z)
+            .mul(&FieldElement::from_limbs([2, 0, 0, 0]));
 
-        Self { x: x3, y: y3, z: z3 }
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     /// Point addition: P1 + P2.
@@ -170,7 +174,11 @@ impl Point {
         // Z3 = H*Z1*Z2
         let z3 = h.mul(&self.z).mul(&other.z);
 
-        Self { x: x3, y: y3, z: z3 }
+        Self {
+            x: x3,
+            y: y3,
+            z: z3,
+        }
     }
 
     /// Scalar multiplication: k * P.
@@ -300,7 +308,8 @@ mod tests {
     #[test]
     fn test_scalar_mul_two() {
         let g = Point::generator();
-        let two = scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000002");
+        let two =
+            scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000002");
 
         let result = g.mul(&two);
         let expected = g.double();

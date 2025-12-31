@@ -13,6 +13,11 @@ __constant char BASE58_ALPHABET[58] = {
     't', 'u', 'v', 'w', 'x', 'y', 'z'
 };
 
+// Convert uppercase to lowercase for case-insensitive matching
+inline char to_lower(char c) {
+    return (c >= 'A' && c <= 'Z') ? (c + 32) : c;
+}
+
 // Reverse lookup: ASCII -> Base58 index (0-57), or 0xFF for invalid
 __constant uchar BASE58_DECODE[128] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,  // 0-7
@@ -147,6 +152,66 @@ inline int base58_check_prefix_global(
 }
 
 #undef BASE58_CHECK_PREFIX_BODY
+
+// Case-insensitive prefix check (__global version)
+// Pattern MUST be pre-lowercased by CPU. We lowercase each generated Base58 char for comparison.
+inline int base58_check_prefix_global_icase(
+    __private const uchar* addr_bytes,
+    __global const char* prefix,       // Pre-lowercased pattern
+    int prefix_len
+) {
+    // Count leading zeros in address
+    int leading_zeros = 0;
+    while (leading_zeros < 38 && addr_bytes[leading_zeros] == 0u)
+        leading_zeros++;
+
+    // Count leading '1's in pattern
+    int prefix_ones = 0;
+    while (prefix_ones < prefix_len && prefix[prefix_ones] == '1')
+        prefix_ones++;
+
+    // If pattern is all '1's, just check leading zeros count
+    if (prefix_ones == prefix_len)
+        return (leading_zeros >= prefix_ones) ? 1 : 0;
+
+    // Leading zero count must match leading '1' count
+    if (leading_zeros != prefix_ones)
+        return 0;
+
+    // Convert address bytes to Base58 digits (values 0-57, stored in buf)
+    uchar buf[53];
+    int buf_len = 0;
+    for (int i = leading_zeros; i < 38; i++) {
+        int carry = (int)addr_bytes[i];
+        for (int j = 0; j < buf_len; j++) {
+            carry += (int)buf[j] * 256;
+            buf[j] = (uchar)(carry % 58);
+            carry /= 58;
+        }
+        while (carry > 0) {
+            if (buf_len >= 53) return 0;
+            buf[buf_len++] = (uchar)(carry % 58);
+            carry /= 58;
+        }
+    }
+
+    // Compare: convert each Base58 digit to char, lowercase it, compare to pattern
+    for (int i = prefix_ones; i < prefix_len; i++) {
+        char expected = prefix[i];  // Already lowercase from CPU
+        int digit_idx = buf_len - 1 - (i - prefix_ones);
+        if (digit_idx < 0)
+            return 0;
+
+        // Get the actual Base58 character for this digit
+        char actual = BASE58_ALPHABET[buf[digit_idx]];
+        // Lowercase for case-insensitive comparison
+        char actual_lower = to_lower(actual);
+
+        if (actual_lower != expected)
+            return 0;
+    }
+    return 1;
+}
 
 // Full Base58 encode for 38-byte address
 // Returns encoded length (typically 51 chars for Ergo mainnet P2PK)

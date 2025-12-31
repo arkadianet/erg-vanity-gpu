@@ -16,7 +16,7 @@ const HLEN: usize = 64;
 pub fn derive(password: &[u8], salt: &[u8], iterations: u32, output: &mut [u8]) {
     assert!(iterations >= 1, "PBKDF2 iterations must be >= 1");
 
-    let num_blocks = (output.len() + HLEN - 1) / HLEN;
+    let num_blocks = output.len().div_ceil(HLEN);
 
     for block_idx in 0..num_blocks {
         let block_num = (block_idx + 1) as u32; // 1-indexed
@@ -119,7 +119,11 @@ mod tests {
             (b"password".as_slice(), b"salt".as_slice(), 1u32),
             (b"password", b"salt", 2),
             (b"password", b"salt", 4096),
-            (b"passwordPASSWORDpassword", b"saltSALTsaltSALTsaltSALTsaltSALTsalt", 4096),
+            (
+                b"passwordPASSWORDpassword",
+                b"saltSALTsaltSALTsaltSALTsaltSALTsalt",
+                4096,
+            ),
             (b"", b"salt", 1),
             (b"password", b"", 1),
         ];
@@ -132,7 +136,8 @@ mod tests {
             pbkdf2_hmac::<Sha512>(password, salt, iterations, &mut ref_result);
 
             assert_eq!(
-                our_result, ref_result,
+                our_result,
+                ref_result,
                 "mismatch for password={:?}, salt={:?}, iterations={}",
                 String::from_utf8_lossy(password),
                 String::from_utf8_lossy(salt),

@@ -67,7 +67,9 @@ pub fn generate_address_from_entropy(
     let ergo_key = derive_ergo_first_key(&master).map_err(|_| "derivation failed")?;
 
     // 5. Private key → Public key
-    let scalar = ergo_key.private_key_scalar().ok_or("invalid private key scalar")?;
+    let scalar = ergo_key
+        .private_key_scalar()
+        .ok_or("invalid private key scalar")?;
     let pubkey = PublicKey::from_private_key(&scalar).ok_or("invalid public key")?;
 
     // 6. Public key → Address

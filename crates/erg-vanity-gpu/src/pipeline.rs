@@ -12,13 +12,52 @@ use rand::RngCore;
 pub struct VanityConfig {
     /// Number of work items per batch (tune for your GPU).
     pub batch_size: usize,
+    /// Case-insensitive matching.
+    pub ignore_case: bool,
+    /// Number of BIP44 address indices to check per seed (m/44'/429'/0'/0/{0..N-1}).
+    pub num_indices: u32,
 }
 
 impl Default for VanityConfig {
     fn default() -> Self {
         Self {
             batch_size: 1 << 18, // 262,144 - conservative default
+            ignore_case: false,
+            num_indices: 1,
         }
+    }
+}
+
+/// Sort results deterministically for stable output ordering.
+///
+/// GPU hit write order is nondeterministic due to `atomic_inc` across work items.
+/// This produces stable output for a batch.
+///
+/// Sorting key (ascending):
+/// 1) address_index
+/// 2) pattern_index
+/// 3) work_item_id (tie-breaker)
+pub(crate) fn sort_results_deterministically(results: &mut [VanityResult]) {
+    results.sort_by(|a, b| {
+        a.address_index
+            .cmp(&b.address_index)
+            .then_with(|| a.pattern_index.cmp(&b.pattern_index))
+            .then_with(|| a.work_item_id.cmp(&b.work_item_id))
+    });
+}
+
+/// Prepare patterns for GPU upload.
+///
+/// When `ignore_case` is true, returns lowercased patterns (GPU kernel expects pre-lowercased).
+/// When false, returns None (caller should use original patterns directly to avoid cloning).
+pub(crate) fn prepare_patterns_for_gpu(
+    patterns: &[String],
+    ignore_case: bool,
+) -> Option<Vec<String>> {
+    if ignore_case {
+        Some(patterns.iter().map(|p| p.to_ascii_lowercase()).collect())
+    } else {
+        None
     }
 }
 
@@ -29,6 +68,10 @@ pub struct VanityResult {
     pub entropy: [u8; 32],
     /// The work item ID that found this hit.
     pub work_item_id: u32,
+    /// The BIP44 address index <i> in m/44'/429'/0'/0/<i>.
+    pub address_index: u32,
+    /// Index into the pattern list that matched.
+    pub pattern_index: u32,
     /// The Ergo address (Base58 encoded).
     pub address: String,
     /// The BIP39 mnemonic (24 words).
@@ -41,18 +84,29 @@ pub struct VanityPipeline {
     #[allow(dead_code)]
     program: GpuProgram,
     buffers: GpuBuffers,
+    #[allow(dead_code)]
     wordlist: WordlistBuffers,
     kernel: Kernel,
-    pattern: String,
+    patterns: Vec<String>,
+    #[allow(dead_code)]
+    num_patterns: u32,
+    ignore_case: bool,
+    num_indices: u32,
+    #[allow(dead_code)]
     salt: [u8; 32],
     counter: u64,
     cfg: VanityConfig,
     addresses_checked: u64,
+    hits_dropped_total: u64,
 }
 
 impl VanityPipeline {
     /// Create a new vanity search pipeline.
-    pub fn new(pattern: &str, cfg: VanityConfig) -> Result<Self, GpuError> {
+    pub fn new(patterns: &[String], cfg: VanityConfig) -> Result<Self, GpuError> {
+        if patterns.is_empty() {
+            return Err(GpuError::Other("at least one pattern required".to_string()));
+        }
+
         let ctx = GpuContext::new()?;
         let program = GpuProgram::vanity(&ctx)?;
         let queue = ctx.queue();
@@ -66,25 +120,33 @@ impl VanityPipeline {
         rand::thread_rng().fill_bytes(&mut salt);
         buffers.upload_salt(&salt)?;
 
-        // Upload pattern
-        buffers.upload_pattern(pattern.as_bytes())?;
+        // Upload patterns (lowercase for GPU if ignore_case, keep originals for display)
+        let patterns_for_gpu_storage = prepare_patterns_for_gpu(patterns, cfg.ignore_case);
+        let patterns_for_gpu: &[String] = patterns_for_gpu_storage.as_deref().unwrap_or(patterns);
+        let num_patterns = buffers.upload_patterns(patterns_for_gpu)? as u32;
 
         // Build kernel with all arguments matching vanity_search signature:
-        // salt, counter_start, words8, word_lens, pattern, pattern_len, hits, hit_count, max_hits
+        // salt, counter_start, words8, word_lens,
+        // patterns, pattern_offsets, pattern_lens, num_patterns, ignore_case, num_indices,
+        // hits, hit_count, max_hits
         let kernel = Kernel::builder()
             .program(program.program())
             .name("vanity_search")
             .queue(queue.clone())
             .global_work_size(cfg.batch_size)
-            .arg(&buffers.salt)              // arg 0: salt
-            .arg(0u64)                       // arg 1: counter_start (will be updated)
-            .arg(&wordlist.words8)           // arg 2: words8
-            .arg(&wordlist.lens)             // arg 3: word_lens
-            .arg(&buffers.pattern)           // arg 4: pattern
-            .arg(pattern.len() as u32)       // arg 5: pattern_len
-            .arg(&buffers.hits)              // arg 6: hits
-            .arg(&buffers.hit_count)         // arg 7: hit_count
-            .arg(MAX_HITS as u32)            // arg 8: max_hits
+            .arg(&buffers.salt) // arg 0: salt
+            .arg(0u64) // arg 1: counter_start (scalar, updated each batch)
+            .arg(&wordlist.words8) // arg 2: words8
+            .arg(&wordlist.lens) // arg 3: word_lens
+            .arg(&buffers.patterns) // arg 4: patterns
+            .arg(&buffers.pattern_offsets) // arg 5: pattern_offsets
+            .arg(&buffers.pattern_lens) // arg 6: pattern_lens
+            .arg(num_patterns) // arg 7: num_patterns
+            .arg(if cfg.ignore_case { 1u32 } else { 0u32 }) // arg 8: ignore_case
+            .arg(cfg.num_indices) // arg 9: num_indices
+            .arg(&buffers.hits) // arg 10: hits
+            .arg(&buffers.hit_count) // arg 11: hit_count
+            .arg(MAX_HITS as u32) // arg 12: max_hits
             .build()?;
 
         Ok(Self {
@@ -93,11 +155,15 @@ impl VanityPipeline {
             buffers,
             wordlist,
             kernel,
-            pattern: pattern.to_string(),
+            patterns: patterns.to_vec(),
+            num_patterns,
+            ignore_case: cfg.ignore_case,
+            num_indices: cfg.num_indices,
             salt,
             counter: 0,
             cfg,
             addresses_checked: 0,
+            hits_dropped_total: 0,
         })
     }
 
@@ -111,9 +177,14 @@ impl VanityPipeline {
         self.addresses_checked
     }
 
+    /// Get the total number of hits dropped due to buffer overflow.
+    pub fn hits_dropped_total(&self) -> u64 {
+        self.hits_dropped_total
+    }
+
     /// Run one batch of the search.
-    /// Returns Some(result) if a match was found, None otherwise.
-    pub fn run_batch(&mut self) -> Result<Option<VanityResult>, GpuError> {
+    /// Returns all verified matches from this batch.
+    pub fn run_batch(&mut self) -> Result<Vec<VanityResult>, GpuError> {
         // Reset hit counter
         self.buffers.reset_hits()?;
 
@@ -127,32 +198,44 @@ impl VanityPipeline {
         self.ctx.queue().finish()?;
 
         // Update counter for next batch
+        // Each work item checks num_indices addresses
         self.counter = self.counter.wrapping_add(self.cfg.batch_size as u64);
-        self.addresses_checked += self.cfg.batch_size as u64;
+        self.addresses_checked += (self.cfg.batch_size as u64) * (self.num_indices as u64);
 
-        // Check for hits (clamp defensively even though overflow "can't happen")
-        let mut hit_count = self.buffers.read_hit_count()? as usize;
-        hit_count = hit_count.min(MAX_HITS);
+        // Check for hits (read raw count, may exceed MAX_HITS)
+        let raw_hit_count = self.buffers.read_hit_count()? as usize;
+        let hit_count = raw_hit_count.min(MAX_HITS);
+
+        // Track dropped hits (don't spam warnings here - caller can check hits_dropped_total)
+        if raw_hit_count > MAX_HITS {
+            self.hits_dropped_total += (raw_hit_count - MAX_HITS) as u64;
+        }
+
         if hit_count == 0 {
-            return Ok(None);
+            return Ok(Vec::new());
         }
 
         let hits = self.buffers.read_hits(hit_count)?;
 
         // Verify each hit on CPU
+        let mut results = Vec::new();
         for hit in hits {
             if let Some(result) = self.verify_hit(&hit)? {
-                return Ok(Some(result));
+                results.push(result);
             }
         }
 
-        Ok(None)
+        // Sort for stable output (GPU atomic_inc order is nondeterministic)
+        sort_results_deterministically(&mut results);
+
+        Ok(results)
     }
 
     /// Search until a match is found (blocking).
     pub fn search_blocking(&mut self) -> Result<VanityResult, GpuError> {
         loop {
-            if let Some(result) = self.run_batch()? {
+            let results = self.run_batch()?;
+            if let Some(result) = results.into_iter().next() {
                 return Ok(result);
             }
         }
@@ -163,7 +246,7 @@ impl VanityPipeline {
         use erg_vanity_address::encode_p2pk_mainnet;
         use erg_vanity_bip::bip32::ExtendedPrivateKey;
         use erg_vanity_bip::bip39::{entropy_to_mnemonic, mnemonic_to_seed};
-        use erg_vanity_bip::bip44::derive_ergo_first_key;
+        use erg_vanity_bip::bip44::derive_ergo_key;
         use erg_vanity_crypto::secp256k1::pubkey::PublicKey;
         use erg_vanity_crypto::secp256k1::scalar::Scalar;
 
@@ -180,8 +263,8 @@ impl VanityPipeline {
         let master = ExtendedPrivateKey::from_seed(&seed)
             .map_err(|e| GpuError::Other(format!("bip32 error: {:?}", e)))?;
 
-        // Derive Ergo key at m/44'/429'/0'/0/0
-        let ergo_key = derive_ergo_first_key(&master)
+        // Derive Ergo key at m/44'/429'/0'/0/<address_index>
+        let ergo_key = derive_ergo_key(&master, 0, 0, hit.address_index)
             .map_err(|e| GpuError::Other(format!("bip44 error: {:?}", e)))?;
 
         // Get public key
@@ -194,19 +277,36 @@ impl VanityPipeline {
         // Encode address
         let address = encode_p2pk_mainnet(pubkey.as_bytes());
 
-        // Verify prefix match
-        if address.starts_with(&self.pattern) {
+        // Verify prefix match (must mirror ignore_case exactly, use ASCII-only compare)
+        let pattern_idx = hit.pattern_index as usize;
+        let pattern = self.patterns.get(pattern_idx).ok_or_else(|| {
+            GpuError::Other(format!("pattern_index {} out of range", pattern_idx))
+        })?;
+
+        let matches = if self.ignore_case {
+            // ASCII-only case-insensitive compare (no Unicode, no allocation)
+            address
+                .get(..pattern.len())
+                .map(|prefix| prefix.eq_ignore_ascii_case(pattern))
+                .unwrap_or(false)
+        } else {
+            address.starts_with(pattern)
+        };
+
+        if matches {
             Ok(Some(VanityResult {
                 entropy,
                 work_item_id: hit.work_item_id,
+                address_index: hit.address_index,
+                pattern_index: hit.pattern_index,
                 address,
                 mnemonic,
             }))
         } else {
             // False positive (shouldn't happen with correct GPU code)
             eprintln!(
-                "Warning: GPU hit did not verify on CPU (addr={}, pattern={})",
-                address, self.pattern
+                "Warning: GPU hit did not verify on CPU (addr={}, pattern={}, index={}, icase={})",
+                address, pattern, hit.address_index, self.ignore_case
             );
             Ok(None)
         }
@@ -219,18 +319,112 @@ mod tests {
 
     #[test]
     fn test_pipeline_compiles() {
-        // Just test that we can create a pipeline
-        let cfg = VanityConfig {
-            batch_size: 1024,
+        // Skip if no GPU available
+        let Some(_ctx) = crate::context::try_ctx() else {
+            return;
         };
 
-        match VanityPipeline::new("9", cfg) {
-            Ok(pipe) => {
-                println!("Pipeline created: {}", pipe.device_info());
-            }
-            Err(e) => {
-                println!("No GPU available: {}", e);
-            }
+        let cfg = VanityConfig {
+            batch_size: 1024,
+            ignore_case: false,
+            num_indices: 1,
+        };
+
+        let pipe = VanityPipeline::new(&["9".to_string()], cfg).expect("pipeline creation failed");
+        println!("Pipeline created: {}", pipe.device_info());
+    }
+
+    /// Helper to create a dummy VanityResult for ordering tests (no GPU needed).
+    fn dummy_result(work_item_id: u32, address_index: u32, pattern_index: u32) -> VanityResult {
+        VanityResult {
+            entropy: [0u8; 32],
+            work_item_id,
+            address_index,
+            pattern_index,
+            address: String::new(),
+            mnemonic: String::new(),
         }
+    }
+
+    #[test]
+    fn test_sort_results_deterministically_basic() {
+        // Scrambled input simulating nondeterministic GPU atomic_inc order
+        let mut results = vec![
+            dummy_result(100, 2, 0),
+            dummy_result(50, 0, 1),
+            dummy_result(200, 1, 0),
+            dummy_result(75, 0, 0),
+            dummy_result(25, 1, 1),
+        ];
+
+        sort_results_deterministically(&mut results);
+
+        // Expected order: address_index ASC, pattern_index ASC, work_item_id ASC
+        // (0,0,75), (0,1,50), (1,0,200), (1,1,25), (2,0,100)
+        assert_eq!(
+            results
+                .iter()
+                .map(|r| (r.address_index, r.pattern_index, r.work_item_id))
+                .collect::<Vec<_>>(),
+            vec![(0, 0, 75), (0, 1, 50), (1, 0, 200), (1, 1, 25), (2, 0, 100)]
+        );
+    }
+
+    #[test]
+    fn test_sort_results_deterministically_ties() {
+        // Test tie-breaking: same address_index, different pattern_index
+        // and same (address_index, pattern_index), different work_item_id
+        let mut results = vec![
+            dummy_result(300, 0, 2),
+            dummy_result(100, 0, 1),
+            dummy_result(200, 0, 1), // tie on (0,1), work_item_id breaks it
+            dummy_result(50, 0, 0),
+        ];
+
+        sort_results_deterministically(&mut results);
+
+        // Expected: (0,0,50), (0,1,100), (0,1,200), (0,2,300)
+        assert_eq!(
+            results
+                .iter()
+                .map(|r| (r.address_index, r.pattern_index, r.work_item_id))
+                .collect::<Vec<_>>(),
+            vec![(0, 0, 50), (0, 1, 100), (0, 1, 200), (0, 2, 300)]
+        );
+    }
+
+    #[test]
+    fn test_sort_results_deterministically_empty() {
+        let mut results: Vec<VanityResult> = vec![];
+        sort_results_deterministically(&mut results);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_sort_results_deterministically_single() {
+        let mut results = vec![dummy_result(42, 5, 3)];
+        sort_results_deterministically(&mut results);
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            (
+                results[0].address_index,
+                results[0].pattern_index,
+                results[0].work_item_id
+            ),
+            (5, 3, 42)
+        );
+    }
+
+    #[test]
+    fn test_prepare_patterns_for_gpu_lowercases_when_ignore_case() {
+        let patterns = vec!["9ABC".to_string(), "9eRgO".to_string()];
+
+        // ignore_case=true: returns lowercased patterns
+        let lowered = prepare_patterns_for_gpu(&patterns, true).unwrap();
+        assert_eq!(lowered, vec!["9abc", "9ergo"]);
+
+        // ignore_case=false: returns None (use originals directly)
+        let none = prepare_patterns_for_gpu(&patterns, false);
+        assert!(none.is_none());
     }
 }

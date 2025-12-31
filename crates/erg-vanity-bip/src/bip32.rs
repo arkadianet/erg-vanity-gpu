@@ -191,7 +191,7 @@ mod tests {
         // BIP32 test vector 1, path m/0'/1
         let seed = hex::decode("000102030405060708090a0b0c0d0e0f").unwrap();
         let master = ExtendedPrivateKey::from_seed(&seed).unwrap();
-        let child = master.derive_path(&[HARDENED | 0, 1]).unwrap();
+        let child = master.derive_path(&[HARDENED, 1]).unwrap();
 
         assert_eq!(
             to_hex(child.private_key()),
@@ -208,7 +208,7 @@ mod tests {
         // BIP32 test vector 1, path m/0'/1/2'
         let seed = hex::decode("000102030405060708090a0b0c0d0e0f").unwrap();
         let master = ExtendedPrivateKey::from_seed(&seed).unwrap();
-        let derived = master.derive_path(&[HARDENED | 0, 1, HARDENED | 2]).unwrap();
+        let derived = master.derive_path(&[HARDENED, 1, HARDENED | 2]).unwrap();
 
         assert_eq!(
             to_hex(derived.private_key()),

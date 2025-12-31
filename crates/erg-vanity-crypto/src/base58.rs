@@ -92,11 +92,7 @@ mod tests {
         for data in test_cases {
             let our_result = encode(data);
             let ref_result = bs58::encode(data).into_string();
-            assert_eq!(
-                our_result, ref_result,
-                "mismatch for data {:?}",
-                data
-            );
+            assert_eq!(our_result, ref_result, "mismatch for data {:?}", data);
         }
     }
 
