@@ -10,10 +10,13 @@
 // Hit structure: stores entropy that produced a matching address
 // Padded to 64 bytes for alignment and easy host-side mapping
 // Uses uint[8] to match Rust's GpuHit layout (entropy as LE u32 words)
+// MUST match Rust GpuHit struct exactly!
 typedef struct {
     uint entropy_words[8];  // 32 bytes as LE u32 words
-    uint work_item_id;
-    uint _pad[7];  // 32 + 4 + 28 = 64 bytes
+    uint work_item_id;      // 4 bytes
+    uint address_index;     // 4 bytes: BIP44 index <i> in m/44'/429'/0'/0/<i>
+    uint pattern_index;     // 4 bytes: which pattern matched
+    uint _pad[5];           // 20 bytes padding (32 + 4 + 4 + 4 + 20 = 64 bytes)
 } VanityHit;
 
 // Generate entropy from work item ID, counter, and salt
@@ -69,6 +72,8 @@ inline void build_ergo_address(
 }
 
 // Main vanity search kernel
+// Supports multiple patterns, multiple address indices, and case-insensitive matching.
+// Deterministic ordering: first match wins by (address_index ascending, pattern list order).
 __kernel void vanity_search(
     // Entropy generation
     __global const uchar* salt,           // 32 bytes
@@ -76,9 +81,13 @@ __kernel void vanity_search(
     // Wordlist (for BIP39)
     __global const uchar* words8,         // 2048 * 8 bytes
     __global const uchar* word_lens,      // 2048 bytes
-    // Pattern matching
-    __global const char* pattern,         // Null-terminated prefix to match
-    uint pattern_len,                     // Length of pattern
+    // Pattern matching (multi-pattern support)
+    __global const char* patterns,        // Concatenated patterns (no NUL terminators)
+    __global const uint* pattern_offsets, // Offset of each pattern
+    __global const uint* pattern_lens,    // Length of each pattern
+    uint num_patterns,                    // Number of patterns
+    uint ignore_case,                     // 0 = case-sensitive, 1 = case-insensitive
+    uint num_indices,                     // Number of address indices to check per seed
     // Output
     __global VanityHit* hits,             // Hit buffer
     __global volatile int* hit_count,     // Atomic counter
@@ -90,50 +99,74 @@ __kernel void vanity_search(
     uchar entropy[32];
     generate_entropy(gid, counter_start, salt, entropy);
 
-    // Step 2: Entropy → BIP39 seed (PBKDF2 - dominant cost)
+    // Step 2: Entropy → BIP39 seed (PBKDF2 - dominant cost, done ONCE per work item)
     uchar seed[64];
     bip39_entropy_to_seed(entropy, words8, word_lens, seed);
 
-    // Step 3: BIP32 derivation → final private key
-    uchar private_key[32];
-    int bip32_err = bip32_derive_ergo(seed, private_key);
-    if (bip32_err != 0) {
+    // Step 3: Derive to external chain m/44'/429'/0'/0 (done ONCE, amortizes cost)
+    uchar external_key[32], external_chain_code[32];
+    if (bip32_derive_ergo_external_chain(seed, external_key, external_chain_code) != 0) {
         // Invalid key (astronomically rare), skip this work item
         return;
     }
 
-    // Step 4: Private key → public key
-    uint key_limbs[8];
-    sc_from_bytes(key_limbs, private_key);
+    // Step 4-6: Loop over address indices (outer) and patterns (inner)
+    // First match wins by (address_index ascending, pattern list order)
+    for (uint addr_idx = 0; addr_idx < num_indices; addr_idx++) {
+        // Derive key for this address index: m/44'/429'/0'/0/<addr_idx>
+        uchar private_key[32];
+        if (bip32_derive_address_index(external_key, external_chain_code, addr_idx, private_key) != 0) {
+            continue;  // Skip invalid (astronomically rare)
+        }
 
-    uint point[24];
-    pt_mul_generator(point, key_limbs);
+        // Private key → public key
+        uint key_limbs[8];
+        sc_from_bytes(key_limbs, private_key);
 
-    uchar pubkey[33];
-    if (pt_to_compressed_pubkey(pubkey, point) != 0) {
-        // Point at infinity (shouldn't happen with valid key)
-        return;
-    }
+        uint point[24];
+        pt_mul_generator(point, key_limbs);
 
-    // Step 5: Build Ergo address
-    uchar addr_bytes[38];
-    build_ergo_address(pubkey, addr_bytes);
+        uchar pubkey[33];
+        if (pt_to_compressed_pubkey(pubkey, point) != 0) {
+            continue;  // Point at infinity (shouldn't happen)
+        }
 
-    // Step 6: Check if address matches pattern
-    if (base58_check_prefix_global(addr_bytes, pattern, (int)pattern_len)) {
-        // Match found! Store hit with entropy packed as LE u32 words
-        uint hit_idx = (uint)atomic_inc(hit_count);
-        if (hit_idx < max_hits) {
-            for (int w = 0; w < 8; w++) {
-                int o = w * 4;
-                uint x =
-                    ((uint)entropy[o + 0]) |
-                    ((uint)entropy[o + 1] << 8) |
-                    ((uint)entropy[o + 2] << 16) |
-                    ((uint)entropy[o + 3] << 24);
-                hits[hit_idx].entropy_words[w] = x;
+        // Build Ergo address
+        uchar addr_bytes[38];
+        build_ergo_address(pubkey, addr_bytes);
+
+        // Check each pattern (inner loop)
+        for (uint p = 0; p < num_patterns; p++) {
+            uint offset = pattern_offsets[p];
+            int len = (int)pattern_lens[p];
+
+            int match;
+            if (ignore_case) {
+                match = base58_check_prefix_global_icase(addr_bytes, &patterns[offset], len);
+            } else {
+                match = base58_check_prefix_global(addr_bytes, &patterns[offset], len);
             }
-            hits[hit_idx].work_item_id = gid;
+
+            if (match) {
+                // Match found! Store hit with entropy packed as LE u32 words
+                uint hit_idx = (uint)atomic_inc(hit_count);
+                if (hit_idx < max_hits) {
+                    for (int w = 0; w < 8; w++) {
+                        int o = w * 4;
+                        uint x =
+                            ((uint)entropy[o + 0]) |
+                            ((uint)entropy[o + 1] << 8) |
+                            ((uint)entropy[o + 2] << 16) |
+                            ((uint)entropy[o + 3] << 24);
+                        hits[hit_idx].entropy_words[w] = x;
+                    }
+                    hits[hit_idx].work_item_id = gid;
+                    hits[hit_idx].address_index = addr_idx;
+                    hits[hit_idx].pattern_index = p;
+                }
+                // First match wins - exit both loops
+                return;
+            }
         }
     }
 }

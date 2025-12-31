@@ -216,7 +216,9 @@ mod tests {
     #[test]
     fn test_entropy_to_mnemonic_24_words() {
         // All zeros → 24 words
-        let entropy = hex::decode("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+        let entropy =
+            hex::decode("0000000000000000000000000000000000000000000000000000000000000000")
+                .unwrap();
         let mnemonic = entropy_to_mnemonic(&entropy).unwrap();
         let words: Vec<&str> = mnemonic.split_whitespace().collect();
         assert_eq!(words.len(), 24);

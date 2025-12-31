@@ -5,10 +5,10 @@
 
 #![forbid(unsafe_code)]
 
-pub mod sha256;
-pub mod sha512;
+pub mod base58;
+pub mod blake2b;
 pub mod hmac;
 pub mod pbkdf2;
 pub mod secp256k1;
-pub mod blake2b;
-pub mod base58;
+pub mod sha256;
+pub mod sha512;

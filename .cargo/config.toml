@@ -1,0 +1,7 @@
+# Workspace-level Cargo configuration
+#
+# OpenCL kernel compilation in erg-vanity-gpu can require a larger stack.
+# This setting ensures tests pass without manual RUST_MIN_STACK exports.
+
+[env]
+RUST_MIN_STACK = "16777216"

@@ -179,6 +179,88 @@ inline int bip32_derive_normal(
     return 0;
 }
 
+// Ergo derivation to external chain: m/44'/429'/0'/0
+// Derives key and chain code at the external chain level (before final address index).
+// Use this to amortize PBKDF2 cost when checking multiple address indices.
+// Returns 0 on success, non-zero on error
+inline int bip32_derive_ergo_external_chain(
+    __private const uchar* seed,
+    __private uchar* key_out,        // 32 bytes: key at m/44'/429'/0'/0
+    __private uchar* chain_code_out  // 32 bytes: chain code at m/44'/429'/0'/0
+) {
+    uchar key[32], chain_code[32];
+    uchar child_key[32], child_chain_code[32];
+
+    // Master key
+    if (bip32_master_key(seed, key, chain_code) != 0) {
+        return 1;
+    }
+
+    // m/44' (hardened)
+    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 44u,
+                               child_key, child_chain_code) != 0) {
+        return 2;
+    }
+    for (int i = 0; i < 32; i++) {
+        key[i] = child_key[i];
+        chain_code[i] = child_chain_code[i];
+    }
+
+    // m/44'/429' (hardened)
+    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 429u,
+                               child_key, child_chain_code) != 0) {
+        return 3;
+    }
+    for (int i = 0; i < 32; i++) {
+        key[i] = child_key[i];
+        chain_code[i] = child_chain_code[i];
+    }
+
+    // m/44'/429'/0' (hardened)
+    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 0u,
+                               child_key, child_chain_code) != 0) {
+        return 4;
+    }
+    for (int i = 0; i < 32; i++) {
+        key[i] = child_key[i];
+        chain_code[i] = child_chain_code[i];
+    }
+
+    // m/44'/429'/0'/0 (normal) - external chain
+    if (bip32_derive_normal(key, chain_code, 0u,
+                             child_key, child_chain_code) != 0) {
+        return 5;
+    }
+
+    // Output key and chain code at external chain level
+    for (int i = 0; i < 32; i++) {
+        key_out[i] = child_key[i];
+        chain_code_out[i] = child_chain_code[i];
+    }
+
+    return 0;
+}
+
+// Derive final address key from external chain state.
+// Derives m/44'/429'/0'/0/<address_index> from the external chain key/chain_code.
+// Returns 0 on success, non-zero on error
+inline int bip32_derive_address_index(
+    __private const uchar* external_key,
+    __private const uchar* external_chain_code,
+    uint address_index,
+    __private uchar* final_key
+) {
+    uchar child_key[32], child_chain_code[32];
+    if (bip32_derive_normal(external_key, external_chain_code, address_index,
+                             child_key, child_chain_code) != 0) {
+        return 1;
+    }
+    for (int i = 0; i < 32; i++) {
+        final_key[i] = child_key[i];
+    }
+    return 0;
+}
+
 // Ergo derivation path: m/44'/429'/0'/0/0
 // Derives final private key from BIP39 seed.
 // Returns 0 on success, non-zero on error

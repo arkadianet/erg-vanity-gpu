@@ -1,13 +1,11 @@
 //! OpenCL kernel compilation and execution.
 
-use crate::buffers::{GpuBuffers, MAX_HITS};
 use crate::context::{GpuContext, GpuError};
-use ocl::{Kernel, Program};
+use ocl::Program;
 
 /// Kernel source files embedded at compile time.
 pub mod sources {
     // Production kernels
-    pub const SMOKE: &str = include_str!("../kernels/smoke.cl");
     pub const SHA256: &str = include_str!("../kernels/sha256.cl");
     pub const SHA512: &str = include_str!("../kernels/sha512.cl");
     pub const HMAC_SHA512: &str = include_str!("../kernels/hmac_sha512.cl");
@@ -61,11 +59,6 @@ impl GpuProgram {
         Ok(Self { program })
     }
 
-    /// Compile the smoke test program.
-    pub fn smoke_test(ctx: &GpuContext) -> Result<Self, GpuError> {
-        Self::from_source(ctx, sources::SMOKE)
-    }
-
     /// Compile the SHA-256 test program.
     #[cfg(any(test, feature = "test-kernels"))]
     pub fn sha256_test(ctx: &GpuContext) -> Result<Self, GpuError> {
@@ -108,11 +101,7 @@ impl GpuProgram {
     /// Compile the secp256k1 field test program.
     #[cfg(any(test, feature = "test-kernels"))]
     pub fn secp256k1_fe_test(ctx: &GpuContext) -> Result<Self, GpuError> {
-        let combined = format!(
-            "{}\n{}",
-            sources::SECP256K1_FE,
-            sources::SECP256K1_FE_TEST
-        );
+        let combined = format!("{}\n{}", sources::SECP256K1_FE, sources::SECP256K1_FE_TEST);
         Self::from_source(ctx, &combined)
     }
 
@@ -217,48 +206,9 @@ impl GpuProgram {
     }
 }
 
-/// A configured kernel ready to execute.
-pub struct SmokeKernel {
-    kernel: Kernel,
-}
-
-impl SmokeKernel {
-    /// Create a smoke test kernel.
-    pub fn new(
-        ctx: &GpuContext,
-        program: &GpuProgram,
-        buffers: &GpuBuffers,
-    ) -> Result<Self, GpuError> {
-        let kernel = Kernel::builder()
-            .program(program.program())
-            .name("smoke_test")
-            .queue(ctx.queue().clone())
-            .global_work_size(buffers.batch_size())
-            .arg(&buffers.salt)
-            .arg(&buffers.counter_start)
-            .arg(&buffers.pattern)
-            .arg(&buffers.pattern_len)
-            .arg(&buffers.hits)
-            .arg(&buffers.hit_count)
-            .arg(MAX_HITS as u32)
-            .build()?;
-
-        Ok(Self { kernel })
-    }
-
-    /// Execute the kernel.
-    pub fn run(&self) -> Result<(), GpuError> {
-        unsafe {
-            self.kernel.enq()?;
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::buffers::ENTROPY_SIZE;
     use ocl::{Buffer, MemFlags};
     use std::sync::{Mutex, OnceLock};
 
@@ -293,25 +243,16 @@ mod tests {
         let _guard = lock_gpu();
         // SHA-512("abc") - single block test
         const EXPECTED: [u8; 64] = [
-            0xdd, 0xaf, 0x35, 0xa1, 0x93, 0x61, 0x7a, 0xba,
-            0xcc, 0x41, 0x73, 0x49, 0xae, 0x20, 0x41, 0x31,
-            0x12, 0xe6, 0xfa, 0x4e, 0x89, 0xa9, 0x7e, 0xa2,
-            0x0a, 0x9e, 0xee, 0xe6, 0x4b, 0x55, 0xd3, 0x9a,
-            0x21, 0x92, 0x99, 0x2a, 0x27, 0x4f, 0xc1, 0xa8,
-            0x36, 0xba, 0x3c, 0x23, 0xa3, 0xfe, 0xeb, 0xbd,
-            0x45, 0x4d, 0x44, 0x23, 0x64, 0x3c, 0xe8, 0x0e,
+            0xdd, 0xaf, 0x35, 0xa1, 0x93, 0x61, 0x7a, 0xba, 0xcc, 0x41, 0x73, 0x49, 0xae, 0x20,
+            0x41, 0x31, 0x12, 0xe6, 0xfa, 0x4e, 0x89, 0xa9, 0x7e, 0xa2, 0x0a, 0x9e, 0xee, 0xe6,
+            0x4b, 0x55, 0xd3, 0x9a, 0x21, 0x92, 0x99, 0x2a, 0x27, 0x4f, 0xc1, 0xa8, 0x36, 0xba,
+            0x3c, 0x23, 0xa3, 0xfe, 0xeb, 0xbd, 0x45, 0x4d, 0x44, 0x23, 0x64, 0x3c, 0xe8, 0x0e,
             0x2a, 0x9a, 0xc9, 0x4f, 0xa5, 0x4c, 0xa4, 0x9f,
         ];
 
-        let ctx = match GpuContext::new() {
-            Ok(ctx) => ctx,
-            Err(e) => {
-                println!("Skipping SHA-512 test (no GPU): {}", e);
-                return;
-            }
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
         };
-
-        println!("Using GPU: {}", ctx.info());
 
         let program = GpuProgram::sha512_test(&ctx).expect("Failed to compile SHA-512 kernel");
         let queue = ctx.queue();
@@ -348,7 +289,9 @@ mod tests {
             .build()
             .unwrap();
 
-        unsafe { kernel.enq().unwrap(); }
+        unsafe {
+            kernel.enq().unwrap();
+        }
         queue.finish().unwrap();
 
         let mut result = [0u8; 64];
@@ -364,22 +307,15 @@ mod tests {
         let _guard = lock_gpu();
         // SHA-512(b"a" * 200) - two block test (128 + 72 bytes)
         const EXPECTED: [u8; 64] = [
-            0x4b, 0x11, 0x45, 0x9c, 0x33, 0xf5, 0x2a, 0x22,
-            0xee, 0x82, 0x36, 0x78, 0x27, 0x14, 0xc1, 0x50,
-            0xa3, 0xb2, 0xc6, 0x09, 0x94, 0xe9, 0xac, 0xee,
-            0x17, 0xfe, 0x68, 0x94, 0x7a, 0x3e, 0x67, 0x89,
-            0xf3, 0x1e, 0x76, 0x68, 0x39, 0x45, 0x92, 0xda,
-            0x7b, 0xef, 0x82, 0x7c, 0xdd, 0xca, 0x88, 0xc4,
-            0xe6, 0xf8, 0x6e, 0x4d, 0xf7, 0xed, 0x1a, 0xe6,
+            0x4b, 0x11, 0x45, 0x9c, 0x33, 0xf5, 0x2a, 0x22, 0xee, 0x82, 0x36, 0x78, 0x27, 0x14,
+            0xc1, 0x50, 0xa3, 0xb2, 0xc6, 0x09, 0x94, 0xe9, 0xac, 0xee, 0x17, 0xfe, 0x68, 0x94,
+            0x7a, 0x3e, 0x67, 0x89, 0xf3, 0x1e, 0x76, 0x68, 0x39, 0x45, 0x92, 0xda, 0x7b, 0xef,
+            0x82, 0x7c, 0xdd, 0xca, 0x88, 0xc4, 0xe6, 0xf8, 0x6e, 0x4d, 0xf7, 0xed, 0x1a, 0xe6,
             0xcb, 0xa7, 0x1f, 0x3e, 0x98, 0xfa, 0xee, 0x9f,
         ];
 
-        let ctx = match GpuContext::new() {
-            Ok(ctx) => ctx,
-            Err(e) => {
-                println!("Skipping SHA-512 two-block test (no GPU): {}", e);
-                return;
-            }
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
         };
 
         println!("Using GPU: {}", ctx.info());
@@ -411,9 +347,7 @@ mod tests {
         // Upload 200 'a's: first 128 in block1, remaining 72 in block2
         let block1_data = [b'a'; 128];
         let mut block2_data = [0u8; 128];
-        for i in 0..72 {
-            block2_data[i] = b'a';
-        }
+        block2_data[..72].fill(b'a');
         block1.write(&block1_data[..]).enq().unwrap();
         block2.write(&block2_data[..]).enq().unwrap();
 
@@ -429,7 +363,9 @@ mod tests {
             .build()
             .unwrap();
 
-        unsafe { kernel.enq().unwrap(); }
+        unsafe {
+            kernel.enq().unwrap();
+        }
         queue.finish().unwrap();
 
         let mut result = [0u8; 64];
@@ -444,12 +380,8 @@ mod tests {
     fn test_sha512_two_blocks_precondition() {
         let _guard = lock_gpu();
         // Verify that block2_len > 111 returns all zeros (precondition violation)
-        let ctx = match GpuContext::new() {
-            Ok(ctx) => ctx,
-            Err(e) => {
-                println!("Skipping SHA-512 precondition test (no GPU): {}", e);
-                return;
-            }
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
         };
 
         let program = GpuProgram::sha512_test(&ctx).expect("Failed to compile SHA-512 kernel");
@@ -495,13 +427,18 @@ mod tests {
             .build()
             .unwrap();
 
-        unsafe { kernel.enq().unwrap(); }
+        unsafe {
+            kernel.enq().unwrap();
+        }
         queue.finish().unwrap();
 
         let mut result = [0u8; 64];
         output.read(&mut result[..]).enq().unwrap();
 
-        assert_eq!(result, [0u8; 64], "Precondition violation should return zeros");
+        assert_eq!(
+            result, [0u8; 64],
+            "Precondition violation should return zeros"
+        );
         println!("SHA-512 precondition test passed!");
     }
 
@@ -511,22 +448,15 @@ mod tests {
         // BIP39 test vector: mnemonic "abandon" x 11 + "about", no passphrase
         // Salt = "mnemonic" (no passphrase)
         const EXPECTED: [u8; 64] = [
-            0x5e, 0xb0, 0x0b, 0xbd, 0xdc, 0xf0, 0x69, 0x08,
-            0x48, 0x89, 0xa8, 0xab, 0x91, 0x55, 0x56, 0x81,
-            0x65, 0xf5, 0xc4, 0x53, 0xcc, 0xb8, 0x5e, 0x70,
-            0x81, 0x1a, 0xae, 0xd6, 0xf6, 0xda, 0x5f, 0xc1,
-            0x9a, 0x5a, 0xc4, 0x0b, 0x38, 0x9c, 0xd3, 0x70,
-            0xd0, 0x86, 0x20, 0x6d, 0xec, 0x8a, 0xa6, 0xc4,
-            0x3d, 0xae, 0xa6, 0x69, 0x0f, 0x20, 0xad, 0x3d,
+            0x5e, 0xb0, 0x0b, 0xbd, 0xdc, 0xf0, 0x69, 0x08, 0x48, 0x89, 0xa8, 0xab, 0x91, 0x55,
+            0x56, 0x81, 0x65, 0xf5, 0xc4, 0x53, 0xcc, 0xb8, 0x5e, 0x70, 0x81, 0x1a, 0xae, 0xd6,
+            0xf6, 0xda, 0x5f, 0xc1, 0x9a, 0x5a, 0xc4, 0x0b, 0x38, 0x9c, 0xd3, 0x70, 0xd0, 0x86,
+            0x20, 0x6d, 0xec, 0x8a, 0xa6, 0xc4, 0x3d, 0xae, 0xa6, 0x69, 0x0f, 0x20, 0xad, 0x3d,
             0x8d, 0x48, 0xb2, 0xd2, 0xce, 0x9e, 0x38, 0xe4,
         ];
 
-        let ctx = match GpuContext::new() {
-            Ok(ctx) => ctx,
-            Err(e) => {
-                println!("Skipping PBKDF2 test (no GPU): {}", e);
-                return;
-            }
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
         };
 
         println!("Using GPU: {}", ctx.info());
@@ -581,7 +511,9 @@ mod tests {
             .build()
             .unwrap();
 
-        unsafe { kernel.enq().unwrap(); }
+        unsafe {
+            kernel.enq().unwrap();
+        }
         queue.finish().unwrap();
 
         let mut result = [0u8; 64];
@@ -597,27 +529,21 @@ mod tests {
         let _guard = lock_gpu();
         // RFC 4231 Test Case 1: key = 0x0b repeated 20 times, data = "Hi There"
         const EXPECTED: [u8; 64] = [
-            0x87, 0xaa, 0x7c, 0xde, 0xa5, 0xef, 0x61, 0x9d,
-            0x4f, 0xf0, 0xb4, 0x24, 0x1a, 0x1d, 0x6c, 0xb0,
-            0x23, 0x79, 0xf4, 0xe2, 0xce, 0x4e, 0xc2, 0x78,
-            0x7a, 0xd0, 0xb3, 0x05, 0x45, 0xe1, 0x7c, 0xde,
-            0xda, 0xa8, 0x33, 0xb7, 0xd6, 0xb8, 0xa7, 0x02,
-            0x03, 0x8b, 0x27, 0x4e, 0xae, 0xa3, 0xf4, 0xe4,
-            0xbe, 0x9d, 0x91, 0x4e, 0xeb, 0x61, 0xf1, 0x70,
+            0x87, 0xaa, 0x7c, 0xde, 0xa5, 0xef, 0x61, 0x9d, 0x4f, 0xf0, 0xb4, 0x24, 0x1a, 0x1d,
+            0x6c, 0xb0, 0x23, 0x79, 0xf4, 0xe2, 0xce, 0x4e, 0xc2, 0x78, 0x7a, 0xd0, 0xb3, 0x05,
+            0x45, 0xe1, 0x7c, 0xde, 0xda, 0xa8, 0x33, 0xb7, 0xd6, 0xb8, 0xa7, 0x02, 0x03, 0x8b,
+            0x27, 0x4e, 0xae, 0xa3, 0xf4, 0xe4, 0xbe, 0x9d, 0x91, 0x4e, 0xeb, 0x61, 0xf1, 0x70,
             0x2e, 0x69, 0x6c, 0x20, 0x3a, 0x12, 0x68, 0x54,
         ];
 
-        let ctx = match GpuContext::new() {
-            Ok(ctx) => ctx,
-            Err(e) => {
-                println!("Skipping HMAC-SHA512 test (no GPU): {}", e);
-                return;
-            }
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
         };
 
         println!("Using GPU: {}", ctx.info());
 
-        let program = GpuProgram::hmac_sha512_test(&ctx).expect("Failed to compile HMAC-SHA512 kernel");
+        let program =
+            GpuProgram::hmac_sha512_test(&ctx).expect("Failed to compile HMAC-SHA512 kernel");
         let queue = ctx.queue();
 
         let key_buf = Buffer::<u8>::builder()
@@ -666,13 +592,18 @@ mod tests {
             .build()
             .unwrap();
 
-        unsafe { kernel.enq().unwrap(); }
+        unsafe {
+            kernel.enq().unwrap();
+        }
         queue.finish().unwrap();
 
         let mut result = [0u8; 64];
         output.read(&mut result[..]).enq().unwrap();
 
-        println!("HMAC-SHA512 RFC4231 Case 1 first 16 bytes: {:02x?}", &result[..16]);
+        println!(
+            "HMAC-SHA512 RFC4231 Case 1 first 16 bytes: {:02x?}",
+            &result[..16]
+        );
         assert_eq!(result, EXPECTED, "HMAC-SHA512 mismatch");
         println!("HMAC-SHA512 test passed!");
     }
@@ -682,25 +613,19 @@ mod tests {
         let _guard = lock_gpu();
         // RFC 4231 Test Case 2: key = "Jefe", data = "what do ya want for nothing?"
         const EXPECTED: [u8; 64] = [
-            0x16, 0x4b, 0x7a, 0x7b, 0xfc, 0xf8, 0x19, 0xe2,
-            0xe3, 0x95, 0xfb, 0xe7, 0x3b, 0x56, 0xe0, 0xa3,
-            0x87, 0xbd, 0x64, 0x22, 0x2e, 0x83, 0x1f, 0xd6,
-            0x10, 0x27, 0x0c, 0xd7, 0xea, 0x25, 0x05, 0x54,
-            0x97, 0x58, 0xbf, 0x75, 0xc0, 0x5a, 0x99, 0x4a,
-            0x6d, 0x03, 0x4f, 0x65, 0xf8, 0xf0, 0xe6, 0xfd,
-            0xca, 0xea, 0xb1, 0xa3, 0x4d, 0x4a, 0x6b, 0x4b,
+            0x16, 0x4b, 0x7a, 0x7b, 0xfc, 0xf8, 0x19, 0xe2, 0xe3, 0x95, 0xfb, 0xe7, 0x3b, 0x56,
+            0xe0, 0xa3, 0x87, 0xbd, 0x64, 0x22, 0x2e, 0x83, 0x1f, 0xd6, 0x10, 0x27, 0x0c, 0xd7,
+            0xea, 0x25, 0x05, 0x54, 0x97, 0x58, 0xbf, 0x75, 0xc0, 0x5a, 0x99, 0x4a, 0x6d, 0x03,
+            0x4f, 0x65, 0xf8, 0xf0, 0xe6, 0xfd, 0xca, 0xea, 0xb1, 0xa3, 0x4d, 0x4a, 0x6b, 0x4b,
             0x63, 0x6e, 0x07, 0x0a, 0x38, 0xbc, 0xe7, 0x37,
         ];
 
-        let ctx = match GpuContext::new() {
-            Ok(ctx) => ctx,
-            Err(e) => {
-                println!("Skipping HMAC-SHA512 test (no GPU): {}", e);
-                return;
-            }
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
         };
 
-        let program = GpuProgram::hmac_sha512_test(&ctx).expect("Failed to compile HMAC-SHA512 kernel");
+        let program =
+            GpuProgram::hmac_sha512_test(&ctx).expect("Failed to compile HMAC-SHA512 kernel");
         let queue = ctx.queue();
 
         let key_buf = Buffer::<u8>::builder()
@@ -748,13 +673,18 @@ mod tests {
             .build()
             .unwrap();
 
-        unsafe { kernel.enq().unwrap(); }
+        unsafe {
+            kernel.enq().unwrap();
+        }
         queue.finish().unwrap();
 
         let mut result = [0u8; 64];
         output.read(&mut result[..]).enq().unwrap();
 
-        println!("HMAC-SHA512 RFC4231 Case 2 first 16 bytes: {:02x?}", &result[..16]);
+        println!(
+            "HMAC-SHA512 RFC4231 Case 2 first 16 bytes: {:02x?}",
+            &result[..16]
+        );
         assert_eq!(result, EXPECTED, "HMAC-SHA512 Case 2 mismatch");
         println!("HMAC-SHA512 Case 2 test passed!");
     }
@@ -765,16 +695,12 @@ mod tests {
         // SHA-256("abc") = ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
         // As u32 words (big-endian word order):
         const EXPECTED: [u32; 8] = [
-            0xba7816bf, 0x8f01cfea, 0x414140de, 0x5dae2223,
-            0xb00361a3, 0x96177a9c, 0xb410ff61, 0xf20015ad,
+            0xba7816bf, 0x8f01cfea, 0x414140de, 0x5dae2223, 0xb00361a3, 0x96177a9c, 0xb410ff61,
+            0xf20015ad,
         ];
 
-        let ctx = match GpuContext::new() {
-            Ok(ctx) => ctx,
-            Err(e) => {
-                println!("Skipping SHA-256 test (no GPU): {}", e);
-                return;
-            }
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
         };
 
         println!("Using GPU: {}", ctx.info());
@@ -837,74 +763,11 @@ mod tests {
     }
 
     #[test]
-    fn test_smoke_kernel() {
-        let _guard = lock_gpu();
-        // This test requires a GPU
-        let ctx = match GpuContext::new() {
-            Ok(ctx) => ctx,
-            Err(e) => {
-                println!("Skipping smoke test (no GPU): {}", e);
-                return;
-            }
-        };
-
-        println!("Using GPU: {}", ctx.info());
-
-        // Compile the smoke program
-        let program = GpuProgram::smoke_test(&ctx).expect("Failed to compile smoke kernel");
-
-        // Allocate buffers
-        let batch_size = 1024;
-        let buffers = GpuBuffers::new(&ctx, batch_size).expect("Failed to allocate buffers");
-
-        // Set up test data
-        // Use 2-byte pattern so only gid=0 matches (for batch < 65536)
-        // gid=0: counter=0, so entropy[0..2] = salt[0..2] = 0x42 0x42
-        // gid=256: counter=256, so entropy[1] = salt[1] ^ 1 = 0x43, fails
-        let salt = [0x42u8; ENTROPY_SIZE];
-        let pattern = [0x42u8, 0x42u8];
-
-        buffers.upload_salt(&salt).unwrap();
-        buffers.upload_counter(0).unwrap();
-        buffers.upload_pattern(&pattern).unwrap();
-        buffers.reset_hits().unwrap();
-
-        // Create and run kernel
-        let kernel = SmokeKernel::new(&ctx, &program, &buffers).expect("Failed to create kernel");
-        kernel.run().unwrap();
-
-        // Wait for completion
-        ctx.queue().finish().unwrap();
-
-        // Read results
-        let hit_count = buffers.read_hit_count().unwrap();
-        println!("Smoke test found {} hits", hit_count);
-
-        // Only gid=0 should match
-        assert_eq!(hit_count, 1, "Expected exactly one hit");
-
-        let hits = buffers.read_hits(hit_count as usize).unwrap();
-        println!("Hit: work_item_id = {}", hits[0].work_item_id);
-
-        // Work item 0 should have matched
-        assert_eq!(hits[0].work_item_id, 0);
-
-        // Verify the entropy is what we expect
-        let entropy = hits[0].entropy_bytes();
-        assert_eq!(entropy[0], 0x42);
-        assert_eq!(entropy[1], 0x42);
-    }
-
-    #[test]
     fn test_secp256k1_fe_self_test() {
         let _guard = lock_gpu();
 
-        let ctx = match GpuContext::new() {
-            Ok(ctx) => ctx,
-            Err(e) => {
-                println!("Skipping secp256k1 FE test (no GPU): {}", e);
-                return;
-            }
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
         };
 
         println!("Using GPU: {}", ctx.info());
@@ -968,12 +831,8 @@ mod tests {
     fn test_secp256k1_scalar_self_test() {
         let _guard = lock_gpu();
 
-        let ctx = match GpuContext::new() {
-            Ok(ctx) => ctx,
-            Err(e) => {
-                println!("Skipping secp256k1 scalar test (no GPU): {}", e);
-                return;
-            }
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
         };
 
         println!("Using GPU: {}", ctx.info());
@@ -1048,12 +907,8 @@ mod tests {
         run_with_big_stack(BIG_TEST_STACK, || {
             let _guard = lock_gpu();
 
-            let ctx = match GpuContext::new() {
-                Ok(ctx) => ctx,
-                Err(e) => {
-                    println!("Skipping secp256k1 point test (no GPU): {}", e);
-                    return;
-                }
+            let Some(ctx) = crate::context::try_ctx() else {
+                return;
             };
 
             println!("Using GPU: {}", ctx.info());
@@ -1130,12 +985,8 @@ mod tests {
         run_with_big_stack(BIG_TEST_STACK, || {
             let _guard = lock_gpu();
 
-            let ctx = match GpuContext::new() {
-                Ok(ctx) => ctx,
-                Err(e) => {
-                    println!("Skipping Blake2b test (no GPU): {}", e);
-                    return;
-                }
+            let Some(ctx) = crate::context::try_ctx() else {
+                return;
             };
 
             println!("Using GPU: {}", ctx.info());
@@ -1196,12 +1047,8 @@ mod tests {
         run_with_big_stack(BIG_TEST_STACK, || {
             let _guard = lock_gpu();
 
-            let ctx = match GpuContext::new() {
-                Ok(ctx) => ctx,
-                Err(e) => {
-                    println!("Skipping Base58 test (no GPU): {}", e);
-                    return;
-                }
+            let Some(ctx) = crate::context::try_ctx() else {
+                return;
             };
 
             println!("Using GPU: {}", ctx.info());
@@ -1276,12 +1123,8 @@ mod tests {
         run_with_big_stack(BIG_TEST_STACK, || {
             let _guard = lock_gpu();
 
-            let ctx = match GpuContext::new() {
-                Ok(ctx) => ctx,
-                Err(e) => {
-                    println!("Skipping vanity consistency test (no GPU): {}", e);
-                    return;
-                }
+            let Some(ctx) = crate::context::try_ctx() else {
+                return;
             };
 
             println!("Using GPU: {}", ctx.info());
@@ -1298,13 +1141,13 @@ mod tests {
                 ([0xff; 32], "short mnemonic (<=128 bytes)"),
             ];
 
-            use erg_vanity_bip::bip39::{entropy_to_mnemonic, mnemonic_to_seed};
+            use crate::wordlist::WordlistBuffers;
             use erg_vanity_bip::bip32::ExtendedPrivateKey;
+            use erg_vanity_bip::bip39::{entropy_to_mnemonic, mnemonic_to_seed};
             use erg_vanity_bip::bip44::derive_ergo_first_key;
+            use erg_vanity_crypto::blake2b;
             use erg_vanity_crypto::secp256k1::pubkey::PublicKey;
             use erg_vanity_crypto::secp256k1::scalar::Scalar;
-            use erg_vanity_crypto::blake2b;
-            use crate::wordlist::WordlistBuffers;
 
             let wordlist = WordlistBuffers::upload(queue).expect("upload wordlist");
 
@@ -1357,7 +1200,10 @@ mod tests {
                 // === CPU derivation ===
                 let mnemonic = entropy_to_mnemonic(&entropy).expect("mnemonic from entropy");
                 println!("Mnemonic length: {} bytes", mnemonic.len());
-                println!("Mnemonic (first 50 chars): {}...", &mnemonic[..50.min(mnemonic.len())]);
+                println!(
+                    "Mnemonic (first 50 chars): {}...",
+                    &mnemonic[..50.min(mnemonic.len())]
+                );
 
                 let cpu_seed = mnemonic_to_seed(&mnemonic, "");
                 println!("CPU seed (first 16 bytes): {:02x?}", &cpu_seed[..16]);
@@ -1365,7 +1211,10 @@ mod tests {
                 let master = ExtendedPrivateKey::from_seed(&cpu_seed).expect("master from seed");
                 let ergo_key = derive_ergo_first_key(&master).expect("derive ergo key");
                 let cpu_private_key = *ergo_key.private_key(); // Copy to owned array
-                println!("CPU private key (first 16 bytes): {:02x?}", &cpu_private_key[..16]);
+                println!(
+                    "CPU private key (first 16 bytes): {:02x?}",
+                    &cpu_private_key[..16]
+                );
 
                 let scalar = Scalar::from_bytes(&cpu_private_key).expect("valid scalar");
                 let cpu_pubkey = PublicKey::from_private_key(&scalar).expect("pubkey from scalar");
@@ -1412,24 +1261,47 @@ mod tests {
                 let mut gpu_error = [0i32; 1];
 
                 seed_buf.read(&mut gpu_seed[..]).enq().unwrap();
-                private_key_buf.read(&mut gpu_private_key[..]).enq().unwrap();
+                private_key_buf
+                    .read(&mut gpu_private_key[..])
+                    .enq()
+                    .unwrap();
                 pubkey_buf.read(&mut gpu_pubkey[..]).enq().unwrap();
                 addr_bytes_buf.read(&mut gpu_addr_bytes[..]).enq().unwrap();
                 error_buf.read(&mut gpu_error[..]).enq().unwrap();
                 queue.finish().unwrap(); // Ensure reads complete before comparing
 
                 println!("GPU seed (first 16 bytes): {:02x?}", &gpu_seed[..16]);
-                println!("GPU private key (first 16 bytes): {:02x?}", &gpu_private_key[..16]);
+                println!(
+                    "GPU private key (first 16 bytes): {:02x?}",
+                    &gpu_private_key[..16]
+                );
                 println!("GPU pubkey: {:02x?}", &gpu_pubkey);
                 println!("GPU addr_bytes (first 16): {:02x?}", &gpu_addr_bytes[..16]);
                 println!("GPU error: {}", gpu_error[0]);
 
                 // === Compare results ===
-                assert_eq!(gpu_error[0], 0, "GPU derivation returned error for {}", description);
+                assert_eq!(
+                    gpu_error[0], 0,
+                    "GPU derivation returned error for {}",
+                    description
+                );
                 assert_eq!(gpu_seed, cpu_seed, "Seed mismatch for {}", description);
-                assert_eq!(gpu_private_key, cpu_private_key, "Private key mismatch for {}", description);
-                assert_eq!(gpu_pubkey, *cpu_pubkey.as_bytes(), "Pubkey mismatch for {}", description);
-                assert_eq!(gpu_addr_bytes, cpu_addr_bytes, "Address bytes mismatch for {}", description);
+                assert_eq!(
+                    gpu_private_key, cpu_private_key,
+                    "Private key mismatch for {}",
+                    description
+                );
+                assert_eq!(
+                    gpu_pubkey,
+                    *cpu_pubkey.as_bytes(),
+                    "Pubkey mismatch for {}",
+                    description
+                );
+                assert_eq!(
+                    gpu_addr_bytes, cpu_addr_bytes,
+                    "Address bytes mismatch for {}",
+                    description
+                );
 
                 println!("PASSED: {}", description);
             }

@@ -23,10 +23,14 @@ pub struct Scalar {
 
 impl Scalar {
     /// Zero scalar.
-    pub const ZERO: Self = Self { limbs: [0, 0, 0, 0] };
+    pub const ZERO: Self = Self {
+        limbs: [0, 0, 0, 0],
+    };
 
     /// One scalar.
-    pub const ONE: Self = Self { limbs: [1, 0, 0, 0] };
+    pub const ONE: Self = Self {
+        limbs: [1, 0, 0, 0],
+    };
 
     /// Create scalar from 4 limbs (little-endian).
     pub const fn from_limbs(limbs: [u64; 4]) -> Self {
@@ -38,20 +42,19 @@ impl Scalar {
     pub fn from_bytes(bytes: &[u8; 32]) -> Option<Self> {
         let limbs = [
             u64::from_be_bytes([
-                bytes[24], bytes[25], bytes[26], bytes[27],
-                bytes[28], bytes[29], bytes[30], bytes[31],
+                bytes[24], bytes[25], bytes[26], bytes[27], bytes[28], bytes[29], bytes[30],
+                bytes[31],
             ]),
             u64::from_be_bytes([
-                bytes[16], bytes[17], bytes[18], bytes[19],
-                bytes[20], bytes[21], bytes[22], bytes[23],
+                bytes[16], bytes[17], bytes[18], bytes[19], bytes[20], bytes[21], bytes[22],
+                bytes[23],
             ]),
             u64::from_be_bytes([
-                bytes[8], bytes[9], bytes[10], bytes[11],
-                bytes[12], bytes[13], bytes[14], bytes[15],
+                bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14],
+                bytes[15],
             ]),
             u64::from_be_bytes([
-                bytes[0], bytes[1], bytes[2], bytes[3],
-                bytes[4], bytes[5], bytes[6], bytes[7],
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
             ]),
         ];
 
@@ -98,7 +101,9 @@ impl Scalar {
         let (r2, c2) = self.limbs[2].carrying_add(other.limbs[2], c1);
         let (r3, c3) = self.limbs[3].carrying_add(other.limbs[3], c2);
 
-        let mut result = Self { limbs: [r0, r1, r2, r3] };
+        let mut result = Self {
+            limbs: [r0, r1, r2, r3],
+        };
 
         if c3 || result.gte_n() {
             result = result.sub_n();
@@ -113,7 +118,9 @@ impl Scalar {
         let (r1, b1) = self.limbs[1].borrowing_sub(N[1], b0);
         let (r2, b2) = self.limbs[2].borrowing_sub(N[2], b1);
         let (r3, _) = self.limbs[3].borrowing_sub(N[3], b2);
-        Self { limbs: [r0, r1, r2, r3] }
+        Self {
+            limbs: [r0, r1, r2, r3],
+        }
     }
 
     /// Subtraction: self - other (mod n).
@@ -123,7 +130,9 @@ impl Scalar {
         let (r2, b2) = self.limbs[2].borrowing_sub(other.limbs[2], b1);
         let (r3, b3) = self.limbs[3].borrowing_sub(other.limbs[3], b2);
 
-        let mut result = Self { limbs: [r0, r1, r2, r3] };
+        let mut result = Self {
+            limbs: [r0, r1, r2, r3],
+        };
 
         if b3 {
             result = result.add_n();
@@ -138,7 +147,9 @@ impl Scalar {
         let (r1, c1) = self.limbs[1].carrying_add(N[1], c0);
         let (r2, c2) = self.limbs[2].carrying_add(N[2], c1);
         let (r3, _) = self.limbs[3].carrying_add(N[3], c2);
-        Self { limbs: [r0, r1, r2, r3] }
+        Self {
+            limbs: [r0, r1, r2, r3],
+        }
     }
 
     /// Negation: -self (mod n).
@@ -150,7 +161,9 @@ impl Scalar {
             let (r1, b1) = N[1].borrowing_sub(self.limbs[1], b0);
             let (r2, b2) = N[2].borrowing_sub(self.limbs[2], b1);
             let (r3, _) = N[3].borrowing_sub(self.limbs[3], b2);
-            Self { limbs: [r0, r1, r2, r3] }
+            Self {
+                limbs: [r0, r1, r2, r3],
+            }
         }
     }
 
@@ -257,8 +270,10 @@ mod tests {
     #[test]
     fn test_add_wrap() {
         // Test addition that wraps around n
-        let almost_n = scalar_from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140");
-        let two = scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000002");
+        let almost_n =
+            scalar_from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140");
+        let two =
+            scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000002");
 
         // almost_n + 2 should wrap: (n-1) + 2 = n + 1 ≡ 1 (mod n)
         assert_eq!(almost_n.add(&two), Scalar::ONE);
@@ -268,11 +283,13 @@ mod tests {
     fn test_sub_wrap() {
         // Test subtraction that wraps below zero
         let one = Scalar::ONE;
-        let two = scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000002");
+        let two =
+            scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000002");
 
         // 1 - 2 = -1 ≡ n - 1 (mod n)
         let result = one.sub(&two);
-        let expected = scalar_from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140");
+        let expected =
+            scalar_from_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140");
         assert_eq!(result, expected);
     }
 
@@ -287,9 +304,12 @@ mod tests {
 
     #[test]
     fn test_mul_simple() {
-        let two = scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000002");
-        let three = scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000003");
-        let six = scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000006");
+        let two =
+            scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000002");
+        let three =
+            scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000003");
+        let six =
+            scalar_from_hex("0000000000000000000000000000000000000000000000000000000000000006");
 
         assert_eq!(two.mul(&three), six);
     }

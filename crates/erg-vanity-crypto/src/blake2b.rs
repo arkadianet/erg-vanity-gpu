@@ -74,8 +74,7 @@ fn compress(h: &mut [u64; 8], block: &[u8; BLOCK_SIZE], t: u128, last: bool) {
     }
 
     // 12 rounds of mixing
-    for round in 0..12 {
-        let s = &SIGMA[round];
+    for s in &SIGMA {
         g(&mut v, 0, 4, 8, 12, m[s[0]], m[s[1]]);
         g(&mut v, 1, 5, 9, 13, m[s[2]], m[s[3]]);
         g(&mut v, 2, 6, 10, 14, m[s[4]], m[s[5]]);
@@ -166,8 +165,8 @@ mod tests {
 
     #[test]
     fn test_against_blake2_crate() {
-        use blake2::{Blake2b, Digest};
         use blake2::digest::consts::U32;
+        use blake2::{Blake2b, Digest};
 
         type Blake2b256 = Blake2b<U32>;
 
@@ -177,8 +176,8 @@ mod tests {
             b"abc",
             b"message digest",
             b"abcdefghijklmnopqrstuvwxyz",
-            &[0u8; 128],  // exactly one block
-            &[0u8; 129],  // one block + 1 byte
+            &[0u8; 128], // exactly one block
+            &[0u8; 129], // one block + 1 byte
             &[0xffu8; 256],
         ];
 
@@ -186,7 +185,8 @@ mod tests {
             let our_result = digest(data);
             let ref_result: [u8; 32] = Blake2b256::digest(data).into();
             assert_eq!(
-                our_result, ref_result,
+                our_result,
+                ref_result,
                 "mismatch for data len {}",
                 data.len()
             );

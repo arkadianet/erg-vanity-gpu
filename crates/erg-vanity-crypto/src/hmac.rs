@@ -124,7 +124,13 @@ mod tests {
             let mut mac = HmacSha512::new_from_slice(key).unwrap();
             mac.update(data);
             let ref_result: [u8; 64] = mac.finalize().into_bytes().into();
-            assert_eq!(our_result, ref_result, "mismatch for key len {}, data len {}", key.len(), data.len());
+            assert_eq!(
+                our_result,
+                ref_result,
+                "mismatch for key len {}, data len {}",
+                key.len(),
+                data.len()
+            );
         }
     }
 }

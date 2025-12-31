@@ -72,7 +72,10 @@ impl GpuContext {
         let devices = Self::enumerate_devices()?;
         let info = devices
             .get(global_selection)
-            .ok_or(GpuError::DeviceIndexOutOfRange(global_selection, devices.len()))?
+            .ok_or(GpuError::DeviceIndexOutOfRange(
+                global_selection,
+                devices.len(),
+            ))?
             .clone();
 
         let platforms = Platform::list();
@@ -238,41 +241,56 @@ impl std::fmt::Display for DeviceInfo {
     }
 }
 
+/// Try to create a GPU context, returning None if no device available.
+/// Use this in tests to gracefully skip when no GPU is present.
+/// Also catches panics from the OpenCL library (e.g., no ICD installed).
+#[cfg(test)]
+pub(crate) fn try_ctx() -> Option<GpuContext> {
+    match std::panic::catch_unwind(GpuContext::new) {
+        Ok(Ok(ctx)) => Some(ctx),
+        Ok(Err(e)) => {
+            eprintln!("Skipping GPU test (no OpenCL device available): {e}");
+            None
+        }
+        Err(_) => {
+            eprintln!("Skipping GPU test (OpenCL runtime panicked - likely no ICD installed)");
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_enumerate_devices() {
-        // This test may pass or fail depending on hardware
-        match GpuContext::enumerate_devices() {
-            Ok(devices) => {
-                println!("Found {} GPU device(s):", devices.len());
+        // Test that enumeration doesn't crash, regardless of device count
+        // Catch panics from OpenCL library (e.g., no ICD installed)
+        match std::panic::catch_unwind(GpuContext::enumerate_devices) {
+            Ok(Ok(devices)) => {
+                println!("OpenCL devices found: {}", devices.len());
                 for dev in &devices {
                     println!("  {}", dev);
                 }
             }
-            Err(e) => {
-                println!("No GPU devices available: {}", e);
+            Ok(Err(e)) => {
+                eprintln!("Skipping enumerate_devices test: {e}");
+            }
+            Err(_) => {
+                eprintln!("Skipping enumerate_devices test (OpenCL runtime panicked)");
             }
         }
     }
 
     #[test]
     fn test_create_context() {
-        // This test may pass or fail depending on hardware
-        match GpuContext::new() {
-            Ok(ctx) => {
-                println!("Created context for: {}", ctx.info());
-                println!(
-                    "Recommended work group size: {}",
-                    ctx.recommended_work_group_size()
-                );
-                println!("Recommended batch size: {}", ctx.recommended_batch_size());
-            }
-            Err(e) => {
-                println!("Could not create GPU context: {}", e);
-            }
-        }
+        let Some(ctx) = try_ctx() else { return };
+        println!("Created context for: {}", ctx.info());
+        println!(
+            "Recommended work group size: {}",
+            ctx.recommended_work_group_size()
+        );
+        println!("Recommended batch size: {}", ctx.recommended_batch_size());
     }
 }

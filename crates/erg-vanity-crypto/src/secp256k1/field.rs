@@ -29,10 +29,14 @@ pub struct FieldElement {
 
 impl FieldElement {
     /// Zero element.
-    pub const ZERO: Self = Self { limbs: [0, 0, 0, 0] };
+    pub const ZERO: Self = Self {
+        limbs: [0, 0, 0, 0],
+    };
 
     /// One element.
-    pub const ONE: Self = Self { limbs: [1, 0, 0, 0] };
+    pub const ONE: Self = Self {
+        limbs: [1, 0, 0, 0],
+    };
 
     /// Create field element from 4 limbs (little-endian).
     pub const fn from_limbs(limbs: [u64; 4]) -> Self {
@@ -43,10 +47,21 @@ impl FieldElement {
     /// Returns None if value >= p.
     pub fn from_bytes(bytes: &[u8; 32]) -> Option<Self> {
         let limbs = [
-            u64::from_be_bytes([bytes[24], bytes[25], bytes[26], bytes[27], bytes[28], bytes[29], bytes[30], bytes[31]]),
-            u64::from_be_bytes([bytes[16], bytes[17], bytes[18], bytes[19], bytes[20], bytes[21], bytes[22], bytes[23]]),
-            u64::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]]),
-            u64::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]]),
+            u64::from_be_bytes([
+                bytes[24], bytes[25], bytes[26], bytes[27], bytes[28], bytes[29], bytes[30],
+                bytes[31],
+            ]),
+            u64::from_be_bytes([
+                bytes[16], bytes[17], bytes[18], bytes[19], bytes[20], bytes[21], bytes[22],
+                bytes[23],
+            ]),
+            u64::from_be_bytes([
+                bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14],
+                bytes[15],
+            ]),
+            u64::from_be_bytes([
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+            ]),
         ];
 
         let fe = Self { limbs };
@@ -92,7 +107,9 @@ impl FieldElement {
         let (r2, c2) = self.limbs[2].carrying_add(other.limbs[2], c1);
         let (r3, c3) = self.limbs[3].carrying_add(other.limbs[3], c2);
 
-        let mut result = Self { limbs: [r0, r1, r2, r3] };
+        let mut result = Self {
+            limbs: [r0, r1, r2, r3],
+        };
 
         if c3 || result.gte_p() {
             result = result.sub_p();
@@ -107,7 +124,9 @@ impl FieldElement {
         let (r1, b1) = self.limbs[1].borrowing_sub(P[1], b0);
         let (r2, b2) = self.limbs[2].borrowing_sub(P[2], b1);
         let (r3, _) = self.limbs[3].borrowing_sub(P[3], b2);
-        Self { limbs: [r0, r1, r2, r3] }
+        Self {
+            limbs: [r0, r1, r2, r3],
+        }
     }
 
     /// Subtraction: self - other (mod p).
@@ -117,7 +136,9 @@ impl FieldElement {
         let (r2, b2) = self.limbs[2].borrowing_sub(other.limbs[2], b1);
         let (r3, b3) = self.limbs[3].borrowing_sub(other.limbs[3], b2);
 
-        let mut result = Self { limbs: [r0, r1, r2, r3] };
+        let mut result = Self {
+            limbs: [r0, r1, r2, r3],
+        };
 
         if b3 {
             result = result.add_p();
@@ -132,7 +153,9 @@ impl FieldElement {
         let (r1, c1) = self.limbs[1].carrying_add(P[1], c0);
         let (r2, c2) = self.limbs[2].carrying_add(P[2], c1);
         let (r3, _) = self.limbs[3].carrying_add(P[3], c2);
-        Self { limbs: [r0, r1, r2, r3] }
+        Self {
+            limbs: [r0, r1, r2, r3],
+        }
     }
 
     /// Negation: -self (mod p).
@@ -144,7 +167,9 @@ impl FieldElement {
             let (r1, b1) = P[1].borrowing_sub(self.limbs[1], b0);
             let (r2, b2) = P[2].borrowing_sub(self.limbs[2], b1);
             let (r3, _) = P[3].borrowing_sub(self.limbs[3], b2);
-            Self { limbs: [r0, r1, r2, r3] }
+            Self {
+                limbs: [r0, r1, r2, r3],
+            }
         }
     }
 
@@ -251,7 +276,9 @@ impl FieldElement {
             result[4] = carry as u64;
         }
 
-        let mut fe = Self { limbs: [result[0], result[1], result[2], result[3]] };
+        let mut fe = Self {
+            limbs: [result[0], result[1], result[2], result[3]],
+        };
 
         // Final reduction if >= p (may need multiple subtractions)
         while fe.gte_p() {
@@ -403,8 +430,8 @@ mod tests {
 
     #[test]
     fn test_against_k256() {
-        use k256::{FieldBytes, FieldElement as K256Fe};
         use k256::elliptic_curve::ff::PrimeField;
+        use k256::{FieldBytes, FieldElement as K256Fe};
 
         fn k256_from_bytes(b: [u8; 32]) -> K256Fe {
             Option::<K256Fe>::from(K256Fe::from_repr(FieldBytes::from(b))).unwrap()
@@ -434,19 +461,31 @@ mod tests {
                 let our_mul = a.mul(&b);
                 let k256_mul = k256_a * k256_b;
                 let k256_mul_bytes: [u8; 32] = k256_mul.to_repr().into();
-                assert_eq!(our_mul.to_bytes(), k256_mul_bytes, "mul mismatch for {hex_a} * {hex_b}");
+                assert_eq!(
+                    our_mul.to_bytes(),
+                    k256_mul_bytes,
+                    "mul mismatch for {hex_a} * {hex_b}"
+                );
 
                 // Test add
                 let our_add = a.add(&b);
                 let k256_add = k256_a + k256_b;
                 let k256_add_bytes: [u8; 32] = k256_add.to_repr().into();
-                assert_eq!(our_add.to_bytes(), k256_add_bytes, "add mismatch for {hex_a} + {hex_b}");
+                assert_eq!(
+                    our_add.to_bytes(),
+                    k256_add_bytes,
+                    "add mismatch for {hex_a} + {hex_b}"
+                );
 
                 // Test sub
                 let our_sub = a.sub(&b);
                 let k256_sub = k256_a - k256_b;
                 let k256_sub_bytes: [u8; 32] = k256_sub.to_repr().into();
-                assert_eq!(our_sub.to_bytes(), k256_sub_bytes, "sub mismatch for {hex_a} - {hex_b}");
+                assert_eq!(
+                    our_sub.to_bytes(),
+                    k256_sub_bytes,
+                    "sub mismatch for {hex_a} - {hex_b}"
+                );
             }
         }
     }

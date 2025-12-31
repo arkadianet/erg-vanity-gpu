@@ -22,7 +22,7 @@ pub fn derive_ergo_key(
 ) -> Result<ExtendedPrivateKey, Bip32Error> {
     // m/44'/429'/account'/change/address_index
     let path = [
-        HARDENED | PURPOSE,       // 44'
+        HARDENED | PURPOSE,        // 44'
         HARDENED | ERGO_COIN_TYPE, // 429'
         HARDENED | account,        // account'
         change,                    // change (not hardened)
@@ -32,7 +32,9 @@ pub fn derive_ergo_key(
 }
 
 /// Derive first Ergo key at m/44'/429'/0'/0/0.
-pub fn derive_ergo_first_key(master: &ExtendedPrivateKey) -> Result<ExtendedPrivateKey, Bip32Error> {
+pub fn derive_ergo_first_key(
+    master: &ExtendedPrivateKey,
+) -> Result<ExtendedPrivateKey, Bip32Error> {
     derive_ergo_key(master, 0, 0, 0)
 }
 

@@ -127,7 +127,7 @@ mod tests {
         let lens = generate_word_lens();
         for (i, &len) in lens.iter().enumerate() {
             assert!(
-                len >= 3 && len <= 8,
+                (3..=8).contains(&len),
                 "Word {} has invalid length {}",
                 i,
                 len
@@ -140,9 +140,9 @@ mod tests {
         let data = generate_words_data();
         let lens = generate_word_lens();
 
-        for i in 0..WORD_COUNT {
+        for (i, &word_len) in lens.iter().enumerate() {
             let offset = i * WORD_WIDTH;
-            let len = lens[i] as usize;
+            let len = word_len as usize;
             for b in &data[offset + len..offset + WORD_WIDTH] {
                 assert_eq!(*b, 0u8, "non-zero padding at word {}", i);
             }
