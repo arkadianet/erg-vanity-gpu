@@ -1,0 +1,20 @@
+[package]
+name = "erg-vanity-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "CLI for GPU-accelerated Ergo vanity address generation"
+
+[[bin]]
+name = "erg-vanity"
+path = "src/main.rs"
+
+[dependencies]
+erg-vanity-core = { path = "../erg-vanity-core" }
+erg-vanity-cpu = { path = "../erg-vanity-cpu" }
+erg-vanity-gpu = { path = "../erg-vanity-gpu" }
+anyhow = { workspace = true }
+clap = { workspace = true }
+hex = { workspace = true }
+indicatif = { workspace = true }

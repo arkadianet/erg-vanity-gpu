@@ -1,0 +1,17 @@
+[package]
+name = "erg-vanity-address"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Ergo P2PK address encoding"
+
+[dependencies]
+erg-vanity-core = { path = "../erg-vanity-core" }
+erg-vanity-crypto = { path = "../erg-vanity-crypto" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+bs58 = { workspace = true }
+ergo-lib = { workspace = true }

@@ -1,0 +1,20 @@
+[package]
+name = "erg-vanity-crypto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Cryptographic primitives: SHA-256/512, HMAC, PBKDF2, secp256k1, Blake2b, Base58"
+
+[dependencies]
+erg-vanity-core = { path = "../erg-vanity-core" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+sha2 = { workspace = true }
+hmac = { workspace = true }
+pbkdf2 = { workspace = true }
+blake2 = { workspace = true }
+bs58 = { workspace = true }
+k256 = { workspace = true }

@@ -1,0 +1,64 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/erg-vanity-core",
+    "crates/erg-vanity-crypto",
+    "crates/erg-vanity-bip",
+    "crates/erg-vanity-address",
+    "crates/erg-vanity-cpu",
+    "crates/erg-vanity-gpu",
+    "crates/erg-vanity-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["rkadias"]
+
+[workspace.dependencies]
+# Core
+thiserror = "1.0"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+
+# Parallelism
+rayon = "1.10"
+crossbeam = "0.8"
+
+# OpenCL
+ocl = "0.19"
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+indicatif = "0.17"
+
+# Crypto (verification only - compare our impl against these)
+sha2 = "0.10"
+hmac = "0.12"
+pbkdf2 = "0.12"
+blake2 = "0.10"
+bs58 = "0.5"
+k256 = { version = "0.13", features = ["expose-field"] }
+
+# Unicode (BIP39 NFKD normalization)
+unicode-normalization = "0.1"
+
+# Random
+rand = "0.8"
+rand_chacha = "0.3"
+
+# Testing
+hex = "0.4"
+
+# Validation - pin exact version to avoid drift
+ergo-lib = "=0.28.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+
+[profile.bench]
+lto = true
+codegen-units = 1

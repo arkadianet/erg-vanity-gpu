@@ -1,0 +1,16 @@
+[package]
+name = "erg-vanity-bip"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "BIP39/BIP32/BIP44 implementation with NFKD normalization"
+
+[dependencies]
+erg-vanity-core = { path = "../erg-vanity-core" }
+erg-vanity-crypto = { path = "../erg-vanity-crypto" }
+thiserror = { workspace = true }
+unicode-normalization = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }

@@ -1,0 +1,22 @@
+[package]
+name = "erg-vanity-cpu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "CPU reference implementation for vanity address generation"
+
+[dependencies]
+erg-vanity-core = { path = "../erg-vanity-core" }
+erg-vanity-crypto = { path = "../erg-vanity-crypto" }
+erg-vanity-bip = { path = "../erg-vanity-bip" }
+erg-vanity-address = { path = "../erg-vanity-address" }
+thiserror = { workspace = true }
+rayon = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+ergo-lib = { workspace = true }
+bip39 = "2.1"
