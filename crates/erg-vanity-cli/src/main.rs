@@ -206,6 +206,7 @@ fn parse_patterns(args: &Args) -> Result<(Vec<String>, Vec<String>), String> {
     Ok((originals, normalized))
 }
 
+/// Enumerate GPUs and print a user-friendly list for `--list-devices`.
 fn list_devices() -> Result<(), String> {
     let devices = GpuContext::enumerate_devices().map_err(|e| e.to_string())?;
     if devices.is_empty() {
@@ -312,15 +313,22 @@ enum WorkerMessage {
 
 /// Coordinates vanity search workers across multiple GPU devices.
 struct MultiGpuRunner {
+    /// Runtime configuration applied to every GPU pipeline.
     cfg: VanityConfig,
+    /// Global device indices selected via `--devices`.
     device_indices: Vec<usize>,
+    /// Normalized patterns for GPU matching.
     normalized_patterns: Arc<Vec<String>>,
+    /// Original user-provided patterns for display.
     original_patterns: Vec<String>,
+    /// Maximum number of matches to find before stopping.
     max_results: usize,
+    /// Optional time limit for the run.
     duration: Option<Duration>,
 }
 
 impl MultiGpuRunner {
+    /// Run the vanity search across all configured GPU devices.
     fn run(self) -> Result<(), String> {
         let mut salt = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut salt);
