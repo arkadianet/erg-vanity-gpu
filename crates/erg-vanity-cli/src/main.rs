@@ -206,6 +206,7 @@ fn parse_patterns(args: &Args) -> Result<(Vec<String>, Vec<String>), String> {
     Ok((originals, normalized))
 }
 
+/// Enumerate GPUs and print a user-friendly list for `--list-devices`.
 fn list_devices() -> Result<(), String> {
     let devices = GpuContext::enumerate_devices().map_err(|e| e.to_string())?;
     if devices.is_empty() {
@@ -224,6 +225,7 @@ fn list_devices() -> Result<(), String> {
     Ok(())
 }
 
+/// Parse the `--devices` argument into a sorted, deduplicated list of indices.
 fn parse_device_list(devices_arg: &str) -> Result<Vec<usize>, String> {
     let devices = GpuContext::enumerate_devices().map_err(|e| e.to_string())?;
     if devices.is_empty() {
@@ -268,6 +270,7 @@ fn parse_device_list(devices_arg: &str) -> Result<Vec<usize>, String> {
     Ok(indices)
 }
 
+/// Print a vanity match result in a consistent, user-facing format.
 fn print_result(
     result: &VanityResult,
     original_patterns: &[String],
@@ -291,30 +294,41 @@ fn print_result(
 }
 
 enum WorkerMessage {
+    /// A device produced a verified match.
     Hit {
         device_index: usize,
         result: VanityResult,
     },
+    /// A device encountered a fatal error and should halt the search.
     Error {
         device_index: usize,
         message: String,
     },
+    /// Final stats for a device when its worker exits.
     Stats {
         device_index: usize,
         hits_dropped_total: u64,
     },
 }
 
+/// Coordinates vanity search workers across multiple GPU devices.
 struct MultiGpuRunner {
+    /// Runtime configuration applied to every GPU pipeline.
     cfg: VanityConfig,
+    /// Global device indices selected via `--devices`.
     device_indices: Vec<usize>,
+    /// Normalized patterns for GPU matching.
     normalized_patterns: Arc<Vec<String>>,
+    /// Original user-provided patterns for display.
     original_patterns: Vec<String>,
+    /// Maximum number of matches to find before stopping.
     max_results: usize,
+    /// Optional time limit for the run.
     duration: Option<Duration>,
 }
 
 impl MultiGpuRunner {
+    /// Run the vanity search across all configured GPU devices.
     fn run(self) -> Result<(), String> {
         let mut salt = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut salt);
