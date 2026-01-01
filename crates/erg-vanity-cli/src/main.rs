@@ -410,6 +410,7 @@ impl MultiGpuRunner {
         let mut last_report = Instant::now();
         let mut results_found = 0usize;
         let mut dropped_hits_total = 0u64;
+        let mut first_error: Option<String> = None;
 
         loop {
             match rx.recv_timeout(Duration::from_millis(200)) {
@@ -437,6 +438,10 @@ impl MultiGpuRunner {
                         device_index,
                         message,
                     } => {
+                        if first_error.is_none() {
+                            first_error =
+                                Some(format!("Device {} error: {}", device_index, message));
+                        }
                         eprintln!("Device {} error: {}", device_index, message);
                         stop.store(true, Ordering::Relaxed);
                     }
@@ -473,6 +478,10 @@ impl MultiGpuRunner {
 
         for handle in handles {
             let _ = handle.join();
+        }
+
+        if let Some(err) = first_error {
+            return Err(err);
         }
 
         eprintln!();
