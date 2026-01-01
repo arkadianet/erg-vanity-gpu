@@ -23,8 +23,11 @@ cargo build --release -p erg-vanity-cli
 |--------|-------------|
 | `-p, --pattern <patterns>` | Comma-separated patterns (e.g., `9err,9ego`) |
 | `-i, --ignore-case` | Case-insensitive matching |
-| `-n, --num <N>` | Number of matches to find (default: 1) |
+| `-n, --max-results <N>` | Number of matches to find (default: 1, `--num` alias) |
 | `--index <N>` | BIP44 indices per seed: `m/44'/429'/0'/0/{0..N-1}` (default: 1) |
+| `--list-devices` | List available OpenCL devices and exit |
+| `--devices <csv\|all>` | Comma-separated device indices or `all` (default: `0`) |
+| `--duration-secs <S>` | Stop after `S` seconds |
 
 ### Examples
 
@@ -37,6 +40,10 @@ cargo build --release -p erg-vanity-cli
 
 # Check first 10 address indices per seed
 ./target/release/erg-vanity -p 9ergo --index 10
+
+# List devices and search across all GPUs for 2 matches or up to 60 seconds
+./target/release/erg-vanity --list-devices
+./target/release/erg-vanity -p 9err --devices all --max-results 2 --duration-secs 60
 ```
 
 Ergo mainnet P2PK addresses start with `9e`, `9f`, `9g`, `9h`, or `9i`.
