@@ -101,14 +101,58 @@ pub struct VanityPipeline {
 }
 
 impl VanityPipeline {
-    /// Create a new vanity search pipeline.
+    /// Creates a vanity search pipeline for the given patterns using the default GPU device (device 0)
+    /// and a randomly generated 32-byte salt.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if pipeline initialization fails (for example, if no GPU device is available
+    /// or if GPU resource allocation/upload fails).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let cfg = VanityConfig::default();
+    /// let patterns = vec!["erg".to_string(), "ergos".to_string()];
+    /// let pipeline = VanityPipeline::new(&patterns, cfg).unwrap();
+    /// // Use pipeline to run batches or inspect device information
+    /// let info = pipeline.device_info();
+    /// println!("{}", info.name);
+    /// ```
     pub fn new(patterns: &[String], cfg: VanityConfig) -> Result<Self, GpuError> {
         let mut salt = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut salt);
         Self::new_with_device_and_salt(patterns, cfg, 0, salt)
     }
 
-    /// Create a new vanity search pipeline on a specific device with a shared salt.
+    /// Create a vanity search pipeline bound to a specific GPU device using the provided 32-byte salt.
+    ///
+    /// This initializes GPU resources, uploads the salt, wordlist and patterns, and builds the
+    /// kernel configured for the pipeline. The provided `salt` is uploaded to the device and used
+    /// as the shared per-batch seed material.
+    ///
+    /// # Parameters
+    ///
+    /// - `patterns`: List of ASCII patterns to search for; must contain at least one pattern.
+    /// - `cfg`: Configuration for the pipeline (batch size, case handling, indices per seed, etc.).
+    /// - `device_index`: Index of the GPU device to use.
+    /// - `salt`: 32-byte salt uploaded to the GPU and used by the kernel.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(VanityPipeline)` on success. `Err(GpuError)` if `patterns` is empty or GPU/resource setup fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use erg_vanity_gpu::{VanityConfig, VanityPipeline};
+    ///
+    /// let patterns = vec!["erg".to_string()];
+    /// let cfg = VanityConfig::default();
+    /// let salt = [0u8; 32];
+    /// let pipeline = VanityPipeline::new_with_device_and_salt(&patterns, cfg, 0, salt);
+    /// assert!(pipeline.is_ok() || pipeline.is_err()); // demonstrates call site; actual result depends on GPU availability
+    /// ```
     pub fn new_with_device_and_salt(
         patterns: &[String],
         cfg: VanityConfig,
@@ -191,8 +235,18 @@ impl VanityPipeline {
         self.hits_dropped_total
     }
 
-    /// Run one batch of the search.
-    /// Returns all verified matches from this batch.
+    /// Executes a single GPU batch of the vanity search and returns any verified hits.
+    ///
+    /// On success, returns a vector of verified VanityResult entries found and validated
+    /// from this batch. On failure, returns a `GpuError`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `pipeline` must be a mutable VanityPipeline previously created.
+    /// let results = pipeline.run_batch().unwrap();
+    /// // `results` is a Vec<VanityResult> containing any verified matches from the batch.
+    /// ```
     pub fn run_batch(&mut self) -> Result<Vec<VanityResult>, GpuError> {
         // Reset hit counter
         self.buffers.reset_hits()?;
@@ -215,8 +269,30 @@ impl VanityPipeline {
         self.collect_results()
     }
 
-    /// Run one batch using an externally managed counter.
-    /// Counter is per-seed: each work item uses counter_start + gid.
+    /// Runs a single GPU batch using an externally provided per-seed counter and returns any verified hits.
+    ///
+    /// This resets the GPU hit counter, sets the kernel's counter start to `counter_start`, enqueues and waits
+    /// for the kernel to finish, increments the pipeline's `addresses_checked` by `batch_size * num_indices`,
+    /// and collects/validates hits on the CPU.
+    ///
+    /// # Parameters
+    ///
+    /// - `counter_start`: Starting counter value used by each work item; each work item uses `counter_start + gid`.
+    ///
+    /// # Returns
+    ///
+    /// `Vec<VanityResult>` of verified VanityResult entries; an empty vector if no matches. Returns a `GpuError` on failure.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // assume `pipeline` is an initialized VanityPipeline
+    /// let counter = 0u64;
+    /// let results = pipeline.run_batch_with_counter(counter)?;
+    /// for hit in results {
+    ///     println!("Found address {} at index {}", hit.address, hit.address_index);
+    /// }
+    /// ```
     pub fn run_batch_with_counter(
         &mut self,
         counter_start: u64,
@@ -238,6 +314,23 @@ impl VanityPipeline {
         self.collect_results()
     }
 
+    /// Collects and verifies GPU-produced hits for the most recent batch.
+    ///
+    /// Reads the raw hit count (capped at `MAX_HITS`), increments `hits_dropped_total` for any overflow,
+    /// reads up to that many hit records from GPU buffers, verifies each hit on the CPU, sorts the
+    /// verified results deterministically, and returns them.
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<VanityResult>` containing verified hits; the vector is empty if no valid hits were found.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // `pipeline` is a mutable VanityPipeline that has just finished a GPU batch.
+    /// let results = pipeline.collect_results().expect("failed to collect results");
+    /// assert!(results.iter().all(|r| !r.address.is_empty()));
+    /// ```
     fn collect_results(&mut self) -> Result<Vec<VanityResult>, GpuError> {
         // Check for hits (read raw count, may exceed MAX_HITS)
         let raw_hit_count = self.buffers.read_hit_count()? as usize;

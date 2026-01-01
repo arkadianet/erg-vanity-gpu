@@ -154,8 +154,33 @@ fn validate_pattern(pattern: &str, ignore_case: bool) -> Result<String, String> 
     }
 }
 
-/// Parse and validate all patterns from CLI args.
-/// Returns (original_patterns, normalized_patterns).
+/// Collects, validates, and normalizes vanity patterns provided on the command line.
+///
+/// Trims and ignores empty patterns from the `-p` flag and the optional positional pattern,
+/// enforces `MAX_PATTERNS` and `MAX_PATTERN_DATA` limits, and validates each pattern via
+/// `validate_pattern`. Returns a tuple `(original_patterns, normalized_patterns)` where
+/// `original_patterns` preserves the user-provided trimmed strings and `normalized_patterns`
+/// contains the validated (and case-normalized when `ignore_case` is enabled) counterparts.
+/// Returns an `Err` with a descriptive message if no patterns are supplied, any limit is
+/// exceeded, or any pattern fails validation.
+///
+/// # Examples
+///
+/// ```
+/// let args = Args {
+///     list_devices: false,
+///     devices: "all".to_string(),
+///     patterns: vec!["9f".to_string(), "9ego".to_string()],
+///     ignore_case: false,
+///     max_results: 1,
+///     num_indices: 1,
+///     duration_secs: None,
+///     pattern: None,
+/// };
+/// let (originals, normalized) = parse_patterns(&args).expect("patterns valid");
+/// assert_eq!(originals, vec!["9f".to_string(), "9ego".to_string()]);
+/// assert_eq!(normalized, vec!["9f".to_string(), "9ego".to_string()]);
+/// ```
 fn parse_patterns(args: &Args) -> Result<(Vec<String>, Vec<String>), String> {
     let mut originals: Vec<String> = Vec::new();
 
@@ -206,6 +231,23 @@ fn parse_patterns(args: &Args) -> Result<(Vec<String>, Vec<String>), String> {
     Ok((originals, normalized))
 }
 
+/// Enumerates available OpenCL GPU devices and prints a one-line summary for each.
+///
+/// Prints "No OpenCL GPU devices found." if none are available.
+///
+/// # Returns
+///
+/// `Ok(())` on success; `Err(String)` if device enumeration fails (error converted to a string).
+///
+/// # Examples
+///
+/// ```
+/// // Print devices or handle enumeration error
+/// match list_devices() {
+///     Ok(()) => (),
+///     Err(e) => eprintln!("Device enumeration failed: {}", e),
+/// }
+/// ```
 fn list_devices() -> Result<(), String> {
     let devices = GpuContext::enumerate_devices().map_err(|e| e.to_string())?;
     if devices.is_empty() {
@@ -224,6 +266,22 @@ fn list_devices() -> Result<(), String> {
     Ok(())
 }
 
+/// Parse a device selection string into a sorted, deduplicated list of available GPU device indices.
+///
+/// The `devices_arg` may be the literal `"all"` (case-insensitive) to select every discovered device,
+/// or a comma-separated list of integer indices (e.g. `"0,1,3"`). Whitespace around entries is ignored.
+/// Returns an error if no devices are discovered, if no indices are provided, if an index cannot be parsed,
+/// or if any requested index is not present among the available devices.
+///
+/// # Examples
+///
+/// ```
+/// // Select all available devices
+/// let all = parse_device_list("all").unwrap();
+/// // Select specific devices by index
+/// let some = parse_device_list("0, 2").unwrap();
+/// assert!(all.len() >= some.len());
+/// ```
 fn parse_device_list(devices_arg: &str) -> Result<Vec<usize>, String> {
     let devices = GpuContext::enumerate_devices().map_err(|e| e.to_string())?;
     if devices.is_empty() {
@@ -268,6 +326,22 @@ fn parse_device_list(devices_arg: &str) -> Result<Vec<usize>, String> {
     Ok(indices)
 }
 
+/// Print a formatted vanity-match summary including device, address, pattern, derivation path, mnemonic, and entropy.
+///
+/// # Examples
+///
+/// ```
+/// // Construct a sample VanityResult matching the fields used by `print_result`.
+/// let result = VanityResult {
+///     address: "9fExampleAddress".to_string(),
+///     pattern_index: 0,
+///     address_index: 3,
+///     mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".to_string(),
+///     entropy: vec![0u8; 32],
+/// };
+/// let original_patterns = vec!["9f".to_string()];
+/// print_result(&result, &original_patterns, 1, 0);
+/// ```
 fn print_result(
     result: &VanityResult,
     original_patterns: &[String],
@@ -315,6 +389,20 @@ struct MultiGpuRunner {
 }
 
 impl MultiGpuRunner {
+    /// Run the multi-GPU vanity search, launching one worker per device and coordinating progress, results, and shutdown.
+    ///
+    /// This method spawns a worker thread for each configured device to run batches of address checks using a shared salt and counters, collects hits and statistics from workers, enforces the configured maximum number of results and optional duration limit, prints live progress and per-match output, and prints a final summary when complete.
+    ///
+    /// Returns an `Err` with a descriptive message if a device pipeline fails to initialize or if a worker reports a fatal error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Given a configured `runner: MultiGpuRunner`, execute the search.
+    /// // The example assumes devices and patterns have been validated beforehand.
+    /// let result = runner.run();
+    /// assert!(result.is_ok());
+    /// ```
     fn run(self) -> Result<(), String> {
         let mut salt = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut salt);
@@ -493,6 +581,31 @@ impl MultiGpuRunner {
     }
 }
 
+/// Program entry point for the erg-vanity command-line tool.
+
+///
+
+/// Parses command-line arguments, validates inputs (patterns, device selection,
+
+/// indices, and limits), prints a search summary, and runs the multi-GPU vanity
+
+/// search until the configured number of matches or duration is reached. Exits
+
+/// the process with non-zero status on configuration or runtime failures.
+
+///
+
+/// # Examples
+
+///
+
+/// ```no_run
+
+/// // Run the CLI from shell:
+
+/// // cargo run --release -- --devices all -p 9f,9ego -n 10 --index 5
+
+/// ```
 fn main() {
     let args = Args::parse();
 
