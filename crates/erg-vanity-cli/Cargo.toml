@@ -18,3 +18,4 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
 indicatif = { workspace = true }
+rand = { workspace = true }

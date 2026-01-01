@@ -103,11 +103,23 @@ pub struct VanityPipeline {
 impl VanityPipeline {
     /// Create a new vanity search pipeline.
     pub fn new(patterns: &[String], cfg: VanityConfig) -> Result<Self, GpuError> {
+        let mut salt = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut salt);
+        Self::new_with_device_and_salt(patterns, cfg, 0, salt)
+    }
+
+    /// Create a new vanity search pipeline on a specific device with a shared salt.
+    pub fn new_with_device_and_salt(
+        patterns: &[String],
+        cfg: VanityConfig,
+        device_index: usize,
+        salt: [u8; 32],
+    ) -> Result<Self, GpuError> {
         if patterns.is_empty() {
             return Err(GpuError::Other("at least one pattern required".to_string()));
         }
 
-        let ctx = GpuContext::new()?;
+        let ctx = GpuContext::with_device(device_index)?;
         let program = GpuProgram::vanity(&ctx)?;
         let queue = ctx.queue();
 
@@ -115,9 +127,6 @@ impl VanityPipeline {
         let buffers = GpuBuffers::new(&ctx, cfg.batch_size)?;
         let wordlist = WordlistBuffers::upload(queue)?;
 
-        // Generate random salt
-        let mut salt = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut salt);
         buffers.upload_salt(&salt)?;
 
         // Upload patterns (lowercase for GPU if ignore_case, keep originals for display)
@@ -198,10 +207,38 @@ impl VanityPipeline {
         self.ctx.queue().finish()?;
 
         // Update counter for next batch
-        // Each work item checks num_indices addresses
+        // Counter is per-seed: each work item uses counter_start + gid.
+        // Each seed checks num_indices addresses.
         self.counter = self.counter.wrapping_add(self.cfg.batch_size as u64);
         self.addresses_checked += (self.cfg.batch_size as u64) * (self.num_indices as u64);
 
+        self.collect_results()
+    }
+
+    /// Run one batch using an externally managed counter.
+    /// Counter is per-seed: each work item uses counter_start + gid.
+    pub fn run_batch_with_counter(
+        &mut self,
+        counter_start: u64,
+    ) -> Result<Vec<VanityResult>, GpuError> {
+        // Reset hit counter
+        self.buffers.reset_hits()?;
+
+        // Update counter_start (arg index 1)
+        self.kernel.set_arg(1, counter_start)?;
+
+        // Run kernel
+        unsafe {
+            self.kernel.enq()?;
+        }
+        self.ctx.queue().finish()?;
+
+        self.addresses_checked += (self.cfg.batch_size as u64) * (self.num_indices as u64);
+
+        self.collect_results()
+    }
+
+    fn collect_results(&mut self) -> Result<Vec<VanityResult>, GpuError> {
         // Check for hits (read raw count, may exceed MAX_HITS)
         let raw_hit_count = self.buffers.read_hit_count()? as usize;
         let hit_count = raw_hit_count.min(MAX_HITS);
