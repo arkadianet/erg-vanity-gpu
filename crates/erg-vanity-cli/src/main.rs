@@ -1,6 +1,13 @@
 use clap::Parser;
+use erg_vanity_gpu::context::GpuContext;
 use erg_vanity_gpu::pipeline::{VanityConfig, VanityPipeline, VanityResult};
+use rand::RngCore;
+use std::collections::HashSet;
 use std::io::{self, Write};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{mpsc, Arc};
+use std::thread;
+use std::time::Duration;
 use std::time::Instant;
 
 /// Base58 alphabet (excluding 0, O, I, l)
@@ -24,6 +31,14 @@ const MAX_PATTERN_DATA: usize = 1024;
     about = "GPU-accelerated Ergo vanity address generator"
 )]
 struct Args {
+    /// List all available OpenCL devices and exit
+    #[arg(long = "list-devices", default_value_t = false)]
+    list_devices: bool,
+
+    /// Comma-separated device indices to use, or "all"
+    #[arg(long = "devices", default_value = "0")]
+    devices: String,
+
     /// Pattern(s) to search for (comma-separated, e.g., "9err,9ego")
     #[arg(short = 'p', long = "pattern", value_delimiter = ',')]
     patterns: Vec<String>,
@@ -32,13 +47,17 @@ struct Args {
     #[arg(short = 'i', long = "ignore-case", default_value_t = false)]
     ignore_case: bool,
 
-    /// Number of matches to find before stopping
-    #[arg(short = 'n', long = "num", default_value_t = 1)]
-    num_matches: usize,
+    /// Maximum number of matches to find before stopping
+    #[arg(short = 'n', long = "max-results", alias = "num", default_value_t = 1)]
+    max_results: usize,
 
     /// Number of BIP44 address indices to check per seed (m/44'/429'/0'/0/{0..N-1})
     #[arg(long = "index", default_value_t = 1)]
     num_indices: u32,
+
+    /// Maximum duration to run before stopping (seconds)
+    #[arg(long = "duration-secs")]
+    duration_secs: Option<u64>,
 
     /// Legacy: single pattern as positional argument
     #[arg()]
@@ -187,7 +206,74 @@ fn parse_patterns(args: &Args) -> Result<(Vec<String>, Vec<String>), String> {
     Ok((originals, normalized))
 }
 
-fn print_result(result: &VanityResult, original_patterns: &[String], match_num: usize) {
+fn list_devices() -> Result<(), String> {
+    let devices = GpuContext::enumerate_devices().map_err(|e| e.to_string())?;
+    if devices.is_empty() {
+        println!("No OpenCL GPU devices found.");
+        return Ok(());
+    }
+    for info in devices {
+        println!(
+            "[{}] {} - {} (platform: {})",
+            info.global_idx,
+            info.vendor.trim(),
+            info.device_name.trim(),
+            info.platform_name.trim()
+        );
+    }
+    Ok(())
+}
+
+fn parse_device_list(devices_arg: &str) -> Result<Vec<usize>, String> {
+    let devices = GpuContext::enumerate_devices().map_err(|e| e.to_string())?;
+    if devices.is_empty() {
+        return Err("no OpenCL GPU devices found".to_string());
+    }
+    let mut available_indices: Vec<usize> = devices.iter().map(|info| info.global_idx).collect();
+    available_indices.sort_unstable();
+    let available_set: HashSet<usize> = available_indices.iter().copied().collect();
+
+    let normalized = devices_arg.trim().to_ascii_lowercase();
+    let mut indices = if normalized == "all" {
+        available_indices.clone()
+    } else {
+        let mut parsed = Vec::new();
+        for part in devices_arg.split(',') {
+            let trimmed = part.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let idx: usize = trimmed.parse().map_err(|_| {
+                format!(
+                    "invalid device index '{}': expected integer or 'all'",
+                    trimmed
+                )
+            })?;
+            if !available_set.contains(&idx) {
+                return Err(format!(
+                    "device index {} not found (available: {:?})",
+                    idx, available_indices
+                ));
+            }
+            parsed.push(idx);
+        }
+        if parsed.is_empty() {
+            return Err("no device indices provided".to_string());
+        }
+        parsed
+    };
+
+    indices.sort_unstable();
+    indices.dedup();
+    Ok(indices)
+}
+
+fn print_result(
+    result: &VanityResult,
+    original_patterns: &[String],
+    match_num: usize,
+    device_index: usize,
+) {
     let pattern_idx = result.pattern_index as usize;
     let pattern = original_patterns
         .get(pattern_idx)
@@ -196,6 +282,7 @@ fn print_result(result: &VanityResult, original_patterns: &[String], match_num: 
 
     println!();
     println!("=== Match {} ===", match_num);
+    println!("Device:   {}", device_index);
     println!("Address:  {}", result.address);
     println!("Pattern:  {}", pattern);
     println!("Path:     m/44'/429'/0'/0/{}", result.address_index);
@@ -203,8 +290,219 @@ fn print_result(result: &VanityResult, original_patterns: &[String], match_num: 
     println!("Entropy:  {}", hex::encode(result.entropy));
 }
 
+enum WorkerMessage {
+    Hit {
+        device_index: usize,
+        result: VanityResult,
+    },
+    Error {
+        device_index: usize,
+        message: String,
+    },
+    Stats {
+        device_index: usize,
+        hits_dropped_total: u64,
+    },
+}
+
+struct MultiGpuRunner {
+    cfg: VanityConfig,
+    device_indices: Vec<usize>,
+    normalized_patterns: Arc<Vec<String>>,
+    original_patterns: Vec<String>,
+    max_results: usize,
+    duration: Option<Duration>,
+}
+
+impl MultiGpuRunner {
+    fn run(self) -> Result<(), String> {
+        let mut salt = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut salt);
+
+        let counter = Arc::new(AtomicU64::new(0));
+        let stop = Arc::new(AtomicBool::new(false));
+        let total_checked = Arc::new(AtomicU64::new(0));
+
+        let (tx, rx) = mpsc::channel::<WorkerMessage>();
+        let mut handles = Vec::new();
+
+        for device_index in &self.device_indices {
+            let device_index = *device_index;
+            let patterns = Arc::clone(&self.normalized_patterns);
+            let cfg = self.cfg.clone();
+            let tx = tx.clone();
+            let counter = Arc::clone(&counter);
+            let stop = Arc::clone(&stop);
+            let total_checked = Arc::clone(&total_checked);
+            let salt = salt;
+
+            let handle = thread::spawn(move || {
+                let mut pipeline = match VanityPipeline::new_with_device_and_salt(
+                    &patterns,
+                    cfg.clone(),
+                    device_index,
+                    salt,
+                ) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        let _ = tx.send(WorkerMessage::Error {
+                            device_index,
+                            message: e.to_string(),
+                        });
+                        stop.store(true, Ordering::Relaxed);
+                        return;
+                    }
+                };
+
+                while !stop.load(Ordering::Relaxed) {
+                    let counter_start = counter.fetch_add(cfg.batch_size as u64, Ordering::Relaxed);
+                    let batch_results = match pipeline.run_batch_with_counter(counter_start) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            let _ = tx.send(WorkerMessage::Error {
+                                device_index,
+                                message: e.to_string(),
+                            });
+                            stop.store(true, Ordering::Relaxed);
+                            break;
+                        }
+                    };
+
+                    total_checked.fetch_add(
+                        (cfg.batch_size as u64) * (cfg.num_indices as u64),
+                        Ordering::Relaxed,
+                    );
+
+                    for result in batch_results {
+                        if tx
+                            .send(WorkerMessage::Hit {
+                                device_index,
+                                result,
+                            })
+                            .is_err()
+                        {
+                            stop.store(true, Ordering::Relaxed);
+                            return;
+                        }
+                    }
+                }
+
+                let _ = tx.send(WorkerMessage::Stats {
+                    device_index,
+                    hits_dropped_total: pipeline.hits_dropped_total(),
+                });
+            });
+
+            handles.push(handle);
+        }
+
+        drop(tx);
+
+        if let Some(duration) = self.duration {
+            let stop = Arc::clone(&stop);
+            thread::spawn(move || {
+                thread::sleep(duration);
+                stop.store(true, Ordering::Relaxed);
+            });
+        }
+
+        let start = Instant::now();
+        let mut last_report = Instant::now();
+        let mut results_found = 0usize;
+        let mut dropped_hits_total = 0u64;
+
+        loop {
+            match rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(message) => match message {
+                    WorkerMessage::Hit {
+                        device_index,
+                        result,
+                    } => {
+                        if results_found >= self.max_results {
+                            stop.store(true, Ordering::Relaxed);
+                            continue;
+                        }
+                        results_found += 1;
+                        print_result(
+                            &result,
+                            &self.original_patterns,
+                            results_found,
+                            device_index,
+                        );
+                        if results_found >= self.max_results {
+                            stop.store(true, Ordering::Relaxed);
+                        }
+                    }
+                    WorkerMessage::Error {
+                        device_index,
+                        message,
+                    } => {
+                        eprintln!("Device {} error: {}", device_index, message);
+                        stop.store(true, Ordering::Relaxed);
+                    }
+                    WorkerMessage::Stats {
+                        device_index,
+                        hits_dropped_total,
+                    } => {
+                        if hits_dropped_total > 0 {
+                            eprintln!();
+                            eprintln!(
+                                "Device {} dropped {} hits due to buffer overflow",
+                                device_index, hits_dropped_total
+                            );
+                        }
+                        dropped_hits_total = dropped_hits_total.saturating_add(hits_dropped_total);
+                    }
+                },
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+
+            if last_report.elapsed().as_secs_f64() >= 1.0 {
+                let elapsed = start.elapsed().as_secs_f64();
+                let checked = total_checked.load(Ordering::Relaxed);
+                let rate = checked as f64 / elapsed.max(0.001);
+                eprint!(
+                    "\rChecked: {} ({:.0} addr/s) [{}/{}]   ",
+                    checked, rate, results_found, self.max_results
+                );
+                io::stderr().flush().ok();
+                last_report = Instant::now();
+            }
+        }
+
+        for handle in handles {
+            let _ = handle.join();
+        }
+
+        eprintln!();
+        eprintln!(
+            "Found {} match(es) in {:.1}s ({} addresses checked)",
+            results_found,
+            start.elapsed().as_secs_f64(),
+            total_checked.load(Ordering::Relaxed)
+        );
+        if dropped_hits_total > 0 {
+            eprintln!(
+                "Warning: {} hits dropped due to buffer overflow (pattern too short?)",
+                dropped_hits_total
+            );
+        }
+
+        Ok(())
+    }
+}
+
 fn main() {
     let args = Args::parse();
+
+    if args.list_devices {
+        if let Err(err) = list_devices() {
+            eprintln!("Error: {}", err);
+            std::process::exit(1);
+        }
+        return;
+    }
 
     // Parse and validate patterns
     let (original_patterns, normalized_patterns) = match parse_patterns(&args) {
@@ -225,11 +523,19 @@ fn main() {
         std::process::exit(2);
     }
 
-    // Validate num_matches
-    if args.num_matches == 0 {
-        eprintln!("Error: -n/--num must be at least 1");
+    // Validate max_results
+    if args.max_results == 0 {
+        eprintln!("Error: -n/--max-results must be at least 1");
         std::process::exit(2);
     }
+
+    let device_indices = match parse_device_list(&args.devices) {
+        Ok(list) => list,
+        Err(err) => {
+            eprintln!("Error: {}", err);
+            std::process::exit(2);
+        }
+    };
 
     let cfg = VanityConfig {
         batch_size: 1 << 18, // 262,144
@@ -249,79 +555,26 @@ fn main() {
         args.num_indices,
         args.num_indices - 1
     );
-    eprintln!("Target matches: {}", args.num_matches);
+    eprintln!("Target matches: {}", args.max_results);
+    eprintln!("Devices: {:?}", device_indices);
     eprintln!("Batch size: {}", cfg.batch_size);
+    if let Some(secs) = args.duration_secs {
+        eprintln!("Duration limit: {}s", secs);
+    }
+    eprintln!();
 
-    // Pass normalized patterns to pipeline (lowercased if ignore_case)
-    let mut pipe = match VanityPipeline::new(&normalized_patterns, cfg) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("GPU init failed: {}", e);
-            std::process::exit(1);
-        }
+    let runner = MultiGpuRunner {
+        cfg,
+        device_indices,
+        normalized_patterns: Arc::new(normalized_patterns),
+        original_patterns,
+        max_results: args.max_results,
+        duration: args.duration_secs.map(Duration::from_secs),
     };
 
-    eprintln!("Device: {}", pipe.device_info());
-    eprintln!();
-
-    let start = Instant::now();
-    let mut last_report = Instant::now();
-    let mut results: Vec<VanityResult> = Vec::new();
-
-    loop {
-        match pipe.run_batch() {
-            Ok(batch_results) => {
-                for result in batch_results {
-                    print_result(&result, &original_patterns, results.len() + 1);
-                    results.push(result);
-
-                    if results.len() >= args.num_matches {
-                        break;
-                    }
-                }
-
-                if results.len() >= args.num_matches {
-                    break;
-                }
-
-                // Progress report every ~1 second
-                if last_report.elapsed().as_secs_f64() >= 1.0 {
-                    let elapsed = start.elapsed().as_secs_f64();
-                    let checked = pipe.addresses_checked();
-                    let rate = checked as f64 / elapsed;
-                    eprint!(
-                        "\rChecked: {} ({:.0} addr/s) [{}/{}]   ",
-                        checked,
-                        rate,
-                        results.len(),
-                        args.num_matches
-                    );
-                    io::stderr().flush().ok();
-                    last_report = Instant::now();
-                }
-            }
-            Err(e) => {
-                eprintln!("\nSearch failed: {}", e);
-                std::process::exit(1);
-            }
-        }
-    }
-
-    eprintln!();
-    eprintln!(
-        "Found {} match(es) in {:.1}s ({} addresses checked)",
-        results.len(),
-        start.elapsed().as_secs_f64(),
-        pipe.addresses_checked()
-    );
-
-    // Warn about dropped hits (short prefix = many matches = buffer overflow)
-    let dropped = pipe.hits_dropped_total();
-    if dropped > 0 {
-        eprintln!(
-            "Warning: {} hits dropped due to buffer overflow (pattern too short?)",
-            dropped
-        );
+    if let Err(err) = runner.run() {
+        eprintln!("Search failed: {}", err);
+        std::process::exit(1);
     }
 }
 
