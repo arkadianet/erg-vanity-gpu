@@ -224,6 +224,7 @@ fn list_devices() -> Result<(), String> {
     Ok(())
 }
 
+/// Parse the `--devices` argument into a sorted, deduplicated list of indices.
 fn parse_device_list(devices_arg: &str) -> Result<Vec<usize>, String> {
     let devices = GpuContext::enumerate_devices().map_err(|e| e.to_string())?;
     if devices.is_empty() {
@@ -268,6 +269,7 @@ fn parse_device_list(devices_arg: &str) -> Result<Vec<usize>, String> {
     Ok(indices)
 }
 
+/// Print a vanity match result in a consistent, user-facing format.
 fn print_result(
     result: &VanityResult,
     original_patterns: &[String],
@@ -291,20 +293,24 @@ fn print_result(
 }
 
 enum WorkerMessage {
+    /// A device produced a verified match.
     Hit {
         device_index: usize,
         result: VanityResult,
     },
+    /// A device encountered a fatal error and should halt the search.
     Error {
         device_index: usize,
         message: String,
     },
+    /// Final stats for a device when its worker exits.
     Stats {
         device_index: usize,
         hits_dropped_total: u64,
     },
 }
 
+/// Coordinates vanity search workers across multiple GPU devices.
 struct MultiGpuRunner {
     cfg: VanityConfig,
     device_indices: Vec<usize>,
