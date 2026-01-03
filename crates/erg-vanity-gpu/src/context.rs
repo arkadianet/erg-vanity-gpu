@@ -69,6 +69,16 @@ impl GpuContext {
 
     /// Create a GPU context with a specific device index (global index).
     pub fn with_device(global_selection: usize) -> Result<Self, GpuError> {
+        Self::with_device_impl(global_selection, false)
+    }
+
+    /// Create a GPU context with profiling enabled (for benchmark mode).
+    pub fn with_device_profiling(global_selection: usize) -> Result<Self, GpuError> {
+        Self::with_device_impl(global_selection, true)
+    }
+
+    /// Internal implementation for creating GPU context with optional profiling.
+    fn with_device_impl(global_selection: usize, enable_profiling: bool) -> Result<Self, GpuError> {
         let devices = Self::enumerate_devices()?;
         let info = devices
             .get(global_selection)
@@ -94,7 +104,12 @@ impl GpuContext {
             .devices(device)
             .build()?;
 
-        let queue = Queue::new(&context, device, None)?;
+        let queue_props = if enable_profiling {
+            Some(ocl::flags::CommandQueueProperties::PROFILING_ENABLE)
+        } else {
+            None
+        };
+        let queue = Queue::new(&context, device, queue_props)?;
 
         Ok(Self {
             context,
