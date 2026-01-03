@@ -68,7 +68,10 @@ impl DeviceBenchStats {
 }
 
 /// Run benchmark on a specific device.
-pub fn run_bench_on_device(device_index: usize, cfg: &BenchConfig) -> Result<DeviceBenchStats, GpuError> {
+pub fn run_bench_on_device(
+    device_index: usize,
+    cfg: &BenchConfig,
+) -> Result<DeviceBenchStats, GpuError> {
     // Create context with profiling enabled
     let ctx = GpuContext::with_device_profiling(device_index)?;
     let queue = ctx.queue();
@@ -177,7 +180,7 @@ pub fn run_bench_on_device(device_index: usize, cfg: &BenchConfig) -> Result<Dev
                 kernel.cmd().enew(&mut event).enq()?;
             }
             event.wait_for().map_err(ocl::Error::from)?;
-            validate_checksums(&checksum_buf, queue, label)?;
+            validate_checksums(&checksum_buf, queue, label, cfg.batch_size)?;
         }
 
         println!("\nValidation passed. All kernels producing varied, non-zero output.\n");
@@ -204,18 +207,24 @@ fn validate_checksums(
     checksum_buf: &Buffer<u32>,
     queue: &ocl::Queue,
     label: &str,
+    batch_size: usize,
 ) -> Result<(), GpuError> {
-    const N: usize = 16;
+    const MAX_N: usize = 16;
+
+    // Use known batch_size rather than trusting buffer API
+    let n = std::cmp::min(MAX_N, batch_size);
+    if n == 0 {
+        return Err(GpuError::Other(format!(
+            "{label}: batch_size is 0, cannot validate"
+        )));
+    }
 
     // Ensure kernel has finished before reading
     queue.finish()?;
 
-    // Read first N checksums
-    let mut checksums = vec![0u32; N];
-    checksum_buf
-        .read(&mut checksums)
-        .len(N)
-        .enq()?;
+    // Read first n checksums
+    let mut checksums = vec![0u32; n];
+    checksum_buf.read(&mut checksums).len(n).enq()?;
     queue.finish()?;
 
     // Compute stats
@@ -230,11 +239,11 @@ fn validate_checksums(
     let xor_fold = checksums.iter().fold(0u32, |acc, &x| acc ^ x);
 
     // Print results
-    println!("  {}: first {} checksums:", label, N);
+    println!("  {}: first {} checksums:", label, n);
     print!("    ");
     for (i, cs) in checksums.iter().enumerate() {
         print!("{:08x}", cs);
-        if i < N - 1 {
+        if i < n - 1 {
             print!(" ");
         }
     }
@@ -247,14 +256,14 @@ fn validate_checksums(
     // Fail on degenerate cases
     if all_zero {
         return Err(GpuError::Other(format!(
-            "{}: all checksums are zero - kernel may be optimized away",
-            label
+            "{label}: all checksums are zero - kernel may be optimized away"
         )));
     }
-    if all_identical {
+    // Only meaningful when we read >1 value
+    if n > 1 && all_identical {
         return Err(GpuError::Other(format!(
-            "{}: all checksums identical ({:08x}) - kernel may not be varying input",
-            label, checksums[0]
+            "{label}: all checksums identical ({:08x}) - kernel may not be varying input",
+            checksums[0]
         )));
     }
 

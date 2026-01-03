@@ -198,6 +198,7 @@ __kernel void bench_base58(
     // Generate base pubkey deterministically
     uchar base_pubkey[33];
     bench_generate_entropy(gid, counter_start, salt, base_pubkey);
+    base_pubkey[32] = (uchar)(gid ^ 0xA5u);  // deterministic last byte (entropy only fills 32)
     base_pubkey[0] = 0x02u;  // Valid compressed pubkey prefix
 
     uint checksum = 0;
