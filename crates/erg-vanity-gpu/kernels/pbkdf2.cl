@@ -107,3 +107,39 @@ inline void pbkdf2_bip39(__private const uchar* mnemonic, uint mnemonic_len,
     // Run PBKDF2 with 2048 iterations
     pbkdf2_sha512(key, key_len, salt, salt_len, 2048u, out);
 }
+
+// Vanity-optimized PBKDF2-HMAC-SHA512 for BIP39 seed derivation.
+// Salt is fixed to "mnemonic" and iterations are fixed to 2048.
+inline void pbkdf2_sha512_vanity(__private const uchar* password, uint password_len,
+                                 __private uchar* out) {
+    HmacSha512MidstateCtx ctx;
+    hmac_sha512_midstate_init(&ctx, password, password_len);
+
+    uchar salt_block[12];
+    salt_block[0] = (uchar)'m';
+    salt_block[1] = (uchar)'n';
+    salt_block[2] = (uchar)'e';
+    salt_block[3] = (uchar)'m';
+    salt_block[4] = (uchar)'o';
+    salt_block[5] = (uchar)'n';
+    salt_block[6] = (uchar)'i';
+    salt_block[7] = (uchar)'c';
+    salt_block[8] = 0u;
+    salt_block[9] = 0u;
+    salt_block[10] = 0u;
+    salt_block[11] = 1u;
+
+    uchar u[64];
+    hmac_sha512_msg12(&ctx, salt_block, u);
+
+    for (int i = 0; i < 64; i++) {
+        out[i] = u[i];
+    }
+
+    for (uint iter = 1u; iter < 2048u; iter++) {
+        hmac_sha512_msg64(&ctx, u, u);
+        for (int i = 0; i < 64; i++) {
+            out[i] ^= u[i];
+        }
+    }
+}

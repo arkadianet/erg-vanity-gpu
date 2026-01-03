@@ -525,6 +525,108 @@ mod tests {
     }
 
     #[test]
+    fn test_pbkdf2_vanity_matches_bip39() {
+        let _guard = lock_gpu();
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
+        };
+
+        let program = GpuProgram::pbkdf2_test(&ctx).expect("Failed to compile PBKDF2 kernel");
+        let queue = ctx.queue();
+
+        let password_buf = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().read_only())
+            .len(512)
+            .build()
+            .unwrap();
+
+        let salt_buf = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().read_only())
+            .len(256)
+            .build()
+            .unwrap();
+
+        let output_generic = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().write_only())
+            .len(64)
+            .build()
+            .unwrap();
+
+        let output_vanity = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().write_only())
+            .len(64)
+            .build()
+            .unwrap();
+
+        let salt = b"mnemonic";
+        let mut salt_data = [0u8; 256];
+        salt_data[..salt.len()].copy_from_slice(salt);
+        salt_buf.write(&salt_data[..]).enq().unwrap();
+
+        let cases: [(&str, Vec<u8>); 4] = [
+            ("empty", Vec::new()),
+            ("password", b"password".to_vec()),
+            ("boundary_128", vec![b'a'; 128]),
+            ("boundary_129", vec![b'b'; 129]),
+        ];
+
+        for (label, password) in cases {
+            let mut password_data = [0u8; 512];
+            password_data[..password.len()].copy_from_slice(&password);
+            password_buf.write(&password_data[..]).enq().unwrap();
+
+            let generic_kernel = ocl::Kernel::builder()
+                .program(program.program())
+                .name("pbkdf2_bip39_test")
+                .queue(queue.clone())
+                .global_work_size(1)
+                .arg(&password_buf)
+                .arg(password.len() as u32)
+                .arg(&salt_buf)
+                .arg(salt.len() as u32)
+                .arg(&output_generic)
+                .build()
+                .unwrap();
+
+            unsafe {
+                generic_kernel.enq().unwrap();
+            }
+
+            let vanity_kernel = ocl::Kernel::builder()
+                .program(program.program())
+                .name("pbkdf2_vanity_test")
+                .queue(queue.clone())
+                .global_work_size(1)
+                .arg(&password_buf)
+                .arg(password.len() as u32)
+                .arg(&output_vanity)
+                .build()
+                .unwrap();
+
+            unsafe {
+                vanity_kernel.enq().unwrap();
+            }
+
+            queue.finish().unwrap();
+
+            let mut generic_result = [0u8; 64];
+            output_generic.read(&mut generic_result[..]).enq().unwrap();
+
+            let mut vanity_result = [0u8; 64];
+            output_vanity.read(&mut vanity_result[..]).enq().unwrap();
+
+            assert_eq!(
+                generic_result, vanity_result,
+                "PBKDF2 vanity mismatch for case: {label}"
+            );
+        }
+    }
+
+    #[test]
     fn test_hmac_sha512_rfc4231() {
         let _guard = lock_gpu();
         // RFC 4231 Test Case 1: key = 0x0b repeated 20 times, data = "Hi There"
@@ -687,6 +789,203 @@ mod tests {
         );
         assert_eq!(result, EXPECTED, "HMAC-SHA512 Case 2 mismatch");
         println!("HMAC-SHA512 Case 2 test passed!");
+    }
+
+    #[test]
+    fn test_hmac_sha512_midstate_matches_legacy() {
+        let _guard = lock_gpu();
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
+        };
+
+        let program =
+            GpuProgram::hmac_sha512_test(&ctx).expect("Failed to compile HMAC-SHA512 kernel");
+        let queue = ctx.queue();
+
+        let key_buf = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().read_only())
+            .len(128)
+            .build()
+            .unwrap();
+
+        let data_buf = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().read_only())
+            .len(256)
+            .build()
+            .unwrap();
+
+        let output_legacy = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().write_only())
+            .len(64)
+            .build()
+            .unwrap();
+
+        let output_midstate = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().write_only())
+            .len(64)
+            .build()
+            .unwrap();
+
+        let key = [0x0bu8; 20];
+        let data: Vec<u8> = (0u8..64).collect();
+
+        let mut key_data = [0u8; 128];
+        key_data[..key.len()].copy_from_slice(&key);
+        key_buf.write(&key_data[..]).enq().unwrap();
+
+        let mut data_padded = [0u8; 256];
+        data_padded[..data.len()].copy_from_slice(&data);
+        data_buf.write(&data_padded[..]).enq().unwrap();
+
+        let legacy_kernel = ocl::Kernel::builder()
+            .program(program.program())
+            .name("hmac_sha512_test")
+            .queue(queue.clone())
+            .global_work_size(1)
+            .arg(&key_buf)
+            .arg(key.len() as u32)
+            .arg(&data_buf)
+            .arg(data.len() as u32)
+            .arg(&output_legacy)
+            .build()
+            .unwrap();
+
+        unsafe {
+            legacy_kernel.enq().unwrap();
+        }
+
+        let midstate_kernel = ocl::Kernel::builder()
+            .program(program.program())
+            .name("hmac_sha512_midstate_test")
+            .queue(queue.clone())
+            .global_work_size(1)
+            .arg(&key_buf)
+            .arg(key.len() as u32)
+            .arg(&data_buf)
+            .arg(&output_midstate)
+            .build()
+            .unwrap();
+
+        unsafe {
+            midstate_kernel.enq().unwrap();
+        }
+
+        queue.finish().unwrap();
+
+        let mut legacy_result = [0u8; 64];
+        output_legacy.read(&mut legacy_result[..]).enq().unwrap();
+
+        let mut midstate_result = [0u8; 64];
+        output_midstate
+            .read(&mut midstate_result[..])
+            .enq()
+            .unwrap();
+
+        assert_eq!(legacy_result, midstate_result, "Midstate HMAC mismatch");
+    }
+
+    #[test]
+    fn test_hmac_sha512_midstate_msg12_matches_legacy() {
+        let _guard = lock_gpu();
+        let Some(ctx) = crate::context::try_ctx() else {
+            return;
+        };
+
+        let program =
+            GpuProgram::hmac_sha512_test(&ctx).expect("Failed to compile HMAC-SHA512 kernel");
+        let queue = ctx.queue();
+
+        let key_buf = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().read_only())
+            .len(128)
+            .build()
+            .unwrap();
+
+        let data_buf = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().read_only())
+            .len(256)
+            .build()
+            .unwrap();
+
+        let output_legacy = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().write_only())
+            .len(64)
+            .build()
+            .unwrap();
+
+        let output_midstate = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().write_only())
+            .len(64)
+            .build()
+            .unwrap();
+
+        let key = [0x0bu8; 20];
+        let data = *b"mnemonic\0\0\0\1";
+
+        let mut key_data = [0u8; 128];
+        key_data[..key.len()].copy_from_slice(&key);
+        key_buf.write(&key_data[..]).enq().unwrap();
+
+        let mut data_padded = [0u8; 256];
+        data_padded[..data.len()].copy_from_slice(&data);
+        data_buf.write(&data_padded[..]).enq().unwrap();
+
+        let legacy_kernel = ocl::Kernel::builder()
+            .program(program.program())
+            .name("hmac_sha512_test")
+            .queue(queue.clone())
+            .global_work_size(1)
+            .arg(&key_buf)
+            .arg(key.len() as u32)
+            .arg(&data_buf)
+            .arg(data.len() as u32)
+            .arg(&output_legacy)
+            .build()
+            .unwrap();
+
+        unsafe {
+            legacy_kernel.enq().unwrap();
+        }
+
+        let midstate_kernel = ocl::Kernel::builder()
+            .program(program.program())
+            .name("hmac_sha512_midstate_msg12_test")
+            .queue(queue.clone())
+            .global_work_size(1)
+            .arg(&key_buf)
+            .arg(key.len() as u32)
+            .arg(&data_buf)
+            .arg(&output_midstate)
+            .build()
+            .unwrap();
+
+        unsafe {
+            midstate_kernel.enq().unwrap();
+        }
+
+        queue.finish().unwrap();
+
+        let mut legacy_result = [0u8; 64];
+        output_legacy.read(&mut legacy_result[..]).enq().unwrap();
+
+        let mut midstate_result = [0u8; 64];
+        output_midstate
+            .read(&mut midstate_result[..])
+            .enq()
+            .unwrap();
+
+        assert_eq!(
+            legacy_result, midstate_result,
+            "Midstate HMAC msg12 mismatch"
+        );
     }
 
     #[test]

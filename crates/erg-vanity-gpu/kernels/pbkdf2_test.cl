@@ -78,3 +78,30 @@ __kernel void pbkdf2_bip39_test(
         output[i] = seed[i];
     }
 }
+
+// Test kernel for vanity-optimized PBKDF2-HMAC-SHA512
+// Max password: 512 bytes
+__kernel void pbkdf2_vanity_test(
+    __global const uchar* password,
+    const uint password_len,
+    __global uchar* output   // 64 bytes
+) {
+    if (get_global_id(0) != 0u) return;
+
+    if (password_len > 512u) {
+        for (int i = 0; i < 64; i++) output[i] = 0u;
+        return;
+    }
+
+    uchar priv_password[512];
+    for (uint i = 0u; i < password_len; i++) {
+        priv_password[i] = password[i];
+    }
+
+    uchar seed[64];
+    pbkdf2_sha512_vanity(priv_password, password_len, seed);
+
+    for (int i = 0; i < 64; i++) {
+        output[i] = seed[i];
+    }
+}

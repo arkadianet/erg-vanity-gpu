@@ -169,18 +169,10 @@ inline void bip39_entropy_to_seed(
     // Get password (mnemonic or its hash)
     uchar password[128];
     uint password_len = mnemonic_to_password(entropy, words8, word_lens, password);
+    if (password_len > 128u) {
+        password_len = 128u;
+    }
 
     // Salt is "mnemonic" (no passphrase for vanity generation)
-    uchar salt[8];
-    salt[0] = (uchar)'m';
-    salt[1] = (uchar)'n';
-    salt[2] = (uchar)'e';
-    salt[3] = (uchar)'m';
-    salt[4] = (uchar)'o';
-    salt[5] = (uchar)'n';
-    salt[6] = (uchar)'i';
-    salt[7] = (uchar)'c';
-
-    // PBKDF2 with 2048 iterations
-    pbkdf2_sha512(password, password_len, salt, 8u, 2048u, seed);
+    pbkdf2_sha512_vanity(password, password_len, seed);
 }

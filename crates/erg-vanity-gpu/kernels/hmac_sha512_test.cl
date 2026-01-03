@@ -39,3 +39,73 @@ __kernel void hmac_sha512_test(
         output[i] = digest[i];
     }
 }
+
+// Test kernel for midstate-based HMAC-SHA512 on 64-byte messages.
+// Max key: 128 bytes, fixed data length: 64 bytes
+__kernel void hmac_sha512_midstate_test(
+    __global const uchar* key,
+    const uint key_len,
+    __global const uchar* data,
+    __global uchar* output   // 64 bytes
+) {
+    if (get_global_id(0) != 0u) return;
+
+    if (key_len > 128u) {
+        for (int i = 0; i < 64; i++) output[i] = 0u;
+        return;
+    }
+
+    uchar priv_key[128];
+    for (uint i = 0u; i < key_len; i++) {
+        priv_key[i] = key[i];
+    }
+
+    uchar priv_data[64];
+    for (int i = 0; i < 64; i++) {
+        priv_data[i] = data[i];
+    }
+
+    uchar digest[64];
+    HmacSha512MidstateCtx ctx;
+    hmac_sha512_midstate_init(&ctx, priv_key, key_len);
+    hmac_sha512_msg64(&ctx, priv_data, digest);
+
+    for (int i = 0; i < 64; i++) {
+        output[i] = digest[i];
+    }
+}
+
+// Test kernel for midstate-based HMAC-SHA512 on 12-byte messages.
+// Max key: 128 bytes, fixed data length: 12 bytes
+__kernel void hmac_sha512_midstate_msg12_test(
+    __global const uchar* key,
+    const uint key_len,
+    __global const uchar* data,
+    __global uchar* output   // 64 bytes
+) {
+    if (get_global_id(0) != 0u) return;
+
+    if (key_len > 128u) {
+        for (int i = 0; i < 64; i++) output[i] = 0u;
+        return;
+    }
+
+    uchar priv_key[128];
+    for (uint i = 0u; i < key_len; i++) {
+        priv_key[i] = key[i];
+    }
+
+    uchar priv_data[12];
+    for (int i = 0; i < 12; i++) {
+        priv_data[i] = data[i];
+    }
+
+    uchar digest[64];
+    HmacSha512MidstateCtx ctx;
+    hmac_sha512_midstate_init(&ctx, priv_key, key_len);
+    hmac_sha512_msg12(&ctx, priv_data, digest);
+
+    for (int i = 0; i < 64; i++) {
+        output[i] = digest[i];
+    }
+}
