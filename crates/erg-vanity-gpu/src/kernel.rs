@@ -18,6 +18,7 @@ pub mod sources {
     pub const BIP39: &str = include_str!("../kernels/bip39.cl");
     pub const BIP32: &str = include_str!("../kernels/bip32.cl");
     pub const VANITY: &str = include_str!("../kernels/vanity.cl");
+    pub const BENCH: &str = include_str!("../kernels/bench.cl");
 
     // Test kernels (unit tests OR integration tests with --features test-kernels)
     #[cfg(any(test, feature = "test-kernels"))]
@@ -195,6 +196,62 @@ impl GpuProgram {
 
         combined.push_str("\n\n// === vanity.cl ===\n");
         combined.push_str(sources::VANITY);
+        combined.push('\n');
+
+        Self::from_source(ctx, &combined)
+    }
+
+    /// Compile the benchmark program with separate kernels for each component.
+    ///
+    /// Concatenates all required kernels in dependency order:
+    /// sha256 → sha512 → hmac_sha512 → pbkdf2 → secp256k1 → blake2b → base58 → bip39 → bip32 → bench
+    pub fn bench(ctx: &GpuContext) -> Result<Self, GpuError> {
+        // Pre-allocate to avoid reallocations
+        let mut combined = String::with_capacity(
+            sources::SHA256.len()
+                + sources::SHA512.len()
+                + sources::HMAC_SHA512.len()
+                + sources::PBKDF2.len()
+                + sources::SECP256K1_FE.len()
+                + sources::SECP256K1_SCALAR.len()
+                + sources::SECP256K1_POINT.len()
+                + sources::BLAKE2B.len()
+                + sources::BASE58.len()
+                + sources::BIP39.len()
+                + sources::BIP32.len()
+                + sources::BENCH.len()
+                + 1024, // comment separators + newlines
+        );
+
+        // Same dependency order as vanity, but with bench.cl instead of vanity.cl
+        combined.push_str("// === sha256.cl ===\n");
+        combined.push_str(sources::SHA256);
+        combined.push_str("\n\n// === sha512.cl ===\n");
+        combined.push_str(sources::SHA512);
+        combined.push_str("\n\n// === hmac_sha512.cl ===\n");
+        combined.push_str(sources::HMAC_SHA512);
+        combined.push_str("\n\n// === pbkdf2.cl ===\n");
+        combined.push_str(sources::PBKDF2);
+
+        combined.push_str("\n\n// === secp256k1_fe.cl ===\n");
+        combined.push_str(sources::SECP256K1_FE);
+        combined.push_str("\n\n// === secp256k1_scalar.cl ===\n");
+        combined.push_str(sources::SECP256K1_SCALAR);
+        combined.push_str("\n\n// === secp256k1_point.cl ===\n");
+        combined.push_str(sources::SECP256K1_POINT);
+
+        combined.push_str("\n\n// === blake2b.cl ===\n");
+        combined.push_str(sources::BLAKE2B);
+        combined.push_str("\n\n// === base58.cl ===\n");
+        combined.push_str(sources::BASE58);
+
+        combined.push_str("\n\n// === bip39.cl ===\n");
+        combined.push_str(sources::BIP39);
+        combined.push_str("\n\n// === bip32.cl ===\n");
+        combined.push_str(sources::BIP32);
+
+        combined.push_str("\n\n// === bench.cl ===\n");
+        combined.push_str(sources::BENCH);
         combined.push('\n');
 
         Self::from_source(ctx, &combined)
