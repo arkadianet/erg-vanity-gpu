@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_MIN_STACK: 16777216
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: erg-vanity
+            package: erg-vanity-linux-x64.tar.gz
+
+          - name: macOS Intel
+            os: macos-13
+            target: x86_64-apple-darwin
+            binary: erg-vanity
+            package: erg-vanity-macos-x64.tar.gz
+
+          - name: macOS Apple Silicon
+            os: macos-14
+            target: aarch64-apple-darwin
+            binary: erg-vanity
+            package: erg-vanity-macos-arm64.tar.gz
+
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: erg-vanity.exe
+            package: erg-vanity-windows-x64.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install OpenCL headers (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ocl-icd-opencl-dev opencl-headers
+
+      - name: Build
+        run: cargo build --release --locked --bin erg-vanity -p erg-vanity-cli --target ${{ matrix.target }}
+
+      - name: Package (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euxo pipefail
+          BIN="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          chmod +x "$BIN"
+          strip "$BIN" || true
+          tar -czf "${{ matrix.package }}" -C "target/${{ matrix.target }}/release" "${{ matrix.binary }}"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bin = "target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          if (!(Test-Path $bin)) { throw "Binary not found: $bin" }
+          Compress-Archive -Path $bin -DestinationPath "${{ matrix.package }}" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.package }}
+          path: ${{ matrix.package }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p release
+          cp artifacts/*/* release/
+          cp README* LICENSE* release/ 2>/dev/null || true
+          cd release
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          files: |
+            release/*
