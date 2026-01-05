@@ -50,12 +50,38 @@ pub struct GpuProgram {
 
 impl GpuProgram {
     /// Compile a program from source.
+    ///
+    /// Set `ERG_CL_VERBOSE=1` to enable NVIDIA compile diagnostics (-cl-nv-verbose).
+    /// This prints register usage, spills, and occupancy hints to stderr.
     pub fn from_source(ctx: &GpuContext, source: &str) -> Result<Self, GpuError> {
+        let is_nvidia = ctx.info().vendor.to_uppercase().contains("NVIDIA");
+        let verbose = std::env::var("ERG_CL_VERBOSE")
+            .map(|v| v == "1")
+            .unwrap_or(false);
+
+        let mut opts = String::from("-cl-std=CL1.2");
+        if is_nvidia && verbose {
+            opts.push_str(" -cl-nv-verbose");
+            eprintln!("[diag] NVIDIA verbose mode enabled");
+        }
+
         let program = Program::builder()
             .src(source)
             .devices(ctx.device())
-            .cmplr_opt("-cl-std=CL1.2")
+            .cmplr_opt(&opts)
             .build(ctx.context())?;
+
+        // Print build log if verbose and NVIDIA
+        if is_nvidia && verbose {
+            if let Ok(log) =
+                program.build_info(ctx.device(), ocl::enums::ProgramBuildInfo::BuildLog)
+            {
+                let s = log.to_string();
+                if !s.trim().is_empty() {
+                    eprintln!("[diag] OpenCL build log:\n{s}");
+                }
+            }
+        }
 
         Ok(Self { program })
     }
