@@ -136,5 +136,57 @@ jobs:
           name: ${{ github.ref_name }}
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
+          body: |
+            GPU-accelerated Ergo vanity address generator. Find Ergo wallet addresses matching a custom prefix (e.g., `9ergo...`).
+
+            > **Warning:** Early development. Verify generated mnemonics with official Ergo wallet before using for significant funds.
+
+            ## Requirements
+
+            A GPU with up-to-date drivers (NVIDIA, AMD, or Intel). Drivers include OpenCL support needed to run this tool.
+
+            ## Getting Started
+
+            ### Windows
+
+            1. Download `erg-vanity-windows-x64.zip` and extract it
+            2. Open PowerShell, navigate to the folder: `cd C:\path\to\extracted\folder`
+            3. Run: `.\erg-vanity.exe 9err`
+
+            ### macOS
+
+            1. Download the `.tar.gz` for your Mac (arm64 = Apple Silicon, x64 = Intel)
+            2. Open Terminal:
+               ```
+               tar -xzf erg-vanity-macos-*.tar.gz
+               ./erg-vanity 9err
+               ```
+            3. If blocked: System Settings → Privacy & Security → Allow
+
+            ### Linux
+
+            1. Download `erg-vanity-linux-x64.tar.gz`
+            2. Open terminal:
+               ```
+               tar -xzf erg-vanity-linux-x64.tar.gz
+               ./erg-vanity 9err
+               ```
+
+            ## Examples
+
+            ```bash
+            ./erg-vanity 9err                    # Find address starting with "9err"
+            ./erg-vanity -p 9ErGo -i             # Case-insensitive
+            ./erg-vanity -p 9err,9ego,9fun       # Multiple patterns
+            ./erg-vanity -p 9err -n 5            # Find 5 matches
+            ./erg-vanity --list-devices          # List GPUs
+            ```
+
+            When a match is found, save the 24-word mnemonic securely - it controls the wallet.
+
+            **Full docs:** https://github.com/arkadianet/erg-vanity-gpu#readme
+
+            ---
+
           files: |
             release/*
