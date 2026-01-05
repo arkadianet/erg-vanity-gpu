@@ -1119,6 +1119,92 @@ mod tests {
     }
 
     #[test]
+    fn test_base58_fast_vs_generic() {
+        run_with_big_stack(BIG_TEST_STACK, || {
+            let _guard = lock_gpu();
+
+            let Some(ctx) = crate::context::try_ctx() else {
+                return;
+            };
+
+            println!("Using GPU: {}", ctx.info());
+
+            let program =
+                GpuProgram::base58_test(&ctx).expect("Failed to compile Base58 kernel");
+            let queue = ctx.queue();
+
+            // Test multiple prefixes (including mixed-case stress test)
+            let prefixes = ["9", "9a", "9Z", "111", "9abcdefgh", "9ABCdefGHi", "111111111111"];
+
+            for prefix in prefixes {
+                let prefix_lc = prefix.to_ascii_lowercase();
+                let prefix_bytes = prefix.as_bytes();
+                let prefix_lc_bytes = prefix_lc.as_bytes();
+
+                let prefix_buf = Buffer::<u8>::builder()
+                    .queue(queue.clone())
+                    .flags(MemFlags::new().read_only())
+                    .len(prefix_bytes.len())
+                    .build()
+                    .unwrap();
+                prefix_buf.write(prefix_bytes).enq().unwrap();
+
+                let prefix_lc_buf = Buffer::<u8>::builder()
+                    .queue(queue.clone())
+                    .flags(MemFlags::new().read_only())
+                    .len(prefix_lc_bytes.len())
+                    .build()
+                    .unwrap();
+                prefix_lc_buf.write(prefix_lc_bytes).enq().unwrap();
+
+                let result_buf = Buffer::<u32>::builder()
+                    .queue(queue.clone())
+                    .flags(MemFlags::new().read_write())
+                    .len(1)
+                    .build()
+                    .unwrap();
+                result_buf.write(&[0u32][..]).enq().unwrap();
+
+                let kernel = ocl::Kernel::builder()
+                    .program(program.program())
+                    .name("base58_fast_vs_generic_test")
+                    .queue(queue.clone())
+                    .global_work_size(1)
+                    .arg(&prefix_buf)
+                    .arg(&prefix_lc_buf)
+                    .arg(prefix_bytes.len() as i32)
+                    .arg(&result_buf)
+                    .build()
+                    .unwrap();
+
+                unsafe {
+                    kernel.enq().unwrap();
+                }
+                queue.finish().unwrap();
+
+                let mut result = [0u32; 1];
+                result_buf.read(&mut result[..]).enq().unwrap();
+                queue.finish().unwrap();
+
+                let failures = result[0];
+                if failures != 0 {
+                    // Decode failure bits
+                    let cs_failures = failures & 0xFFFF;
+                    let icase_failures = (failures >> 16) & 0xFFFF;
+                    panic!(
+                        "Base58 fast-vs-generic test failed for prefix '{}': \
+                         CS failures=0x{:04x}, ICASE failures=0x{:04x}",
+                        prefix, cs_failures, icase_failures
+                    );
+                }
+                println!("  Prefix '{}': OK", prefix);
+            }
+
+            println!("Base58 fast-vs-generic test passed for all prefixes!");
+        });
+    }
+
+    #[test]
     fn test_vanity_cpu_gpu_consistency() {
         run_with_big_stack(BIG_TEST_STACK, || {
             let _guard = lock_gpu();

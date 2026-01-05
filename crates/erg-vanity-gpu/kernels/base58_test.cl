@@ -243,3 +243,74 @@ __kernel void base58_self_test(__global uint* result) {
 
     *result = failures;
 }
+
+// ---- Fast vs Generic comparison test ----
+// Properly compares base58_check_prefix_38_grouped_global_* (fast) vs *_generic
+//
+// Failure bitmap layout:
+//   bits 0-15:  CS mismatch for samples 0-15
+//   bits 16-31: ICASE mismatch for samples 0-15
+//
+// Sample patterns:
+//   0: typical Ergo address (0x01 prefix + patterned data)
+//   1: one leading zero (0x00, 0x01, 0x00...)
+//   2: all zeros
+//   3: one non-zero at end
+//   4: two leading zeros (0x00, 0x00, 0x01, 0x00...)
+//   5-15: pseudo-random
+
+__kernel void base58_fast_vs_generic_test(
+    __global const char* prefix,      // Case-sensitive prefix
+    __global const char* prefix_lc,   // Lowercased prefix (for icase generic)
+    int prefix_len,
+    __global uint* result
+) {
+    if (get_global_id(0) != 0u) return;
+
+    uint failures = 0u;
+
+    for (int sample = 0; sample < 16; sample++) {
+        uchar addr[38];
+
+        if (sample == 0) {
+            // Typical Ergo address
+            addr[0] = 0x01u;
+            for (int i = 1; i < 38; i++) addr[i] = (uchar)(i * 7);
+        } else if (sample == 1) {
+            // One leading zero
+            addr[0] = 0u;
+            addr[1] = 0x01u;
+            for (int i = 2; i < 38; i++) addr[i] = 0u;
+        } else if (sample == 2) {
+            // All zeros
+            for (int i = 0; i < 38; i++) addr[i] = 0u;
+        } else if (sample == 3) {
+            // One non-zero at end
+            for (int i = 0; i < 37; i++) addr[i] = 0u;
+            addr[37] = 0x01u;
+        } else if (sample == 4) {
+            // Two leading zeros
+            addr[0] = 0u;
+            addr[1] = 0u;
+            addr[2] = 0x01u;
+            for (int i = 3; i < 38; i++) addr[i] = 0u;
+        } else {
+            // Pseudo-random
+            for (int i = 0; i < 38; i++) {
+                addr[i] = (uchar)(((sample - 5) * 17 + i * 31 + 42) & 0xFF);
+            }
+        }
+
+        // Case-sensitive: fast vs generic
+        int fast_cs = base58_check_prefix_38_grouped_global_cs(addr, prefix, prefix_len);
+        int gen_cs = base58_check_prefix_global_generic(addr, prefix, prefix_len);
+        if (fast_cs != gen_cs) failures |= (1u << sample);
+
+        // Case-insensitive: fast vs generic (both use lowercased prefix)
+        int fast_i = base58_check_prefix_38_grouped_global_icase(addr, prefix_lc, prefix_len);
+        int gen_i = base58_check_prefix_global_icase_generic(addr, prefix_lc, prefix_len);
+        if (fast_i != gen_i) failures |= (1u << (16 + sample));
+    }
+
+    *result = failures;
+}
