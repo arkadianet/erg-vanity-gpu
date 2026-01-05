@@ -76,3 +76,25 @@ inline void hmac_sha512_oneshot(const __private uchar* key, uint key_len,
     hmac_sha512_init(&ctx, key, key_len);
     hmac_sha512(&ctx, data, data_len, out);
 }
+
+// ============================================================================
+// Specialized HMAC for exactly 64-byte message (PBKDF2 iterations 2..2048)
+// ============================================================================
+
+// HMAC-SHA512 for 64-byte message as ulong8, returns ulong8.
+// No arrays, no pointers in hot path - keeps everything in registers.
+static inline ulong8 hmac_sha512_msg64_u8(__private HmacSha512Ctx* ctx, ulong8 msg) {
+    Sha512State s;
+
+    // Inner hash: H(i_key_pad || msg)
+    sha512_init(&s);
+    sha512_compress(&s, ctx->i_key_pad);
+    s.total_len = 128ul;
+    ulong8 inner = sha512_final_from_u8(&s, msg);
+
+    // Outer hash: H(o_key_pad || inner)
+    sha512_init(&s);
+    sha512_compress(&s, ctx->o_key_pad);
+    s.total_len = 128ul;
+    return sha512_final_from_u8(&s, inner);
+}

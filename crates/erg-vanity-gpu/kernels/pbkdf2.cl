@@ -46,24 +46,49 @@ inline void pbkdf2_sha512(__private const uchar* password, uint password_len,
     salt_block[salt_len + 2u] = 0u;
     salt_block[salt_len + 3u] = 1u;
 
-    uchar u[64];
-    hmac_sha512(&ctx, salt_block, salt_len + 4u, u);
+    uchar u_bytes[64];
+    hmac_sha512(&ctx, salt_block, salt_len + 4u, u_bytes);
 
-    // result = U1
-    for (int i = 0; i < 64; i++) {
-        out[i] = u[i];
-    }
+    // Pack U1 into ulong8 (NVIDIA treats as register pack, not addressable array)
+    ulong8 u = (ulong8)(
+        pack_be64(u_bytes[0],  u_bytes[1],  u_bytes[2],  u_bytes[3],
+                  u_bytes[4],  u_bytes[5],  u_bytes[6],  u_bytes[7]),
+        pack_be64(u_bytes[8],  u_bytes[9],  u_bytes[10], u_bytes[11],
+                  u_bytes[12], u_bytes[13], u_bytes[14], u_bytes[15]),
+        pack_be64(u_bytes[16], u_bytes[17], u_bytes[18], u_bytes[19],
+                  u_bytes[20], u_bytes[21], u_bytes[22], u_bytes[23]),
+        pack_be64(u_bytes[24], u_bytes[25], u_bytes[26], u_bytes[27],
+                  u_bytes[28], u_bytes[29], u_bytes[30], u_bytes[31]),
+        pack_be64(u_bytes[32], u_bytes[33], u_bytes[34], u_bytes[35],
+                  u_bytes[36], u_bytes[37], u_bytes[38], u_bytes[39]),
+        pack_be64(u_bytes[40], u_bytes[41], u_bytes[42], u_bytes[43],
+                  u_bytes[44], u_bytes[45], u_bytes[46], u_bytes[47]),
+        pack_be64(u_bytes[48], u_bytes[49], u_bytes[50], u_bytes[51],
+                  u_bytes[52], u_bytes[53], u_bytes[54], u_bytes[55]),
+        pack_be64(u_bytes[56], u_bytes[57], u_bytes[58], u_bytes[59],
+                  u_bytes[60], u_bytes[61], u_bytes[62], u_bytes[63])
+    );
 
-    // U2 ... U_iterations, XOR into result
+    // Accumulator as ulong8 - no arrays in hot path
+    ulong8 acc = u;
+
+    // U2 ... U_iterations: use specialized 64-byte HMAC path with ulong8
+    // Loop runs 2047 times for iterations=2048
+    // No arrays, no pack/unpack - everything stays in registers
     for (uint iter = 1u; iter < iterations; iter++) {
-        // U_i = HMAC(password, U_{i-1})
-        hmac_sha512(&ctx, u, 64u, u);
-
-        // result ^= U_i
-        for (int i = 0; i < 64; i++) {
-            out[i] ^= u[i];
-        }
+        u = hmac_sha512_msg64_u8(&ctx, u);
+        acc = acc ^ u;
     }
+
+    // Unpack final accumulator to output
+    unpack_be64(acc.s0, &out[0]);
+    unpack_be64(acc.s1, &out[8]);
+    unpack_be64(acc.s2, &out[16]);
+    unpack_be64(acc.s3, &out[24]);
+    unpack_be64(acc.s4, &out[32]);
+    unpack_be64(acc.s5, &out[40]);
+    unpack_be64(acc.s6, &out[48]);
+    unpack_be64(acc.s7, &out[56]);
 }
 
 // BIP39-specific wrapper: handles long mnemonics by pre-hashing.
