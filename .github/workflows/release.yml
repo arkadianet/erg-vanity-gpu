@@ -25,7 +25,7 @@ jobs:
             package: erg-vanity-linux-x64.tar.gz
 
           - name: macOS Intel
-            os: macos-13
+            os: macos-14
             target: x86_64-apple-darwin
             binary: erg-vanity
             package: erg-vanity-macos-x64.tar.gz
@@ -57,6 +57,16 @@ jobs:
       - name: Install OpenCL headers (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ocl-icd-opencl-dev opencl-headers
+
+      - name: Install OpenCL SDK (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Install OpenCL SDK via vcpkg
+          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat
+          C:\vcpkg\vcpkg install opencl:x64-windows
+          echo "OPENCL_ROOT=C:\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
 
       - name: Build
         run: cargo build --release --locked --bin erg-vanity -p erg-vanity-cli --target ${{ matrix.target }}
