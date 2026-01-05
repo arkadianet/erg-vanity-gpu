@@ -218,3 +218,303 @@ inline void sha512_two_blocks(const __private uchar* block1,
     state.total_len = 128ul;
     sha512_final(&state, block2, block2_len, out);
 }
+
+// ============================================================================
+// Specialized 64-byte finalization helpers for PBKDF2 fast path
+// Uses 16 SCALAR ulongs (not an array) to keep schedule in registers.
+// The W[16] array approach gets punted to local memory by NVIDIA.
+// ============================================================================
+
+// SHA-512 round macro for scalar schedule (single-line, no backslash fragility)
+#define SHA512_ROUND(i, Wi) do { ulong t1 = h + EP1_64(e) + CH64(e, f, g) + K512[(i)] + (Wi); ulong t2 = EP0_64(a) + MAJ64(a, b, c); h = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2; } while (0)
+
+// Finalize SHA-512 with exactly 64 bytes remaining, output as 8× ulong.
+// Uses 16 scalar ulongs with explicit rotation to stay in registers.
+// Updates state->h[] for consistency with other finalize functions.
+inline void sha512_final_64_words(__private Sha512State* state,
+                                  const __private uchar* msg64,
+                                  __private ulong* out_words) {
+    // 16 scalar schedule words - NO ARRAY (avoids local memory)
+    ulong w0  = pack_be64(msg64[0],  msg64[1],  msg64[2],  msg64[3],
+                          msg64[4],  msg64[5],  msg64[6],  msg64[7]);
+    ulong w1  = pack_be64(msg64[8],  msg64[9],  msg64[10], msg64[11],
+                          msg64[12], msg64[13], msg64[14], msg64[15]);
+    ulong w2  = pack_be64(msg64[16], msg64[17], msg64[18], msg64[19],
+                          msg64[20], msg64[21], msg64[22], msg64[23]);
+    ulong w3  = pack_be64(msg64[24], msg64[25], msg64[26], msg64[27],
+                          msg64[28], msg64[29], msg64[30], msg64[31]);
+    ulong w4  = pack_be64(msg64[32], msg64[33], msg64[34], msg64[35],
+                          msg64[36], msg64[37], msg64[38], msg64[39]);
+    ulong w5  = pack_be64(msg64[40], msg64[41], msg64[42], msg64[43],
+                          msg64[44], msg64[45], msg64[46], msg64[47]);
+    ulong w6  = pack_be64(msg64[48], msg64[49], msg64[50], msg64[51],
+                          msg64[52], msg64[53], msg64[54], msg64[55]);
+    ulong w7  = pack_be64(msg64[56], msg64[57], msg64[58], msg64[59],
+                          msg64[60], msg64[61], msg64[62], msg64[63]);
+    ulong w8  = 0x8000000000000000ul;  // 0x80 padding
+    ulong w9  = 0ul;
+    ulong w10 = 0ul;
+    ulong w11 = 0ul;
+    ulong w12 = 0ul;
+    ulong w13 = 0ul;
+    ulong w14 = 0ul;
+    ulong w15 = (state->total_len + 64ul) * 8ul;  // bit length
+
+    ulong a = state->h[0], b = state->h[1], c = state->h[2], d = state->h[3];
+    ulong e = state->h[4], f = state->h[5], g = state->h[6], h = state->h[7];
+
+    // Rounds 0-63: round + schedule update with rotation
+    for (int i = 0; i < 64; i++) {
+        SHA512_ROUND(i, w0);
+
+        // Compute next schedule word and rotate
+        ulong newW = SIG1_64(w14) + w9 + SIG0_64(w1) + w0;
+        w0 = w1; w1 = w2; w2 = w3; w3 = w4;
+        w4 = w5; w5 = w6; w6 = w7; w7 = w8;
+        w8 = w9; w9 = w10; w10 = w11; w11 = w12;
+        w12 = w13; w13 = w14; w14 = w15; w15 = newW;
+    }
+
+    // Rounds 64-79: unrolled, no rotation needed
+    // After 64 rotations, w0..w15 contain W64..W79
+    SHA512_ROUND(64, w0);  SHA512_ROUND(65, w1);
+    SHA512_ROUND(66, w2);  SHA512_ROUND(67, w3);
+    SHA512_ROUND(68, w4);  SHA512_ROUND(69, w5);
+    SHA512_ROUND(70, w6);  SHA512_ROUND(71, w7);
+    SHA512_ROUND(72, w8);  SHA512_ROUND(73, w9);
+    SHA512_ROUND(74, w10); SHA512_ROUND(75, w11);
+    SHA512_ROUND(76, w12); SHA512_ROUND(77, w13);
+    SHA512_ROUND(78, w14); SHA512_ROUND(79, w15);
+
+    // Update state and output as words
+    state->h[0] += a; state->h[1] += b; state->h[2] += c; state->h[3] += d;
+    state->h[4] += e; state->h[5] += f; state->h[6] += g; state->h[7] += h;
+
+    out_words[0] = state->h[0]; out_words[1] = state->h[1];
+    out_words[2] = state->h[2]; out_words[3] = state->h[3];
+    out_words[4] = state->h[4]; out_words[5] = state->h[5];
+    out_words[6] = state->h[6]; out_words[7] = state->h[7];
+}
+
+// Finalize SHA-512 where 64-byte message is already 8× ulong, output as bytes.
+// Uses 16 scalar ulongs with rotation. Updates state->h[].
+inline void sha512_final_from_words(__private Sha512State* state,
+                                    const __private ulong* msg_words,
+                                    __private uchar* out) {
+    // 16 scalar schedule words from msg_words + padding
+    ulong w0  = msg_words[0];
+    ulong w1  = msg_words[1];
+    ulong w2  = msg_words[2];
+    ulong w3  = msg_words[3];
+    ulong w4  = msg_words[4];
+    ulong w5  = msg_words[5];
+    ulong w6  = msg_words[6];
+    ulong w7  = msg_words[7];
+    ulong w8  = 0x8000000000000000ul;
+    ulong w9  = 0ul;
+    ulong w10 = 0ul;
+    ulong w11 = 0ul;
+    ulong w12 = 0ul;
+    ulong w13 = 0ul;
+    ulong w14 = 0ul;
+    ulong w15 = (state->total_len + 64ul) * 8ul;
+
+    ulong a = state->h[0], b = state->h[1], c = state->h[2], d = state->h[3];
+    ulong e = state->h[4], f = state->h[5], g = state->h[6], h = state->h[7];
+
+    // Rounds 0-63: round + schedule update with rotation
+    for (int i = 0; i < 64; i++) {
+        SHA512_ROUND(i, w0);
+
+        ulong newW = SIG1_64(w14) + w9 + SIG0_64(w1) + w0;
+        w0 = w1; w1 = w2; w2 = w3; w3 = w4;
+        w4 = w5; w5 = w6; w6 = w7; w7 = w8;
+        w8 = w9; w9 = w10; w10 = w11; w11 = w12;
+        w12 = w13; w13 = w14; w14 = w15; w15 = newW;
+    }
+
+    // Rounds 64-79: unrolled
+    SHA512_ROUND(64, w0);  SHA512_ROUND(65, w1);
+    SHA512_ROUND(66, w2);  SHA512_ROUND(67, w3);
+    SHA512_ROUND(68, w4);  SHA512_ROUND(69, w5);
+    SHA512_ROUND(70, w6);  SHA512_ROUND(71, w7);
+    SHA512_ROUND(72, w8);  SHA512_ROUND(73, w9);
+    SHA512_ROUND(74, w10); SHA512_ROUND(75, w11);
+    SHA512_ROUND(76, w12); SHA512_ROUND(77, w13);
+    SHA512_ROUND(78, w14); SHA512_ROUND(79, w15);
+
+    // Update state and output as bytes
+    state->h[0] += a; state->h[1] += b; state->h[2] += c; state->h[3] += d;
+    state->h[4] += e; state->h[5] += f; state->h[6] += g; state->h[7] += h;
+
+    for (int i = 0; i < 8; i++) {
+        unpack_be64(state->h[i], &out[i * 8]);
+    }
+}
+
+// Finalize SHA-512 where 64-byte message is already 8× ulong, output as 8× ulong.
+// Uses 16 scalar ulongs with rotation. Updates state->h[].
+inline void sha512_final_from_words_to_words(__private Sha512State* state,
+                                              const __private ulong* msg_words,
+                                              __private ulong* out_words) {
+    // 16 scalar schedule words from msg_words + padding
+    ulong w0  = msg_words[0];
+    ulong w1  = msg_words[1];
+    ulong w2  = msg_words[2];
+    ulong w3  = msg_words[3];
+    ulong w4  = msg_words[4];
+    ulong w5  = msg_words[5];
+    ulong w6  = msg_words[6];
+    ulong w7  = msg_words[7];
+    ulong w8  = 0x8000000000000000ul;
+    ulong w9  = 0ul;
+    ulong w10 = 0ul;
+    ulong w11 = 0ul;
+    ulong w12 = 0ul;
+    ulong w13 = 0ul;
+    ulong w14 = 0ul;
+    ulong w15 = (state->total_len + 64ul) * 8ul;
+
+    ulong a = state->h[0], b = state->h[1], c = state->h[2], d = state->h[3];
+    ulong e = state->h[4], f = state->h[5], g = state->h[6], h = state->h[7];
+
+    // Rounds 0-63: round + schedule update with rotation
+    for (int i = 0; i < 64; i++) {
+        SHA512_ROUND(i, w0);
+
+        ulong newW = SIG1_64(w14) + w9 + SIG0_64(w1) + w0;
+        w0 = w1; w1 = w2; w2 = w3; w3 = w4;
+        w4 = w5; w5 = w6; w6 = w7; w7 = w8;
+        w8 = w9; w9 = w10; w10 = w11; w11 = w12;
+        w12 = w13; w13 = w14; w14 = w15; w15 = newW;
+    }
+
+    // Rounds 64-79: unrolled
+    SHA512_ROUND(64, w0);  SHA512_ROUND(65, w1);
+    SHA512_ROUND(66, w2);  SHA512_ROUND(67, w3);
+    SHA512_ROUND(68, w4);  SHA512_ROUND(69, w5);
+    SHA512_ROUND(70, w6);  SHA512_ROUND(71, w7);
+    SHA512_ROUND(72, w8);  SHA512_ROUND(73, w9);
+    SHA512_ROUND(74, w10); SHA512_ROUND(75, w11);
+    SHA512_ROUND(76, w12); SHA512_ROUND(77, w13);
+    SHA512_ROUND(78, w14); SHA512_ROUND(79, w15);
+
+    // Update state and output as words
+    state->h[0] += a; state->h[1] += b; state->h[2] += c; state->h[3] += d;
+    state->h[4] += e; state->h[5] += f; state->h[6] += g; state->h[7] += h;
+
+    out_words[0] = state->h[0]; out_words[1] = state->h[1];
+    out_words[2] = state->h[2]; out_words[3] = state->h[3];
+    out_words[4] = state->h[4]; out_words[5] = state->h[5];
+    out_words[6] = state->h[6]; out_words[7] = state->h[7];
+}
+
+// ============================================================================
+// ulong8 variants - return vectors instead of writing to arrays.
+// NVIDIA treats ulong8 as register pack, avoiding local memory traps.
+// ============================================================================
+
+// Finalize SHA-512 with exactly 64 bytes remaining, return as ulong8.
+inline ulong8 sha512_final_64_u8(__private Sha512State* state,
+                                  const __private uchar* msg64) {
+    ulong w0  = pack_be64(msg64[0],  msg64[1],  msg64[2],  msg64[3],
+                          msg64[4],  msg64[5],  msg64[6],  msg64[7]);
+    ulong w1  = pack_be64(msg64[8],  msg64[9],  msg64[10], msg64[11],
+                          msg64[12], msg64[13], msg64[14], msg64[15]);
+    ulong w2  = pack_be64(msg64[16], msg64[17], msg64[18], msg64[19],
+                          msg64[20], msg64[21], msg64[22], msg64[23]);
+    ulong w3  = pack_be64(msg64[24], msg64[25], msg64[26], msg64[27],
+                          msg64[28], msg64[29], msg64[30], msg64[31]);
+    ulong w4  = pack_be64(msg64[32], msg64[33], msg64[34], msg64[35],
+                          msg64[36], msg64[37], msg64[38], msg64[39]);
+    ulong w5  = pack_be64(msg64[40], msg64[41], msg64[42], msg64[43],
+                          msg64[44], msg64[45], msg64[46], msg64[47]);
+    ulong w6  = pack_be64(msg64[48], msg64[49], msg64[50], msg64[51],
+                          msg64[52], msg64[53], msg64[54], msg64[55]);
+    ulong w7  = pack_be64(msg64[56], msg64[57], msg64[58], msg64[59],
+                          msg64[60], msg64[61], msg64[62], msg64[63]);
+    ulong w8  = 0x8000000000000000ul;
+    ulong w9  = 0ul;
+    ulong w10 = 0ul;
+    ulong w11 = 0ul;
+    ulong w12 = 0ul;
+    ulong w13 = 0ul;
+    ulong w14 = 0ul;
+    ulong w15 = (state->total_len + 64ul) * 8ul;
+
+    ulong a = state->h[0], b = state->h[1], c = state->h[2], d = state->h[3];
+    ulong e = state->h[4], f = state->h[5], g = state->h[6], h = state->h[7];
+
+    for (int i = 0; i < 64; i++) {
+        SHA512_ROUND(i, w0);
+        ulong newW = SIG1_64(w14) + w9 + SIG0_64(w1) + w0;
+        w0 = w1; w1 = w2; w2 = w3; w3 = w4;
+        w4 = w5; w5 = w6; w6 = w7; w7 = w8;
+        w8 = w9; w9 = w10; w10 = w11; w11 = w12;
+        w12 = w13; w13 = w14; w14 = w15; w15 = newW;
+    }
+
+    SHA512_ROUND(64, w0);  SHA512_ROUND(65, w1);
+    SHA512_ROUND(66, w2);  SHA512_ROUND(67, w3);
+    SHA512_ROUND(68, w4);  SHA512_ROUND(69, w5);
+    SHA512_ROUND(70, w6);  SHA512_ROUND(71, w7);
+    SHA512_ROUND(72, w8);  SHA512_ROUND(73, w9);
+    SHA512_ROUND(74, w10); SHA512_ROUND(75, w11);
+    SHA512_ROUND(76, w12); SHA512_ROUND(77, w13);
+    SHA512_ROUND(78, w14); SHA512_ROUND(79, w15);
+
+    state->h[0] += a; state->h[1] += b; state->h[2] += c; state->h[3] += d;
+    state->h[4] += e; state->h[5] += f; state->h[6] += g; state->h[7] += h;
+
+    return (ulong8)(state->h[0], state->h[1], state->h[2], state->h[3],
+                    state->h[4], state->h[5], state->h[6], state->h[7]);
+}
+
+// Finalize SHA-512 where 64-byte message is ulong8, return as ulong8.
+inline ulong8 sha512_final_from_u8(__private Sha512State* state, ulong8 msg) {
+    ulong w0  = msg.s0;
+    ulong w1  = msg.s1;
+    ulong w2  = msg.s2;
+    ulong w3  = msg.s3;
+    ulong w4  = msg.s4;
+    ulong w5  = msg.s5;
+    ulong w6  = msg.s6;
+    ulong w7  = msg.s7;
+    ulong w8  = 0x8000000000000000ul;
+    ulong w9  = 0ul;
+    ulong w10 = 0ul;
+    ulong w11 = 0ul;
+    ulong w12 = 0ul;
+    ulong w13 = 0ul;
+    ulong w14 = 0ul;
+    ulong w15 = (state->total_len + 64ul) * 8ul;
+
+    ulong a = state->h[0], b = state->h[1], c = state->h[2], d = state->h[3];
+    ulong e = state->h[4], f = state->h[5], g = state->h[6], h = state->h[7];
+
+    for (int i = 0; i < 64; i++) {
+        SHA512_ROUND(i, w0);
+        ulong newW = SIG1_64(w14) + w9 + SIG0_64(w1) + w0;
+        w0 = w1; w1 = w2; w2 = w3; w3 = w4;
+        w4 = w5; w5 = w6; w6 = w7; w7 = w8;
+        w8 = w9; w9 = w10; w10 = w11; w11 = w12;
+        w12 = w13; w13 = w14; w14 = w15; w15 = newW;
+    }
+
+    SHA512_ROUND(64, w0);  SHA512_ROUND(65, w1);
+    SHA512_ROUND(66, w2);  SHA512_ROUND(67, w3);
+    SHA512_ROUND(68, w4);  SHA512_ROUND(69, w5);
+    SHA512_ROUND(70, w6);  SHA512_ROUND(71, w7);
+    SHA512_ROUND(72, w8);  SHA512_ROUND(73, w9);
+    SHA512_ROUND(74, w10); SHA512_ROUND(75, w11);
+    SHA512_ROUND(76, w12); SHA512_ROUND(77, w13);
+    SHA512_ROUND(78, w14); SHA512_ROUND(79, w15);
+
+    state->h[0] += a; state->h[1] += b; state->h[2] += c; state->h[3] += d;
+    state->h[4] += e; state->h[5] += f; state->h[6] += g; state->h[7] += h;
+
+    return (ulong8)(state->h[0], state->h[1], state->h[2], state->h[3],
+                    state->h[4], state->h[5], state->h[6], state->h[7]);
+}
+
+#undef SHA512_ROUND
