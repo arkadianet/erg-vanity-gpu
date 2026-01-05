@@ -66,9 +66,12 @@ jobs:
           $sdkUrl = "https://github.com/GPUOpen-LibrariesAndSDKs/OCL-SDK/files/1406216/lightOCLSDK.zip"
           $sdkZip = "$env:TEMP\lightOCLSDK.zip"
           $sdkDir = "C:\Program Files (x86)\OCL_SDK_Light"
+          New-Item -ItemType Directory -Force -Path $sdkDir | Out-Null
           Invoke-WebRequest -Uri $sdkUrl -OutFile $sdkZip
-          Expand-Archive -Path $sdkZip -DestinationPath "C:\Program Files (x86)" -Force
+          # Zip contains lib/ and include/ at root, extract into OCL_SDK_Light
+          Expand-Archive -Path $sdkZip -DestinationPath $sdkDir -Force
           if (!(Test-Path "$sdkDir\lib\x86_64\OpenCL.lib")) {
+            Get-ChildItem -Recurse $sdkDir | Select-Object FullName
             throw "OpenCL.lib not found after extraction"
           }
           Write-Host "OpenCL SDK installed to $sdkDir"
