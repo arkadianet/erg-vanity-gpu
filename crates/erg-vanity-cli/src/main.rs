@@ -59,6 +59,30 @@ struct Args {
     #[arg(long = "duration-secs")]
     duration_secs: Option<u64>,
 
+    /// Run GPU microbenchmark and exit
+    #[arg(long = "bench", default_value_t = false)]
+    bench: bool,
+
+    /// Number of benchmark iterations
+    #[arg(long = "bench-iters", default_value_t = 100)]
+    bench_iters: u32,
+
+    /// Warmup iterations before timing
+    #[arg(long = "bench-warmup", default_value_t = 5)]
+    bench_warmup: u32,
+
+    /// Batch size for benchmark (default: 262144)
+    #[arg(long = "bench-batch-size")]
+    bench_batch_size: Option<usize>,
+
+    /// Number of address indices for benchmark (default: from --index)
+    #[arg(long = "bench-num-indices")]
+    bench_num_indices: Option<u32>,
+
+    /// Validate benchmark kernels by reading back checksums (sanity check)
+    #[arg(long = "bench-validate", default_value_t = false)]
+    bench_validate: bool,
+
     /// Legacy: single pattern as positional argument
     #[arg()]
     pattern: Option<String>,
@@ -524,6 +548,39 @@ fn main() {
             eprintln!("Error: {}", err);
             std::process::exit(1);
         }
+        return;
+    }
+
+    // Benchmark mode - runs before pattern validation
+    if args.bench {
+        let device_indices = match parse_device_list(&args.devices) {
+            Ok(list) => list,
+            Err(err) => {
+                eprintln!("Error: {}", err);
+                std::process::exit(2);
+            }
+        };
+
+        let cfg = erg_vanity_gpu::bench::BenchConfig {
+            batch_size: args.bench_batch_size.unwrap_or(1 << 18),
+            num_indices: args.bench_num_indices.unwrap_or(args.num_indices),
+            iters: args.bench_iters,
+            warmup: args.bench_warmup,
+            validate: args.bench_validate,
+        };
+
+        let mut results = Vec::new();
+        for device_index in &device_indices {
+            match erg_vanity_gpu::bench::run_bench_on_device(*device_index, &cfg) {
+                Ok(stats) => results.push(stats),
+                Err(e) => {
+                    eprintln!("Error benchmarking device {}: {}", device_index, e);
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        erg_vanity_gpu::bench::print_bench_results(&results, &cfg);
         return;
     }
 
