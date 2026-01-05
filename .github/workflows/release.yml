@@ -62,11 +62,16 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # Install OpenCL SDK via vcpkg
-          git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-          C:\vcpkg\bootstrap-vcpkg.bat
-          C:\vcpkg\vcpkg install opencl:x64-windows
-          echo "OPENCL_ROOT=C:\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
+          # Download and install OCL_SDK_Light (lightweight OpenCL headers/libs)
+          $sdkUrl = "https://github.com/GPUOpen-LibrariesAndSDKs/OCL-SDK/files/1406216/lightOCLSDK.zip"
+          $sdkZip = "$env:TEMP\lightOCLSDK.zip"
+          $sdkDir = "C:\Program Files (x86)\OCL_SDK_Light"
+          Invoke-WebRequest -Uri $sdkUrl -OutFile $sdkZip
+          Expand-Archive -Path $sdkZip -DestinationPath "C:\Program Files (x86)" -Force
+          if (!(Test-Path "$sdkDir\lib\x86_64\OpenCL.lib")) {
+            throw "OpenCL.lib not found after extraction"
+          }
+          Write-Host "OpenCL SDK installed to $sdkDir"
 
       - name: Build
         run: cargo build --release --locked --bin erg-vanity -p erg-vanity-cli --target ${{ matrix.target }}
