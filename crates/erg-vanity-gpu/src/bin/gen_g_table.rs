@@ -117,7 +117,8 @@ fn load_affine(buf: &[u8], window: usize, b: usize) -> Point {
     let mut y_limbs = [0u32; 8];
     for i in 0..8 {
         x_limbs[i] = u32::from_le_bytes(buf[off + i * 4..off + i * 4 + 4].try_into().unwrap());
-        y_limbs[i] = u32::from_le_bytes(buf[off + 32 + i * 4..off + 36 + i * 4].try_into().unwrap());
+        y_limbs[i] =
+            u32::from_le_bytes(buf[off + 32 + i * 4..off + 36 + i * 4].try_into().unwrap());
     }
     let x = FieldElement::from_bytes(&limbs_to_bytes(&x_limbs)).expect("comb X in field");
     let y = FieldElement::from_bytes(&limbs_to_bytes(&y_limbs)).expect("comb Y in field");
@@ -150,8 +151,16 @@ fn build_comb_table() -> Vec<u8> {
 
     let g = load_affine(&buf, 31, 1);
     let (gx, gy) = g.to_affine().expect("T[31][1] is G");
-    assert_eq!(bytes_to_limbs(&gx.to_bytes()), EXPECTED_GX, "comb T[31][1] X");
-    assert_eq!(bytes_to_limbs(&gy.to_bytes()), EXPECTED_GY, "comb T[31][1] Y");
+    assert_eq!(
+        bytes_to_limbs(&gx.to_bytes()),
+        EXPECTED_GX,
+        "comb T[31][1] X"
+    );
+    assert_eq!(
+        bytes_to_limbs(&gy.to_bytes()),
+        EXPECTED_GY,
+        "comb T[31][1] Y"
+    );
     eprintln!("comb T[31][1] matches G");
 
     let two = load_affine(&buf, 31, 2);

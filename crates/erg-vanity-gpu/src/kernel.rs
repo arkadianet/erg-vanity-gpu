@@ -1062,7 +1062,7 @@ mod tests {
             println!("secp256k1 point self-test result: 0x{:08x}", failures);
 
             if failures != 0 {
-                const TEST_NAMES: [&str; 23] = [
+                const TEST_NAMES: [&str; 25] = [
                     "G is not infinity",
                     "infinity is infinity",
                     "G + infinity = G",
@@ -1084,8 +1084,10 @@ mod tests {
                     "pt_mul_generator(3) matches 3G.x",
                     "pt_mul_generator_comb(0) = infinity",
                     "pt_mul_generator_comb(1) = G",
-                    "pt_mul_generator_comb(2) matches 2G.x",
-                    "pt_mul_generator_comb(3) matches 3G.x",
+                    "pt_mul_generator_comb(2) = 2G",
+                    "pt_mul_generator_comb(3) = 3G",
+                    "pt_mul_generator_comb all-window scalar",
+                    "pt_mul_generator_comb multi-window scalar",
                 ];
                 for (bit, name) in TEST_NAMES.iter().enumerate() {
                     if failures & (1u32 << bit) != 0 {
@@ -1098,7 +1100,7 @@ mod tests {
                 );
             }
 
-            println!("secp256k1 point self-test passed (all 23 tests)!");
+            println!("secp256k1 point self-test passed (all 25 tests)!");
         });
     }
 

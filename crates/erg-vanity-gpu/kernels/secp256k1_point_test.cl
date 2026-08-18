@@ -21,6 +21,31 @@ __constant uchar THREE_G_X_BYTES[32] = {
     (uchar)0x86, (uchar)0x01, (uchar)0xf1, (uchar)0x13, (uchar)0xbc, (uchar)0xe0, (uchar)0x36, (uchar)0xf9
 };
 
+// Compare pt_mul_generator_comb(k) to independent pt_mul(k, G) (full affine XY).
+inline int comb_eq_pt_mul(
+    __private const uint* k,
+    __global const uint* comb,
+    __private const uint* g
+) {
+    uint expected[24], got[24];
+    pt_mul(expected, k, g);
+    pt_mul_generator_comb(got, k, comb);
+    if (pt_is_infinity(expected)) {
+        return pt_is_infinity(got);
+    }
+    if (pt_is_infinity(got)) {
+        return 0;
+    }
+    uint ex[8], ey[8], gx_[8], gy_[8];
+    if (pt_to_affine(ex, ey, expected) != 0 || pt_to_affine(gx_, gy_, got) != 0) {
+        return 0;
+    }
+    for (int i = 0; i < 8; i++) {
+        if (ex[i] != gx_[i] || ey[i] != gy_[i]) return 0;
+    }
+    return 1;
+}
+
 // Comprehensive self-test kernel for point operations
 // Returns 0 if all tests pass, non-zero otherwise (bit mask of failed tests)
 __kernel void pt_self_test(__global uint* result, __global const uint* comb) {
@@ -270,54 +295,39 @@ __kernel void pt_self_test(__global uint* result, __global const uint* comb) {
         }
     }
 
-    // Tests 20-23: 8-bit comb k·G (production path)
-    uint comb0[24], comb1[24], comb2[24], comb3[24];
-    pt_mul_generator_comb(comb0, zero, comb);
-    if (!pt_is_infinity(comb0)) {
+    // Tests 20-25: comb k·G vs independent pt_mul (full XY), including 0–3
+    if (!comb_eq_pt_mul(zero, comb, g)) {
         failures |= (1u << 19);
     }
-
-    pt_mul_generator_comb(comb1, one, comb);
-    if (pt_to_affine(tmpx, tmpy, comb1) != 0) {
+    if (!comb_eq_pt_mul(one, comb, g)) {
         failures |= (1u << 20);
-    } else {
-        eq = 1;
-        for (int i = 0; i < 8; i++) {
-            if (gx[i] != tmpx[i] || gy[i] != tmpy[i]) eq = 0;
-        }
-        if (!eq) {
-            failures |= (1u << 20);
-        }
     }
-
-    pt_mul_generator_comb(comb2, two, comb);
-    if (pt_to_affine(x1, y1, comb2) != 0) {
+    if (!comb_eq_pt_mul(two, comb, g)) {
         failures |= (1u << 21);
-    } else {
-        uint two_g_x_expected_comb[8];
-        fe_from_constant_bytes(two_g_x_expected_comb, TWO_G_X_BYTES);
-        eq = 1;
-        for (int i = 0; i < 8; i++) {
-            if (x1[i] != two_g_x_expected_comb[i]) eq = 0;
-        }
-        if (!eq) {
-            failures |= (1u << 21);
-        }
+    }
+    if (!comb_eq_pt_mul(three, comb, g)) {
+        failures |= (1u << 22);
     }
 
-    pt_mul_generator_comb(comb3, three, comb);
-    if (pt_to_affine(three_g_x, three_g_y, comb3) != 0) {
-        failures |= (1u << 22);
-    } else {
-        uint three_g_x_expected_comb[8];
-        fe_from_constant_bytes(three_g_x_expected_comb, THREE_G_X_BYTES);
-        eq = 1;
-        for (int i = 0; i < 8; i++) {
-            if (three_g_x[i] != three_g_x_expected_comb[i]) eq = 0;
-        }
-        if (!eq) {
-            failures |= (1u << 22);
-        }
+    // Every comb window non-zero (k_bytes[i] = i+1, safely < n)
+    uchar k_all[32];
+    for (int i = 0; i < 32; i++) k_all[i] = (uchar)(i + 1);
+    uint k_all_sc[8];
+    sc_from_bytes(k_all_sc, k_all);
+    if (!comb_eq_pt_mul(k_all_sc, comb, g)) {
+        failures |= (1u << 23);
+    }
+
+    // Sparse multi-window: MSB, mid, and LSB
+    uchar k_span[32];
+    for (int i = 0; i < 32; i++) k_span[i] = 0;
+    k_span[0] = (uchar)0x01;
+    k_span[15] = (uchar)0xAB;
+    k_span[31] = (uchar)0x7F;
+    uint k_span_sc[8];
+    sc_from_bytes(k_span_sc, k_span);
+    if (!comb_eq_pt_mul(k_span_sc, comb, g)) {
+        failures |= (1u << 24);
     }
 
     *result = failures;

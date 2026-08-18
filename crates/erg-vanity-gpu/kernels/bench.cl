@@ -90,8 +90,8 @@ __kernel void bench_pbkdf2(
 // Kernel 2: BIP32 derivation (m/44'/429'/0'/0 + num_indices address derivations)
 //
 // Uses EXACT production codepath:
-//   - bip32_derive_ergo_external_chain (master + 4 child derivations)
-//   - bip32_derive_address_index (1 normal derivation per index)
+//   - bip32_derive_ergo_external_chain_comb (master + 4 child derivations)
+//   - bip32_derive_address_index_comb (1 normal derivation per index)
 //=============================================================================
 __kernel void bench_bip32(
     __global const uchar* salt,
@@ -133,7 +133,7 @@ __kernel void bench_bip32(
 //
 // Uses EXACT production codepath:
 //   - sc_from_bytes (parse private key as scalar)
-//   - pt_mul_generator (scalar multiplication with generator)
+//   - pt_mul_generator_comb (scalar multiplication with generator)
 //   - pt_to_compressed_pubkey (33-byte compressed format)
 //=============================================================================
 __kernel void bench_secp256k1(
