@@ -501,8 +501,57 @@ inline ulong8 sha512_final_64_u8(__private Sha512State* state,
                     state->h[4], state->h[5], state->h[6], state->h[7]);
 }
 
+// In-place round: h becomes new a, d becomes new e. Next call rotates names.
+#define SHA512_R(a, b, c, d, e, f, g, h, k, w) \
+    do { \
+        h += EP1_64(e) + CH64(e, f, g) + (k) + (w); \
+        d += h; \
+        h += EP0_64(a) + MAJ64(a, b, c); \
+    } while (0)
+
+#define SHA512_ROUNDS16(base) \
+    do { \
+        SHA512_R(a, b, c, d, e, f, g, h, K512[(base) + 0],  w0); \
+        SHA512_R(h, a, b, c, d, e, f, g, K512[(base) + 1],  w1); \
+        SHA512_R(g, h, a, b, c, d, e, f, K512[(base) + 2],  w2); \
+        SHA512_R(f, g, h, a, b, c, d, e, K512[(base) + 3],  w3); \
+        SHA512_R(e, f, g, h, a, b, c, d, K512[(base) + 4],  w4); \
+        SHA512_R(d, e, f, g, h, a, b, c, K512[(base) + 5],  w5); \
+        SHA512_R(c, d, e, f, g, h, a, b, K512[(base) + 6],  w6); \
+        SHA512_R(b, c, d, e, f, g, h, a, K512[(base) + 7],  w7); \
+        SHA512_R(a, b, c, d, e, f, g, h, K512[(base) + 8],  w8); \
+        SHA512_R(h, a, b, c, d, e, f, g, K512[(base) + 9],  w9); \
+        SHA512_R(g, h, a, b, c, d, e, f, K512[(base) + 10], w10); \
+        SHA512_R(f, g, h, a, b, c, d, e, K512[(base) + 11], w11); \
+        SHA512_R(e, f, g, h, a, b, c, d, K512[(base) + 12], w12); \
+        SHA512_R(d, e, f, g, h, a, b, c, K512[(base) + 13], w13); \
+        SHA512_R(c, d, e, f, g, h, a, b, K512[(base) + 14], w14); \
+        SHA512_R(b, c, d, e, f, g, h, a, K512[(base) + 15], w15); \
+    } while (0)
+
+// Expand W16..W31 in place (then W32..W47, ...). No 16-word rotate-copy.
+#define SHA512_EXPAND16() \
+    do { \
+        w0  += SIG1_64(w14) + w9  + SIG0_64(w1); \
+        w1  += SIG1_64(w15) + w10 + SIG0_64(w2); \
+        w2  += SIG1_64(w0)  + w11 + SIG0_64(w3); \
+        w3  += SIG1_64(w1)  + w12 + SIG0_64(w4); \
+        w4  += SIG1_64(w2)  + w13 + SIG0_64(w5); \
+        w5  += SIG1_64(w3)  + w14 + SIG0_64(w6); \
+        w6  += SIG1_64(w4)  + w15 + SIG0_64(w7); \
+        w7  += SIG1_64(w5)  + w0  + SIG0_64(w8); \
+        w8  += SIG1_64(w6)  + w1  + SIG0_64(w9); \
+        w9  += SIG1_64(w7)  + w2  + SIG0_64(w10); \
+        w10 += SIG1_64(w8)  + w3  + SIG0_64(w11); \
+        w11 += SIG1_64(w9)  + w4  + SIG0_64(w12); \
+        w12 += SIG1_64(w10) + w5  + SIG0_64(w13); \
+        w13 += SIG1_64(w11) + w6  + SIG0_64(w14); \
+        w14 += SIG1_64(w12) + w7  + SIG0_64(w15); \
+        w15 += SIG1_64(w13) + w8  + SIG0_64(w0); \
+    } while (0)
+
 // PBKDF2 hot path: finalize from midstate + 64-byte ulong8 message.
-// No Sha512State writeback — HMAC restores midstate every iteration.
+// 16-round blocks + batched W expand (no per-round schedule rotate).
 inline ulong8 sha512_final_from_mid_u8(ulong8 mid, ulong total_len, ulong8 msg) {
     ulong w0  = msg.s0;
     ulong w1  = msg.s1;
@@ -524,28 +573,23 @@ inline ulong8 sha512_final_from_mid_u8(ulong8 mid, ulong total_len, ulong8 msg) 
     ulong a = mid.s0, b = mid.s1, c = mid.s2, d = mid.s3;
     ulong e = mid.s4, f = mid.s5, g = mid.s6, h = mid.s7;
 
-    #pragma unroll
-    for (int i = 0; i < 64; i++) {
-        SHA512_ROUND(i, w0);
-        ulong newW = SIG1_64(w14) + w9 + SIG0_64(w1) + w0;
-        w0 = w1; w1 = w2; w2 = w3; w3 = w4;
-        w4 = w5; w5 = w6; w6 = w7; w7 = w8;
-        w8 = w9; w9 = w10; w10 = w11; w11 = w12;
-        w12 = w13; w13 = w14; w14 = w15; w15 = newW;
-    }
-
-    SHA512_ROUND(64, w0);  SHA512_ROUND(65, w1);
-    SHA512_ROUND(66, w2);  SHA512_ROUND(67, w3);
-    SHA512_ROUND(68, w4);  SHA512_ROUND(69, w5);
-    SHA512_ROUND(70, w6);  SHA512_ROUND(71, w7);
-    SHA512_ROUND(72, w8);  SHA512_ROUND(73, w9);
-    SHA512_ROUND(74, w10); SHA512_ROUND(75, w11);
-    SHA512_ROUND(76, w12); SHA512_ROUND(77, w13);
-    SHA512_ROUND(78, w14); SHA512_ROUND(79, w15);
+    SHA512_ROUNDS16(0);
+    SHA512_EXPAND16();
+    SHA512_ROUNDS16(16);
+    SHA512_EXPAND16();
+    SHA512_ROUNDS16(32);
+    SHA512_EXPAND16();
+    SHA512_ROUNDS16(48);
+    SHA512_EXPAND16();
+    SHA512_ROUNDS16(64);
 
     return (ulong8)(mid.s0 + a, mid.s1 + b, mid.s2 + c, mid.s3 + d,
                     mid.s4 + e, mid.s5 + f, mid.s6 + g, mid.s7 + h);
 }
+
+#undef SHA512_R
+#undef SHA512_ROUNDS16
+#undef SHA512_EXPAND16
 
 // Finalize SHA-512 where 64-byte message is ulong8, return as ulong8.
 inline ulong8 sha512_final_from_u8(__private Sha512State* state, ulong8 msg) {
