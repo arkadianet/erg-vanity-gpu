@@ -33,7 +33,7 @@ CI (`ubuntu-latest`): check, test, rustfmt, clippy. OpenCL headers are installed
 
 ## Crates
 
-```
+```text
 erg-vanity-cli  → engine, gui, gpu (bench)
 erg-vanity-gui  → engine (eframe/egui)
 erg-vanity-engine → cpu, gpu, address, ergo-lib verify

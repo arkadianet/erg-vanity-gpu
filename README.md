@@ -20,7 +20,7 @@ This is the surviving repo for arkadianet vanity tools. The older CPU/GUI projec
 - `--estimate` before a long search
 - Multi-GPU (`--devices 0,1` or `all`)
 - Multiple patterns (up to 64; longest prefix wins)
-- BIP44 path `m/44'/429'/0'/0/{index}` (default `--index 1`)
+- BIP44 path `m/44'/429'/0'/0/{address_index}` (default `--index 1` derives only `/0`)
 
 ## Install
 
@@ -64,7 +64,7 @@ PowerShell chains commands with `;`, not `&&`.
 ./target/release/erg-vanity
 ```
 
-`--index` defaults to **1** (`m/44'/429'/0'/0/0`). Pass `--index N` (1–100) if you want extra address slots on the same seed. Do not raise the default.
+`--index` is a count, not a path index. Default **1** derives only `m/44'/429'/0'/0/0`. `--index N` (1–100) derives address indices `0..N-1` on the same seed. Do not raise the default.
 
 ### Devices
 
@@ -87,7 +87,7 @@ Default `--devices` is `auto` (GPU if present, else CPU).
 | `--contains` | off | Match anywhere (CPU) |
 | `-i, --ignore-case` | off | Case-insensitive |
 | `-n, --max-results <N>` | `1` | Stop after N matches |
-| `--index <N>` | `1` | BIP44 indices per seed (1–100) |
+| `--index <N>` | `1` | Address indices `0..N-1` per seed (1–100) |
 | `--devices <list>` | `auto` | `auto`, `0,1`, `all`, or `cpu` |
 | `--batch-size <N>` | device default | Search batch size |
 | `--estimate` | off | Print difficulty and exit |
@@ -120,7 +120,7 @@ Suffix / contains skip the `9e`–`9i` prefix rule.
 
 ## Output
 
-```
+```text
 === Match 1 ===
 Device:   0
 Address:  9errK7Qa3oBVHbS4uGFPSe7ETvfHkZGcskV1gqGf6fqLUPAamo
@@ -136,11 +136,11 @@ Progress goes to stderr: `Checked: N (rate addr/s) [found/target]`.
 
 ## Performance
 
-Measured **RTX 3080 Ti**, 18 Aug 2026, default `--index 1`, after 8-bit windowed *k*·G:
+Measured **RTX 3080 Ti**, 18 Aug 2026, default `--index 1`, after cheaper *k*·G and slimmer SHA-512 init:
 
 | Mode | Result |
 |------|--------|
-| Live search | ~368k seeds/s (earlier live baseline ~330k) |
+| Live search | ~455k seeds/s (earlier live baselines ~330k then ~368k) |
 | Isolated PBKDF2 | ~1600 ns/seed (~56–64% of isolated time) |
 | Isolated BIP32 | ~628 ns/addr |
 | Isolated secp256k1 | ~285 ns/addr |
@@ -152,14 +152,14 @@ Measured **RTX 3080 Ti**, 18 Aug 2026, default `--index 1`, after 8-bit windowed
 ./target/release/erg-vanity --bench --bench-validate
 ```
 
-Expected wait for a **single** prefix on a 3080 Ti at ~368k seeds/s:
+Expected wait for a **single** prefix on a 3080 Ti at ~455k seeds/s (`5 × 58^(n−2)` combinations, 1.2× `--estimate` factor):
 
 | Pattern | Combinations | Expected time |
 |---------|--------------|---------------|
-| 4 chars (`9err`) | ~200K | < 1 second |
-| 5 chars (`9ergo`) | ~11M | ~30 seconds |
-| 6 chars (`9ergoo`) | ~650M | ~30 minutes |
-| 7 chars | ~38B | ~1.2 days |
+| 4 chars (`9err`) | ~17K | < 1 second |
+| 5 chars (`9ergo`) | ~976K | ~3 seconds |
+| 6 chars (`9ergoo`) | ~57M | ~2.5 minutes |
+| 7 chars | ~3.3B | ~2.4 hours |
 
 Rates vary by GPU, driver, and pattern. RTX 4090 is higher; we have not published a current measurement.
 
@@ -168,7 +168,7 @@ Rates vary by GPU, driver, and pattern. RTX 4090 is higher; we have not publishe
 1. Entropy from CSPRNG salt + counter (Blake2b on GPU)
 2. BIP39: 24-word mnemonic
 3. PBKDF2-HMAC-SHA512 (2048 rounds) → seed
-4. BIP32/44: `m/44'/429'/0'/0/{index}`
+4. BIP32/44: `m/44'/429'/0'/0/{address_index}`
 5. secp256k1 compressed pubkey
 6. Ergo P2PK (Blake2b checksum + Base58)
 7. Pattern match

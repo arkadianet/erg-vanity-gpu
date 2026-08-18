@@ -229,7 +229,9 @@ impl GpuProgram {
         combined.push_str(sources::VANITY);
         combined.push('\n');
 
-        eprintln!("Compiling OpenCL vanity kernel (first run after a kernel change can take a minute)...");
+        eprintln!(
+            "Compiling OpenCL vanity kernel (first run after a kernel change can take a minute)..."
+        );
         let built = Self::from_source(ctx, &combined);
         if built.is_ok() {
             eprintln!("OpenCL vanity kernel ready.");

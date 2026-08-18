@@ -3,10 +3,11 @@
 use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, RichText, Stroke};
 use erg_vanity_cpu::MatchType;
 use erg_vanity_engine::{
-    estimate_pattern, format_time, list_gpu_devices, run_search, Backend, Hit,
-    SearchEvent, SearchRequest,
+    estimate_pattern, format_time, list_gpu_devices, run_search, Backend, Hit, SearchEvent,
+    SearchRequest,
 };
 use std::collections::VecDeque;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
@@ -26,8 +27,7 @@ const ERR: Color32 = Color32::from_rgb(208, 88, 64);
 /// CLI estimate table uses these two rates; suffix/contains are CPU-only.
 const GPU_ASSUMED_RATE: f64 = 330_000.0;
 const CPU_ASSUMED_RATE: f64 = 10_000.0;
-const COMPILE_HINT: &str =
-    "Compiling OpenCL (first run after a kernel change can take a minute)…";
+const COMPILE_HINT: &str = "Compiling OpenCL (first run after a kernel change can take a minute)…";
 
 /// Launch the native window.
 pub fn run() -> Result<(), eframe::Error> {
@@ -268,9 +268,9 @@ impl VanityApp {
         let rate_note = if self.running && self.rate >= 1.0 {
             format!("{:.0}/s live", self.rate)
         } else if self.uses_gpu() {
-            "330k/s assumed GPU".into()
+            format!("{:.0}k/s assumed GPU", GPU_ASSUMED_RATE / 1000.0)
         } else {
-            "10k/s assumed CPU".into()
+            format!("{:.0}k/s assumed CPU", CPU_ASSUMED_RATE / 1000.0)
         };
         let mut lines = Vec::new();
         for p in self.pattern_list() {
@@ -375,7 +375,7 @@ impl VanityApp {
         }
         if self.is_compiling() {
             self.status = COMPILE_HINT.into();
-        } else if self.status.starts_with("Compiling OpenCL") {
+        } else if self.status == COMPILE_HINT {
             self.status = format!("Searching · {}", self.engine_label());
         }
     }
@@ -458,9 +458,6 @@ impl VanityApp {
         }
         self.stop = None;
         self.rx = None;
-        if let Some(start) = self.started_at {
-            self.elapsed = start.elapsed();
-        }
     }
 
     fn poll(&mut self) {
@@ -1024,10 +1021,8 @@ impl VanityApp {
                 } else {
                     "Restrict that file yourself — it can spend funds."
                 };
-                self.secret_notice = Some((
-                    format!("Saved {}. {extra}", dest.display()),
-                    Instant::now(),
-                ));
+                self.secret_notice =
+                    Some((format!("Saved {}. {extra}", dest.display()), Instant::now()));
             }
             Err(e) => {
                 self.secret_notice = Some((format!("Save failed: {e}"), Instant::now()));
@@ -1126,9 +1121,7 @@ fn draw_sparkline(ui: &mut egui::Ui, hist: &VecDeque<f32>, running: bool) {
 }
 
 fn format_hit_file(address: &str, path: &str, pattern: &str, mnemonic: &str) -> String {
-    format!(
-        "Address:  {address}\nPath:     {path}\nPattern:  {pattern}\nMnemonic: {mnemonic}\n"
-    )
+    format!("Address:  {address}\nPath:     {path}\nPattern:  {pattern}\nMnemonic: {mnemonic}\n")
 }
 
 fn suggested_save_path(address: &str) -> String {
@@ -1141,7 +1134,10 @@ fn suggested_save_path(address: &str) -> String {
     if docs.parent().is_some_and(|p| p.is_dir()) {
         docs.to_string_lossy().into_owned()
     } else {
-        PathBuf::from(home).join(name).to_string_lossy().into_owned()
+        PathBuf::from(home)
+            .join(name)
+            .to_string_lossy()
+            .into_owned()
     }
 }
 
@@ -1159,7 +1155,22 @@ fn write_hit_file(
     }
     let bip44 = format!("m/44'/429'/0'/0/{address_index}");
     let body = format_hit_file(address, &bip44, pattern, mnemonic);
-    std::fs::write(dest, body.as_bytes()).map_err(|e| e.to_string())?;
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(dest).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            format!("{} already exists — pick another path", dest.display())
+        } else {
+            e.to_string()
+        }
+    })?;
+    f.write_all(body.as_bytes()).map_err(|e| e.to_string())?;
+    f.flush().map_err(|e| e.to_string())?;
     Ok(restrict_owner_acl(dest))
 }
 
@@ -1293,7 +1304,15 @@ mod tests {
 
     #[test]
     fn write_hit_file_roundtrip() {
-        let dest = std::env::temp_dir().join("erg-vanity-gui-hit-test.txt");
+        let dest = std::env::temp_dir().join(format!(
+            "erg-vanity-gui-hit-{}-{}.txt",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_file(&dest);
         write_hit_file(&dest, "9errAddr", "9err", "abandon abandon about", 2).unwrap();
         let text = std::fs::read_to_string(&dest).expect("read saved hit");
         let _ = std::fs::remove_file(&dest);

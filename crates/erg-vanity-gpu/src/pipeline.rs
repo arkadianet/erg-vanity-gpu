@@ -5,9 +5,13 @@ use crate::context::{GpuContext, GpuError};
 use crate::kernel::GpuProgram;
 use crate::wordlist::WordlistBuffers;
 use erg_vanity_cpu::{MatchType, Pattern};
+use ocl::enums::{KernelWorkGroupInfo, KernelWorkGroupInfoResult};
 use ocl::Kernel;
 use rand::RngCore;
 use std::fmt;
+
+/// `__local uint g_local[6144]` in vanity_search (24 KiB).
+const G_TABLE_LOCAL_BYTES: u64 = 6144 * 4;
 
 /// Configuration for vanity search.
 #[derive(Debug, Clone)]
@@ -109,13 +113,20 @@ pub(crate) fn sort_patterns_longest_first(patterns: &[String]) -> (Vec<String>, 
 
 fn local_size_for(batch: usize, recommended: usize) -> usize {
     let mut ls = recommended.min(batch).max(1);
-    while batch % ls != 0 {
+    while !batch.is_multiple_of(ls) {
         ls /= 2;
         if ls == 0 {
             return 1;
         }
     }
     ls
+}
+
+fn kernel_work_group_limit(kernel: &Kernel, device: ocl::Device, fallback: usize) -> usize {
+    match kernel.wg_info(device, KernelWorkGroupInfo::WorkGroupSize) {
+        Ok(KernelWorkGroupInfoResult::WorkGroupSize(n)) if n > 0 => n,
+        _ => fallback,
+    }
 }
 
 /// GPU-accelerated vanity address search pipeline.
@@ -164,6 +175,12 @@ impl VanityPipeline {
         }
 
         let ctx = GpuContext::with_device(device_index)?;
+        if ctx.info().local_mem_size < G_TABLE_LOCAL_BYTES {
+            return Err(GpuError::Other(format!(
+                "device local memory {} bytes is below the {G_TABLE_LOCAL_BYTES}-byte G_TABLE requirement",
+                ctx.info().local_mem_size
+            )));
+        }
         let program = GpuProgram::vanity(&ctx)?;
         let queue = ctx.queue();
 
@@ -179,10 +196,11 @@ impl VanityPipeline {
         let patterns_for_gpu: &[String] = patterns_for_gpu_storage.as_deref().unwrap_or(&sorted);
         let num_patterns = buffers.upload_patterns(patterns_for_gpu)? as u32;
 
-        let local = local_size_for(cfg.batch_size, ctx.recommended_work_group_size());
+        let recommended = ctx.recommended_work_group_size();
+        let local = local_size_for(cfg.batch_size, recommended);
 
         // vanity_seed: salt, counter_start, words8, word_lens, seeds
-        let seed_kernel = Kernel::builder()
+        let mut seed_kernel = Kernel::builder()
             .program(program.program())
             .name("vanity_seed")
             .queue(queue.clone())
@@ -196,7 +214,7 @@ impl VanityPipeline {
             .build()?;
 
         // vanity_search: salt, counter_start, seeds, patterns..., hits
-        let kernel = Kernel::builder()
+        let mut kernel = Kernel::builder()
             .program(program.program())
             .name("vanity_search")
             .queue(queue.clone())
@@ -215,6 +233,14 @@ impl VanityPipeline {
             .arg(&buffers.hit_count)
             .arg(MAX_HITS as u32)
             .build()?;
+
+        let device = ctx.device();
+        let capped = recommended
+            .min(kernel_work_group_limit(&seed_kernel, device, recommended))
+            .min(kernel_work_group_limit(&kernel, device, recommended));
+        let local = local_size_for(cfg.batch_size, capped);
+        seed_kernel.set_default_local_work_size(local.into());
+        kernel.set_default_local_work_size(local.into());
 
         Ok(Self {
             ctx,
@@ -418,6 +444,14 @@ impl VanityPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_size_divides_batch_and_respects_cap() {
+        assert_eq!(local_size_for(4096, 256), 256);
+        assert_eq!(local_size_for(1000, 256), 8);
+        assert_eq!(local_size_for(1024, 2048), 1024);
+        assert_eq!(local_size_for(1000, 1), 1);
+    }
 
     #[test]
     fn test_sort_patterns_longest_first() {
