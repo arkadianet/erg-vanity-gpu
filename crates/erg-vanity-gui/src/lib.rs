@@ -81,7 +81,7 @@ impl VanityApp {
         visuals.window_fill = BG;
         visuals.extreme_bg_color = Color32::from_rgb(10, 9, 8);
         visuals.faint_bg_color = PANEL;
-        visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, DIM);
+        visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, DIM);
         cc.egui_ctx.set_visuals(visuals);
 
         let mut style = (*cc.egui_ctx.style()).clone();
@@ -577,7 +577,7 @@ fn draw_sparkline(ui: &mut egui::Ui, hist: &VecDeque<f32>, running: bool) {
     painter.rect_stroke(
         rect,
         0.0,
-        Stroke::new(1.0, Color32::from_rgb(40, 32, 24)),
+        Stroke::new(1.0_f32, Color32::from_rgb(40, 32, 24)),
         egui::StrokeKind::Inside,
     );
     painter.text(
@@ -615,7 +615,7 @@ fn draw_sparkline(ui: &mut egui::Ui, hist: &VecDeque<f32>, running: bool) {
         .collect();
     painter.add(egui::Shape::line(
         points.split_off(0),
-        Stroke::new(1.6, AMBER),
+        Stroke::new(1.6_f32, AMBER),
     ));
 }
 
