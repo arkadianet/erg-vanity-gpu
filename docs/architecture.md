@@ -24,35 +24,13 @@ erg-vanity-gpu/
 ## Crate Dependency Graph
 
 ```
-                    ┌─────────────────┐
-                    │  erg-vanity-cli │
-                    │   (binary)      │
-                    └────────┬────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-              ▼              ▼              ▼
-    ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-    │ erg-vanity-core │  │  erg-vanity-cpu │  │  erg-vanity-gpu │
-    └─────────────────┘  └────────┬────────┘  └────────┬────────┘
-                                  │                     │
-              ┌───────────────────┼─────────────────────┤
-              │                   │                     │
-              ▼                   ▼                     ▼
-    ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-    │ erg-vanity-core │  │ erg-vanity-bip  │  │ erg-vanity-addr │
-    └─────────────────┘  └────────┬────────┘  └────────┬────────┘
-                                  │                     │
-                         ┌────────┴────────┐   ┌───────┴───────┐
-                         ▼                 ▼   ▼               ▼
-               ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-               │ erg-vanity-core │  │erg-vanity-crypto│  │ erg-vanity-core │
-               └─────────────────┘  └────────┬────────┘  └─────────────────┘
-                                             │
-                                             ▼
-                                   ┌─────────────────┐
-                                   │ erg-vanity-core │
-                                   └─────────────────┘
+erg-vanity-cli (binary)
+        |-- erg-vanity-engine
+        |       |-- erg-vanity-cpu  --> bip, address, crypto --> core
+        |       |-- erg-vanity-gpu  --> bip, address, crypto, cpu --> core
+        |       '-- erg-vanity-address
+        |-- erg-vanity-gui --> erg-vanity-engine
+        '-- erg-vanity-gpu (bench only)
 ```
 
 ## Crate Details
@@ -148,7 +126,7 @@ erg-vanity-gpu/
 
 ### erg-vanity-engine
 
-**Dependencies:** cpu, gpu, address, bip, crypto, ergo-lib
+**Dependencies:** cpu, gpu, address, ergo-lib
 
 **Purpose:** Shared search orchestration. Picks GPU (prefix) or CPU (fallback / suffix / contains). Every shown hit is checked with ergo-lib.
 

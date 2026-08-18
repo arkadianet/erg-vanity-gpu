@@ -4,6 +4,7 @@ use crate::buffers::{GpuBuffers, GpuHit, MAX_HITS};
 use crate::context::{GpuContext, GpuError};
 use crate::kernel::GpuProgram;
 use crate::wordlist::WordlistBuffers;
+use erg_vanity_cpu::{MatchType, Pattern};
 use ocl::Kernel;
 use rand::RngCore;
 use std::fmt;
@@ -17,6 +18,8 @@ pub struct VanityConfig {
     pub ignore_case: bool,
     /// Number of BIP44 address indices to check per seed (m/44'/429'/0'/0/{0..N-1}).
     pub num_indices: u32,
+    /// CPU verify match mode. The OpenCL kernel still searches prefixes.
+    pub match_type: MatchType,
 }
 
 impl Default for VanityConfig {
@@ -25,6 +28,7 @@ impl Default for VanityConfig {
             batch_size: 1 << 18, // 262,144 - conservative default
             ignore_case: false,
             num_indices: 1,
+            match_type: MatchType::Prefix,
         }
     }
 }
@@ -118,6 +122,7 @@ pub struct VanityPipeline {
     #[allow(dead_code)]
     num_patterns: u32,
     ignore_case: bool,
+    match_type: MatchType,
     num_indices: u32,
     #[allow(dead_code)]
     salt: [u8; 32],
@@ -196,6 +201,7 @@ impl VanityPipeline {
             pattern_index_map,
             num_patterns,
             ignore_case: cfg.ignore_case,
+            match_type: cfg.match_type,
             num_indices: cfg.num_indices,
             salt,
             counter: 0,
@@ -362,14 +368,8 @@ impl VanityPipeline {
             ))
         })?;
 
-        let matches = if self.ignore_case {
-            address
-                .get(..pattern.len())
-                .map(|prefix| prefix.eq_ignore_ascii_case(pattern))
-                .unwrap_or(false)
-        } else {
-            address.starts_with(pattern)
-        };
+        let matcher = Pattern::new(pattern.clone(), self.match_type).ignore_case(self.ignore_case);
+        let matches = matcher.matches(&address);
 
         if matches {
             Ok(Some(VanityResult {
@@ -421,6 +421,7 @@ mod tests {
             batch_size: 1024,
             ignore_case: false,
             num_indices: 1,
+            match_type: MatchType::Prefix,
         };
 
         let pipe = VanityPipeline::new(&["9".to_string()], cfg).expect("pipeline creation failed");

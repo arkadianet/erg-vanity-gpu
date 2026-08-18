@@ -20,8 +20,8 @@ struct Args {
     #[arg(long = "list-devices", default_value_t = false)]
     list_devices: bool,
 
-    /// Device indices (e.g. 0,1), "all", or "cpu"
-    #[arg(long = "devices", default_value = "0")]
+    /// Device indices (e.g. 0,1), "all", "cpu", or "auto" (GPU if present, else CPU)
+    #[arg(long = "devices", default_value = "auto")]
     devices: String,
 
     /// Pattern(s) to search for (comma-separated, e.g. 9err,9ego)
@@ -121,6 +121,9 @@ fn collect_patterns(args: &Args) -> Vec<String> {
 
 fn parse_backend(devices_arg: &str) -> Result<Backend, String> {
     let normalized = devices_arg.trim().to_ascii_lowercase();
+    if normalized == "auto" || normalized.is_empty() {
+        return Ok(Backend::Auto);
+    }
     if normalized == "cpu" {
         return Ok(Backend::Cpu);
     }
@@ -163,11 +166,11 @@ fn print_hit(hit: &erg_vanity_engine::Hit, originals: &[String], match_num: usiz
     println!("Entropy:  {}", hex::encode(hit.entropy));
 }
 
-fn run_estimate(patterns: &[String], match_type: MatchType) {
+fn run_estimate(patterns: &[String], match_type: MatchType, ignore_case: bool) {
     println!("Difficulty Estimation");
     println!("====================");
     for p in patterns {
-        let est = estimate_pattern(p, match_type);
+        let est = estimate_pattern(p, match_type, ignore_case);
         println!("\nPattern: \"{p}\"");
         if est.has_invalid_chars {
             println!(
@@ -230,6 +233,10 @@ fn main() {
         } else {
             backend
         };
+        if device_indices.is_empty() {
+            eprintln!("Error: no OpenCL GPU devices found");
+            std::process::exit(2);
+        }
         let cfg = erg_vanity_gpu::bench::BenchConfig {
             batch_size: args.bench_batch_size.unwrap_or(1 << 18),
             num_indices: args.bench_num_indices.unwrap_or(args.num_indices),
@@ -266,7 +273,7 @@ fn main() {
             eprintln!("Error: --estimate requires -p");
             std::process::exit(2);
         }
-        run_estimate(&patterns, match_type);
+        run_estimate(&patterns, match_type, args.ignore_case);
         return;
     }
 
@@ -352,11 +359,14 @@ fn main() {
                 );
                 let _ = io::stderr().flush();
             }
-            SearchEvent::Dropped { count } => {
+            SearchEvent::Dropped { count, reason } => {
                 eprintln!();
-                eprintln!(
-                    "Warning: {count} hits dropped due to buffer overflow (pattern too short?)"
-                );
+                match reason {
+                    Some(reason) => eprintln!("Warning: {reason}"),
+                    None => eprintln!(
+                        "Warning: {count} hits dropped due to buffer overflow (pattern too short?)"
+                    ),
+                }
             }
             SearchEvent::Error { message } => {
                 exit_err = Some(message);
@@ -384,6 +394,12 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backend_auto() {
+        assert!(matches!(parse_backend("auto").unwrap(), Backend::Auto));
+        assert!(matches!(parse_backend("").unwrap(), Backend::Auto));
+    }
 
     #[test]
     fn backend_cpu() {

@@ -1585,9 +1585,7 @@ version = "0.1.0"
 dependencies = [
  "bip39",
  "erg-vanity-address",
- "erg-vanity-bip",
  "erg-vanity-cpu",
- "erg-vanity-crypto",
  "erg-vanity-gpu",
  "ergo-lib",
  "rand",

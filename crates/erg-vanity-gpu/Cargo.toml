@@ -16,10 +16,10 @@ erg-vanity-core = { path = "../erg-vanity-core" }
 erg-vanity-crypto = { path = "../erg-vanity-crypto" }
 erg-vanity-bip = { path = "../erg-vanity-bip" }
 erg-vanity-address = { path = "../erg-vanity-address" }
+erg-vanity-cpu = { path = "../erg-vanity-cpu" }
 thiserror = { workspace = true }
 ocl = { workspace = true }
 rand = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
-erg-vanity-cpu = { path = "../erg-vanity-cpu" }

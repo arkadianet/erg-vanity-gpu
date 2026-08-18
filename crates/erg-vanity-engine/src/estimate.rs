@@ -11,7 +11,11 @@ pub struct PatternEstimate {
 }
 
 /// Estimate attempts for a Base58 pattern at the given match type.
-pub fn estimate_pattern(pattern: &str, match_type: MatchType) -> PatternEstimate {
+pub fn estimate_pattern(
+    pattern: &str,
+    match_type: MatchType,
+    ignore_case: bool,
+) -> PatternEstimate {
     let mut invalid_chars = Vec::new();
     for c in pattern.chars() {
         if !is_base58_char(c) && !invalid_chars.contains(&c) {
@@ -27,7 +31,7 @@ pub fn estimate_pattern(pattern: &str, match_type: MatchType) -> PatternEstimate
     }
 
     let n = pattern.len() as f64;
-    let attempts = match match_type {
+    let mut attempts = match match_type {
         MatchType::Prefix => {
             if n <= 1.0 {
                 1.0
@@ -36,12 +40,21 @@ pub fn estimate_pattern(pattern: &str, match_type: MatchType) -> PatternEstimate
                 5.0 * 58.0f64.powf((n - 2.0).max(0.0))
             }
         }
-        MatchType::Suffix | MatchType::Contains => {
+        MatchType::Suffix => 58.0f64.powf(n),
+        MatchType::Contains => {
             let avg_len = 51.0;
             let positions = (avg_len - n + 1.0).max(1.0);
             58.0f64.powf(n) / positions
         }
     };
+
+    if ignore_case {
+        for c in pattern.chars() {
+            if has_base58_case_pair(c) {
+                attempts /= 2.0;
+            }
+        }
+    }
 
     PatternEstimate {
         attempts_needed: attempts * 1.2,
@@ -75,21 +88,44 @@ fn is_base58_char(c: char) -> bool {
     )
 }
 
+fn has_base58_case_pair(c: char) -> bool {
+    if !c.is_ascii_alphabetic() {
+        return false;
+    }
+    let lo = c.to_ascii_lowercase();
+    let hi = c.to_ascii_uppercase();
+    lo != hi && is_base58_char(lo) && is_base58_char(hi)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn prefix_longer_is_harder() {
-        let a = estimate_pattern("9e", MatchType::Prefix);
-        let b = estimate_pattern("9ergo", MatchType::Prefix);
+        let a = estimate_pattern("9e", MatchType::Prefix, false);
+        let b = estimate_pattern("9ergo", MatchType::Prefix, false);
         assert!(b.attempts_needed > a.attempts_needed);
     }
 
     #[test]
     fn invalid_chars_are_impossible() {
-        let e = estimate_pattern("9eO", MatchType::Prefix);
+        let e = estimate_pattern("9eO", MatchType::Prefix, false);
         assert!(e.has_invalid_chars);
         assert!(e.attempts_needed.is_infinite());
+    }
+
+    #[test]
+    fn suffix_has_no_position_divisor() {
+        let suffix = estimate_pattern("cafe", MatchType::Suffix, false);
+        let contains = estimate_pattern("cafe", MatchType::Contains, false);
+        assert!(suffix.attempts_needed > contains.attempts_needed);
+    }
+
+    #[test]
+    fn ignore_case_is_easier() {
+        let sensitive = estimate_pattern("9ergo", MatchType::Prefix, false);
+        let insensitive = estimate_pattern("9ergo", MatchType::Prefix, true);
+        assert!(insensitive.attempts_needed < sensitive.attempts_needed);
     }
 }

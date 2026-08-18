@@ -52,6 +52,7 @@ pub enum SearchEvent {
     Hit(Hit),
     Dropped {
         count: u64,
+        reason: Option<String>,
     },
     Error {
         message: String,
@@ -104,6 +105,9 @@ impl SearchRequest {
                 "--index {} exceeds maximum of 100",
                 self.num_indices
             ));
+        }
+        if let Some(0) = self.batch_size {
+            return Err("--batch-size must be at least 1".into());
         }
         for p in &self.patterns {
             validate_pattern(p, self.match_type, self.ignore_case)?;
@@ -165,6 +169,11 @@ pub fn validate_pattern(
 pub fn run_search(req: SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) {
     if let Err(e) = req.validate() {
         let _ = tx.send(SearchEvent::Error { message: e });
+        let _ = tx.send(SearchEvent::Done {
+            checked: 0,
+            found: 0,
+            elapsed: Duration::ZERO,
+        });
         return;
     }
 
@@ -202,11 +211,19 @@ fn accept_hit(
     max: usize,
     stop: &AtomicBool,
 ) {
-    if !verify_hit_ergo_lib(&hit.entropy, hit.address_index, &hit.address) {
-        eprintln!(
-            "Warning: hit failed ergo-lib verify (addr={}, index={}); dropping",
-            hit.address, hit.address_index
-        );
+    if !verify_hit_ergo_lib(
+        &hit.entropy,
+        hit.address_index,
+        &hit.address,
+        Network::Mainnet,
+    ) {
+        let _ = tx.send(SearchEvent::Dropped {
+            count: 1,
+            reason: Some(format!(
+                "hit failed ergo-lib verify (addr={}, index={}); dropping",
+                hit.address, hit.address_index
+            )),
+        });
         return;
     }
     if *found >= max {
@@ -225,11 +242,16 @@ fn run_cpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
     let mut salt = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut salt);
     let counter = Arc::new(AtomicU64::new(0));
-    let batch = req.batch_size.unwrap_or(256) as u64;
+    let batch = req.batch_size.unwrap_or(256).max(1) as u64;
     let start = Instant::now();
     let mut found = 0usize;
     let mut checked = 0u64;
     let mut last_report = Instant::now();
+    let _ = tx.send(SearchEvent::Progress {
+        checked: 0,
+        rate: 0.0,
+        found: 0,
+    });
 
     if let Some(d) = req.duration {
         let stop = Arc::clone(&stop);
@@ -266,7 +288,7 @@ fn run_cpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
             );
         }
         checked += batch * req.num_indices as u64;
-        if last_report.elapsed().as_secs_f64() >= 1.0 {
+        if last_report.elapsed().as_secs_f64() >= 0.2 {
             let rate = checked as f64 / start.elapsed().as_secs_f64().max(0.001);
             let _ = tx.send(SearchEvent::Progress {
                 checked,
@@ -316,6 +338,11 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
         Ok(d) => d,
         Err(e) => {
             let _ = tx.send(SearchEvent::Error { message: e });
+            let _ = tx.send(SearchEvent::Done {
+                checked: 0,
+                found: 0,
+                elapsed: Duration::ZERO,
+            });
             return;
         }
     };
@@ -327,11 +354,12 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
         .ok()
         .map(|ctx| ctx.recommended_batch_size())
         .unwrap_or(1 << 18);
-    let batch_size = req.batch_size.unwrap_or(default_batch);
+    let batch_size = req.batch_size.unwrap_or(default_batch).max(1);
     let cfg = VanityConfig {
         batch_size,
         ignore_case: req.ignore_case,
         num_indices: req.num_indices,
+        match_type: req.match_type,
     };
 
     let counter = Arc::new(AtomicU64::new(0));
@@ -359,7 +387,6 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
                         device: device_index,
                         message: e.to_string(),
                     });
-                    stop.store(true, Ordering::Relaxed);
                     return;
                 }
             };
@@ -372,7 +399,6 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
                             device: device_index,
                             message: e.to_string(),
                         });
-                        stop.store(true, Ordering::Relaxed);
                         break;
                     }
                 };
@@ -418,6 +444,11 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
     let mut found = 0usize;
     let mut dropped_total = 0u64;
     let mut first_error: Option<String> = None;
+    let _ = tx.send(SearchEvent::Progress {
+        checked: 0,
+        rate: 0.0,
+        found: 0,
+    });
 
     loop {
         match wrx.recv_timeout(Duration::from_millis(200)) {
@@ -428,7 +459,6 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
                 if first_error.is_none() {
                     first_error = Some(format!("Device {device} error: {message}"));
                 }
-                stop.store(true, Ordering::Relaxed);
             }
             Ok(WorkerMsg::Stats { dropped }) => {
                 dropped_total = dropped_total.saturating_add(dropped);
@@ -436,7 +466,7 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         }
-        if last_report.elapsed().as_secs_f64() >= 1.0 {
+        if last_report.elapsed().as_secs_f64() >= 0.2 {
             let checked = total_checked.load(Ordering::Relaxed);
             let rate = checked as f64 / start.elapsed().as_secs_f64().max(0.001);
             let _ = tx.send(SearchEvent::Progress {
@@ -455,6 +485,7 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
     if dropped_total > 0 {
         let _ = tx.send(SearchEvent::Dropped {
             count: dropped_total,
+            reason: None,
         });
     }
     if let Some(message) = first_error {
@@ -497,5 +528,25 @@ mod tests {
     #[test]
     fn suffix_allows_non_prefix() {
         assert!(validate_pattern("cafe", MatchType::Suffix, false).is_ok());
+    }
+
+    #[test]
+    fn rejects_zero_batch_size() {
+        let req = SearchRequest {
+            patterns: vec!["9err".into()],
+            match_type: MatchType::Prefix,
+            ignore_case: false,
+            max_results: 1,
+            num_indices: 1,
+            duration: None,
+            backend: Backend::Cpu,
+            batch_size: Some(0),
+        };
+        assert!(req.validate().is_err());
+        let ok = SearchRequest {
+            batch_size: None,
+            ..req.clone()
+        };
+        assert!(ok.validate().is_ok());
     }
 }

@@ -8,9 +8,7 @@ description = "Shared vanity search engine for CLI and GUI"
 
 [dependencies]
 erg-vanity-address = { path = "../erg-vanity-address" }
-erg-vanity-bip = { path = "../erg-vanity-bip" }
 erg-vanity-cpu = { path = "../erg-vanity-cpu" }
-erg-vanity-crypto = { path = "../erg-vanity-crypto" }
 erg-vanity-gpu = { path = "../erg-vanity-gpu" }
 ergo-lib = { workspace = true }
 bip39 = "=2.1.0"

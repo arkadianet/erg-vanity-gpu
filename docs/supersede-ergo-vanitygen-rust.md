@@ -4,7 +4,7 @@ This repository (`erg-vanity-gpu`) is the surviving codebase.
 
 The older CPU/GUI tool at https://github.com/arkadianet/ergo-vanitygen-rust is superseded. After this tree is released, archive that repo and pin this README blurb at the top:
 
-```
+```text
 This project is superseded by https://github.com/arkadianet/erg-vanity-gpu
 (binary: erg-vanity). CPU search remains as a fallback; GPU prefix search
 and a refreshed GUI live there.
