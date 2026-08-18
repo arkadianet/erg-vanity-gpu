@@ -117,6 +117,12 @@ All jobs run on `ubuntu-latest` with:
 - `dtolnay/rust-toolchain@stable`
 - OpenCL headers installed
 
+GPU kernel tests are opt-in. They skip unless `ERG_RUN_GPU_TESTS=1` (no GPU on GitHub runners). Locally:
+
+```bash
+ERG_RUN_GPU_TESTS=1 cargo test -p erg-vanity-gpu
+```
+
 ## Validation Tests
 
 ### ergo-lib Validation

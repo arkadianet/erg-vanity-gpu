@@ -8,30 +8,29 @@ members = [
     "crates/erg-vanity-cpu",
     "crates/erg-vanity-gpu",
     "crates/erg-vanity-cli",
+    "crates/erg-vanity-engine",
+    "crates/erg-vanity-gui",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-authors = ["rkadias"]
+authors = ["arkadianet"]
 
 [workspace.dependencies]
 # Core
 thiserror = "1.0"
-anyhow = "1.0"
-serde = { version = "1.0", features = ["derive"] }
 
 # Parallelism
 rayon = "1.10"
-crossbeam = "0.8"
 
 # OpenCL
 ocl = "0.19"
 
 # CLI
 clap = { version = "4.5", features = ["derive"] }
-indicatif = "0.17"
+ctrlc = "3.4"
 
 # Crypto (verification only - compare our impl against these)
 sha2 = "0.10"

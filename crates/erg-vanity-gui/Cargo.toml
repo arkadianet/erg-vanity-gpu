@@ -1,0 +1,13 @@
+[package]
+name = "erg-vanity-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Desktop UI for Ergo vanity address search"
+
+[dependencies]
+erg-vanity-engine = { path = "../erg-vanity-engine" }
+erg-vanity-cpu = { path = "../erg-vanity-cpu" }
+eframe = "0.31"
+egui = "0.31"

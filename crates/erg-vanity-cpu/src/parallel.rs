@@ -2,39 +2,59 @@
 
 #![forbid(unsafe_code)]
 
-use crate::generator::{generate_address_from_entropy, GeneratedAddress};
-use crate::matcher::Pattern;
+use crate::generator::{generate_address_from_entropy_at, GeneratedAddress};
+use crate::matcher::{first_match, Pattern};
 use erg_vanity_address::Network;
+use erg_vanity_crypto::entropy::from_salt_counter;
+use rand::rngs::OsRng;
+use rand::RngCore;
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-
-use rand::rngs::OsRng;
-use rand::RngCore;
 
 /// Result of a vanity search.
 pub struct SearchResult {
     /// The matching address (if found)
     pub result: Option<GeneratedAddress>,
+    /// Which pattern matched (index into the pattern list)
+    pub pattern_index: u32,
     /// Number of attempts *reserved* (batch-based) while searching
     pub attempts: u64,
+}
+
+/// A single verified CPU hit.
+#[derive(Clone)]
+pub struct CpuHit {
+    pub generated: GeneratedAddress,
+    pub entropy: [u8; 32],
+    pub pattern_index: u32,
 }
 
 /// Search for a vanity address matching the pattern.
 ///
 /// Runs until a match is found or `stop` is set to true.
 /// Uses all available CPU cores via rayon.
-///
-/// NOTE: entropy is derived from a per-search random salt + counter, so keys are not predictable.
 pub fn search(
     pattern: &Pattern,
     network: Network,
     stop: Arc<AtomicBool>,
     counter: Arc<AtomicU64>,
 ) -> SearchResult {
-    if pattern.validate().is_err() {
+    search_many(std::slice::from_ref(pattern), network, 1, stop, counter)
+}
+
+/// Search multiple patterns, checking `num_indices` BIP44 indices per seed.
+pub fn search_many(
+    patterns: &[Pattern],
+    network: Network,
+    num_indices: u32,
+    stop: Arc<AtomicBool>,
+    counter: Arc<AtomicU64>,
+) -> SearchResult {
+    if patterns.is_empty() || patterns.iter().any(|p| p.validate().is_err()) {
         return SearchResult {
             result: None,
+            pattern_index: 0,
             attempts: 0,
         };
     }
@@ -42,50 +62,44 @@ pub fn search(
     let mut salt = [0u8; 32];
     OsRng.fill_bytes(&mut salt);
 
-    search_with_salt(pattern, network, stop, counter, &salt)
+    search_with_salt(patterns, network, num_indices, stop, counter, &salt)
 }
 
 fn search_with_salt(
-    pattern: &Pattern,
+    patterns: &[Pattern],
     network: Network,
+    num_indices: u32,
     stop: Arc<AtomicBool>,
     counter: Arc<AtomicU64>,
     salt: &[u8; 32],
 ) -> SearchResult {
-    let batch_size = 1000u64;
+    let batch_size = 256u64;
     let mut total_attempts = 0u64;
+    let num_indices = num_indices.max(1);
 
     loop {
         if stop.load(Ordering::Relaxed) {
             break;
         }
 
-        // Allocate a unique range of attempt ids
         let start = counter.fetch_add(batch_size, Ordering::Relaxed);
+        let found = search_counter_range(
+            patterns,
+            network,
+            num_indices,
+            salt,
+            start,
+            batch_size,
+            &stop,
+        );
 
-        let found: Option<GeneratedAddress> = (start..start + batch_size)
-            .into_par_iter()
-            .find_map_any(|attempt_id| {
-                if stop.load(Ordering::Relaxed) {
-                    return None;
-                }
+        total_attempts = total_attempts.saturating_add(batch_size * num_indices as u64);
 
-                let entropy = entropy_from_counter(attempt_id, salt);
-                let result = generate_address_from_entropy(&entropy, network).ok()?;
-
-                if pattern.matches(&result.address) {
-                    Some(result)
-                } else {
-                    None
-                }
-            });
-
-        total_attempts = total_attempts.saturating_add(batch_size);
-
-        if let Some(addr) = found {
+        if let Some(hit) = found {
             stop.store(true, Ordering::Relaxed);
             return SearchResult {
-                result: Some(addr),
+                result: Some(hit.generated),
+                pattern_index: hit.pattern_index,
                 attempts: total_attempts,
             };
         }
@@ -93,20 +107,40 @@ fn search_with_salt(
 
     SearchResult {
         result: None,
+        pattern_index: 0,
         attempts: total_attempts,
     }
 }
 
-/// Convert an attempt id into 32 bytes of entropy using a per-search salt.
-///
-/// entropy = blake2b256(salt || attempt_id_le)
-fn entropy_from_counter(counter: u64, salt: &[u8; 32]) -> [u8; 32] {
-    use erg_vanity_crypto::blake2b;
-
-    let mut buf = [0u8; 40]; // 32 salt + 8 counter
-    buf[..32].copy_from_slice(salt);
-    buf[32..40].copy_from_slice(&counter.to_le_bytes());
-    blake2b::digest(&buf)
+/// Scan a reserved counter range. Used by the engine for batched CPU search.
+pub fn search_counter_range(
+    patterns: &[Pattern],
+    network: Network,
+    num_indices: u32,
+    salt: &[u8; 32],
+    start: u64,
+    batch_size: u64,
+    stop: &AtomicBool,
+) -> Option<CpuHit> {
+    (start..start.saturating_add(batch_size))
+        .into_par_iter()
+        .find_map_any(|attempt_id| {
+            if stop.load(Ordering::Relaxed) {
+                return None;
+            }
+            let entropy = from_salt_counter(salt, attempt_id);
+            for addr_idx in 0..num_indices {
+                let result = generate_address_from_entropy_at(&entropy, network, addr_idx).ok()?;
+                if let Some(pattern_index) = first_match(patterns, &result.address) {
+                    return Some(CpuHit {
+                        generated: result,
+                        entropy,
+                        pattern_index: pattern_index as u32,
+                    });
+                }
+            }
+            None
+        })
 }
 
 #[cfg(test)]
@@ -114,24 +148,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_entropy_from_counter_deterministic_with_fixed_salt() {
+    fn test_entropy_from_counter_matches_crypto_helper() {
         let salt = [7u8; 32];
-        let e1 = entropy_from_counter(12345, &salt);
-        let e2 = entropy_from_counter(12345, &salt);
-        assert_eq!(e1, e2);
-    }
-
-    #[test]
-    fn test_entropy_from_counter_different() {
-        let salt = [7u8; 32];
-        let e1 = entropy_from_counter(1, &salt);
-        let e2 = entropy_from_counter(2, &salt);
-        assert_ne!(e1, e2);
+        assert_eq!(
+            from_salt_counter(&salt, 12345),
+            from_salt_counter(&salt, 12345)
+        );
+        assert_ne!(from_salt_counter(&salt, 1), from_salt_counter(&salt, 2));
     }
 
     #[test]
     fn test_search_with_easy_pattern() {
-        let pattern = Pattern::prefix("9"); // mainnet P2PK addresses start with 9
+        let pattern = Pattern::prefix("9");
         let stop = Arc::new(AtomicBool::new(false));
         let counter = Arc::new(AtomicU64::new(0));
 
@@ -161,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_search_invalid_pattern_returns_immediately() {
-        let pattern = Pattern::prefix("0invalid"); // '0' is not base58
+        let pattern = Pattern::prefix("0invalid");
         let stop = Arc::new(AtomicBool::new(false));
         let counter = Arc::new(AtomicU64::new(0));
 

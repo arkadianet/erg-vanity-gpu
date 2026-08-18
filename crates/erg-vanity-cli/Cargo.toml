@@ -11,11 +11,11 @@ name = "erg-vanity"
 path = "src/main.rs"
 
 [dependencies]
-erg-vanity-core = { path = "../erg-vanity-core" }
+erg-vanity-engine = { path = "../erg-vanity-engine" }
 erg-vanity-cpu = { path = "../erg-vanity-cpu" }
 erg-vanity-gpu = { path = "../erg-vanity-gpu" }
-anyhow = { workspace = true }
+erg-vanity-gui = { path = "../erg-vanity-gui" }
 clap = { workspace = true }
 hex = { workspace = true }
-indicatif = { workspace = true }
+ctrlc = { workspace = true }
 rand = { workspace = true }

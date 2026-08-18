@@ -233,6 +233,69 @@ mod tests {
     }
 
     #[test]
+    fn test_vector_2_master_and_m0() {
+        // BIP32 test vector 2 (64-byte seed, BIP39-sized)
+        let seed = hex::decode(
+            "fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a2\
+             9f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542",
+        )
+        .unwrap();
+        let master = ExtendedPrivateKey::from_seed(&seed).unwrap();
+        assert_eq!(
+            to_hex(master.private_key()),
+            "4b03d6fc340455b363f51020ad3ecca4f0850280cf436c70c727923f6db46c3e"
+        );
+        assert_eq!(
+            to_hex(master.chain_code()),
+            "60499f801b896d83179a4374aeb7822aaeaceaa0db1f85ee3e904c4defbd9689"
+        );
+
+        let child = master.derive_child(0).unwrap();
+        assert_eq!(
+            to_hex(child.private_key()),
+            "abe74a98f6c7eabee0428f53798f0ab8aa1bd37873999041703c742f15ac7e1e"
+        );
+        assert_eq!(
+            to_hex(child.chain_code()),
+            "f0909affaa7ee7abe5dd4e100598d4dc53cd709d5a5c2cac40e7412f232f7c9c"
+        );
+    }
+
+    #[test]
+    fn test_vector_1_remaining_path() {
+        // BIP32 test vector 1, m/0'/1/2'/2 and m/0'/1/2'/2/1000000000
+        let seed = hex::decode("000102030405060708090a0b0c0d0e0f").unwrap();
+        let master = ExtendedPrivateKey::from_seed(&seed).unwrap();
+        let p2 = master.derive_path(&[HARDENED, 1, HARDENED | 2, 2]).unwrap();
+        assert_eq!(
+            to_hex(p2.private_key()),
+            "0f479245fb19a38a1954c5c7c0ebab2f9bdfd96a17563ef28a6a4b1a2a764ef4"
+        );
+        let p3 = master
+            .derive_path(&[HARDENED, 1, HARDENED | 2, 2, 1_000_000_000])
+            .unwrap();
+        assert_eq!(
+            to_hex(p3.private_key()),
+            "471b76e389e528d6de6d816857e012c5455051cad6660850e58372a6c3e6e7c8"
+        );
+    }
+
+    #[test]
+    fn test_vector_3_edge_seed() {
+        // BIP32 test vector 3 seed (leading-zero / edge case)
+        let seed = hex::decode(
+            "4b381541583be4423346c643850da4b320e46a87ae3d2a4e6da11eba819cd4ac\
+             ba45d239319ac14f863b8d5ab5a0d0c64d2e8a1e7d1457df2e5a3c51c73235be",
+        )
+        .unwrap();
+        let master = ExtendedPrivateKey::from_seed(&seed).unwrap();
+        assert!(master.private_key_scalar().is_some());
+        let child = master.derive_hardened(0).unwrap();
+        assert!(child.private_key_scalar().is_some());
+        assert_ne!(master.private_key(), child.private_key());
+    }
+
+    #[test]
     fn test_invalid_seed_length() {
         let short_seed = [0u8; 8];
         assert!(matches!(

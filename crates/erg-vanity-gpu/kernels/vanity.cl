@@ -29,22 +29,14 @@ inline void generate_entropy(
 ) {
     ulong counter = counter_start + (ulong)gid;
 
-    // msg = salt (32) || counter_le (8) || gid_le (4) = 44 bytes
-    uchar msg[44];
+    // msg = salt (32) || counter_le (8) = 40 bytes (must match CPU)
+    uchar msg[40];
 
     for (int i = 0; i < 32; i++) msg[i] = salt[i];
 
-    // little-endian counter
     for (int i = 0; i < 8; i++) msg[32 + i] = (uchar)(counter >> (8 * i));
 
-    // little-endian gid
-    msg[40] = (uchar)(gid);
-    msg[41] = (uchar)(gid >> 8);
-    msg[42] = (uchar)(gid >> 16);
-    msg[43] = (uchar)(gid >> 24);
-
-    // Fill all 32 bytes of entropy deterministically
-    blake2b_256(msg, 44u, entropy);
+    blake2b_256(msg, 40u, entropy);
 }
 
 // Build Ergo P2PK address from compressed public key

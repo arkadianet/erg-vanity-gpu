@@ -19,7 +19,6 @@ erg-vanity-address = { path = "../erg-vanity-address" }
 thiserror = { workspace = true }
 ocl = { workspace = true }
 rand = { workspace = true }
-rand_chacha = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }

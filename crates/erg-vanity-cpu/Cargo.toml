@@ -14,9 +14,9 @@ erg-vanity-address = { path = "../erg-vanity-address" }
 thiserror = { workspace = true }
 rayon = { workspace = true }
 rand = { workspace = true }
-rand_chacha = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
+rand_chacha = { workspace = true }
 ergo-lib = { workspace = true }
-bip39 = "2.1"
+bip39 = "=2.1.0"

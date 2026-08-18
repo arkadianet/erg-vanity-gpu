@@ -373,7 +373,7 @@ fn print_device_table(stats: &DeviceBenchStats, cfg: &BenchConfig) {
 
     // Sort by total time descending
     let mut sorted: Vec<_> = components.iter().collect();
-    sorted.sort_by(|a, b| b.1.total_ns.cmp(&a.1.total_ns));
+    sorted.sort_by_key(|b| std::cmp::Reverse(b.1.total_ns));
 
     for (name, cs, scales_with_indices) in sorted {
         let ms = cs.total_ns as f64 / 1_000_000.0;
@@ -442,7 +442,7 @@ fn print_combined_table(results: &[DeviceBenchStats], cfg: &BenchConfig) {
     ];
 
     let mut sorted: Vec<_> = components.iter().collect();
-    sorted.sort_by(|a, b| b.1.total_ns.cmp(&a.1.total_ns));
+    sorted.sort_by_key(|b| std::cmp::Reverse(b.1.total_ns));
 
     for (name, cs, scales_with_indices) in sorted {
         let ms = cs.total_ns as f64 / 1_000_000.0;

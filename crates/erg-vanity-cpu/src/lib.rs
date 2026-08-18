@@ -6,6 +6,9 @@ pub mod generator;
 pub mod matcher;
 pub mod parallel;
 
-pub use generator::{generate_address, generate_address_from_entropy, GeneratedAddress};
-pub use matcher::{MatchType, Pattern};
-pub use parallel::{search, SearchResult};
+pub use generator::{
+    generate_address, generate_address_from_entropy, generate_address_from_entropy_at,
+    GeneratedAddress,
+};
+pub use matcher::{first_match, MatchType, Pattern};
+pub use parallel::{search, search_counter_range, search_many, CpuHit, SearchResult};

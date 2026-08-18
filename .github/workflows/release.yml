@@ -125,7 +125,7 @@ jobs:
           set -euxo pipefail
           mkdir -p release
           cp artifacts/*/* release/
-          cp README* LICENSE* release/ 2>/dev/null || true
+          cp README.md LICENSE release/
           cd release
           sha256sum * > checksums.txt
           cat checksums.txt

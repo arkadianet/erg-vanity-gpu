@@ -16,6 +16,8 @@ erg-vanity-gpu/
 │   ├── erg-vanity-address/
 │   ├── erg-vanity-cpu/
 │   ├── erg-vanity-gpu/
+│   ├── erg-vanity-engine/
+│   ├── erg-vanity-gui/
 │   └── erg-vanity-cli/
 ```
 
@@ -141,19 +143,26 @@ erg-vanity-gpu/
 - `kernel.rs` - Kernel compilation
 - `buffers.rs` - GPU memory management
 - `pipeline.rs` - Vanity search pipeline
-- `hits.rs` - Hit verification
 - `wordlist.rs` - GPU wordlist buffers
 - `bench.rs` - Microbenchmark runner
 
+### erg-vanity-engine
+
+**Dependencies:** cpu, gpu, address, bip, crypto, ergo-lib
+
+**Purpose:** Shared search orchestration. Picks GPU (prefix) or CPU (fallback / suffix / contains). Every shown hit is checked with ergo-lib.
+
+### erg-vanity-gui
+
+**Dependencies:** engine, eframe/egui
+
+**Purpose:** Desktop UI. Opened when `erg-vanity` is run with no patterns.
+
 ### erg-vanity-cli
 
-<!-- Source: crates/erg-vanity-cli/Cargo.toml:14-16 -->
+**Dependencies:** engine, gpu (bench), gui
 
-**Dependencies:** `erg-vanity-core`, `erg-vanity-cpu`, `erg-vanity-gpu`
-
-**Purpose:** Command-line interface
-
-**Binary:** `erg-vanity`
+**Purpose:** `erg-vanity` binary (CLI + GUI launcher)
 
 ## Data Flow
 
