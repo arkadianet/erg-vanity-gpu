@@ -78,57 +78,91 @@ inline void sha512_init(__private Sha512State* state) {
     state->total_len = 0ul;
 }
 
+// SHA-512 round macro for scalar schedule (single-line, no backslash fragility)
+#define SHA512_ROUND(i, Wi) do { ulong t1 = h + EP1_64(e) + CH64(e, f, g) + K512[(i)] + (Wi); ulong t2 = EP0_64(a) + MAJ64(a, b, c); h = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2; } while (0)
+
+// Full-block compress from 16 message words. Rotating schedule, no W[80].
+inline ulong8 sha512_compress_mid16(
+    ulong8 mid,
+    ulong w0, ulong w1, ulong w2, ulong w3,
+    ulong w4, ulong w5, ulong w6, ulong w7,
+    ulong w8, ulong w9, ulong w10, ulong w11,
+    ulong w12, ulong w13, ulong w14, ulong w15
+) {
+    ulong a = mid.s0, b = mid.s1, c = mid.s2, d = mid.s3;
+    ulong e = mid.s4, f = mid.s5, g = mid.s6, h = mid.s7;
+
+    for (int i = 0; i < 64; i++) {
+        SHA512_ROUND(i, w0);
+        ulong newW = SIG1_64(w14) + w9 + SIG0_64(w1) + w0;
+        w0 = w1; w1 = w2; w2 = w3; w3 = w4;
+        w4 = w5; w5 = w6; w6 = w7; w7 = w8;
+        w8 = w9; w9 = w10; w10 = w11; w11 = w12;
+        w12 = w13; w13 = w14; w14 = w15; w15 = newW;
+    }
+
+    SHA512_ROUND(64, w0);  SHA512_ROUND(65, w1);
+    SHA512_ROUND(66, w2);  SHA512_ROUND(67, w3);
+    SHA512_ROUND(68, w4);  SHA512_ROUND(69, w5);
+    SHA512_ROUND(70, w6);  SHA512_ROUND(71, w7);
+    SHA512_ROUND(72, w8);  SHA512_ROUND(73, w9);
+    SHA512_ROUND(74, w10); SHA512_ROUND(75, w11);
+    SHA512_ROUND(76, w12); SHA512_ROUND(77, w13);
+    SHA512_ROUND(78, w14); SHA512_ROUND(79, w15);
+
+    return (ulong8)(mid.s0 + a, mid.s1 + b, mid.s2 + c, mid.s3 + d,
+                    mid.s4 + e, mid.s5 + f, mid.s6 + g, mid.s7 + h);
+}
+
+inline ulong8 sha512_state_mid(__private const Sha512State* state) {
+    return (ulong8)(state->h[0], state->h[1], state->h[2], state->h[3],
+                    state->h[4], state->h[5], state->h[6], state->h[7]);
+}
+
+inline void sha512_state_from_mid(__private Sha512State* state, ulong8 mid) {
+    state->h[0] = mid.s0; state->h[1] = mid.s1; state->h[2] = mid.s2; state->h[3] = mid.s3;
+    state->h[4] = mid.s4; state->h[5] = mid.s5; state->h[6] = mid.s6; state->h[7] = mid.s7;
+}
+
 // Compress one 128-byte (1024-bit) block into state
-// Block must be in private memory
 inline void sha512_compress(__private Sha512State* state, const __private uchar* block) {
-    // Prepare message schedule W[0..79]
-    ulong W[80];
+    ulong w0  = pack_be64(block[0],  block[1],  block[2],  block[3],
+                          block[4],  block[5],  block[6],  block[7]);
+    ulong w1  = pack_be64(block[8],  block[9],  block[10], block[11],
+                          block[12], block[13], block[14], block[15]);
+    ulong w2  = pack_be64(block[16], block[17], block[18], block[19],
+                          block[20], block[21], block[22], block[23]);
+    ulong w3  = pack_be64(block[24], block[25], block[26], block[27],
+                          block[28], block[29], block[30], block[31]);
+    ulong w4  = pack_be64(block[32], block[33], block[34], block[35],
+                          block[36], block[37], block[38], block[39]);
+    ulong w5  = pack_be64(block[40], block[41], block[42], block[43],
+                          block[44], block[45], block[46], block[47]);
+    ulong w6  = pack_be64(block[48], block[49], block[50], block[51],
+                          block[52], block[53], block[54], block[55]);
+    ulong w7  = pack_be64(block[56], block[57], block[58], block[59],
+                          block[60], block[61], block[62], block[63]);
+    ulong w8  = pack_be64(block[64], block[65], block[66], block[67],
+                          block[68], block[69], block[70], block[71]);
+    ulong w9  = pack_be64(block[72], block[73], block[74], block[75],
+                          block[76], block[77], block[78], block[79]);
+    ulong w10 = pack_be64(block[80], block[81], block[82], block[83],
+                          block[84], block[85], block[86], block[87]);
+    ulong w11 = pack_be64(block[88], block[89], block[90], block[91],
+                          block[92], block[93], block[94], block[95]);
+    ulong w12 = pack_be64(block[96], block[97], block[98], block[99],
+                          block[100], block[101], block[102], block[103]);
+    ulong w13 = pack_be64(block[104], block[105], block[106], block[107],
+                          block[108], block[109], block[110], block[111]);
+    ulong w14 = pack_be64(block[112], block[113], block[114], block[115],
+                          block[116], block[117], block[118], block[119]);
+    ulong w15 = pack_be64(block[120], block[121], block[122], block[123],
+                          block[124], block[125], block[126], block[127]);
 
-    // First 16 words from block (big-endian)
-    for (int i = 0; i < 16; i++) {
-        int idx = i * 8;
-        W[i] = pack_be64(block[idx], block[idx+1], block[idx+2], block[idx+3],
-                         block[idx+4], block[idx+5], block[idx+6], block[idx+7]);
-    }
-
-    // Extend to 80 words
-    for (int i = 16; i < 80; i++) {
-        W[i] = SIG1_64(W[i-2]) + W[i-7] + SIG0_64(W[i-15]) + W[i-16];
-    }
-
-    // Initialize working variables
-    ulong a = state->h[0];
-    ulong b = state->h[1];
-    ulong c = state->h[2];
-    ulong d = state->h[3];
-    ulong e = state->h[4];
-    ulong f = state->h[5];
-    ulong g = state->h[6];
-    ulong h = state->h[7];
-
-    // 80 rounds
-    for (int i = 0; i < 80; i++) {
-        ulong t1 = h + EP1_64(e) + CH64(e, f, g) + K512[i] + W[i];
-        ulong t2 = EP0_64(a) + MAJ64(a, b, c);
-        h = g;
-        g = f;
-        f = e;
-        e = d + t1;
-        d = c;
-        c = b;
-        b = a;
-        a = t1 + t2;
-    }
-
-    // Add compressed chunk to current state
-    state->h[0] += a;
-    state->h[1] += b;
-    state->h[2] += c;
-    state->h[3] += d;
-    state->h[4] += e;
-    state->h[5] += f;
-    state->h[6] += g;
-    state->h[7] += h;
+    sha512_state_from_mid(state, sha512_compress_mid16(
+        sha512_state_mid(state),
+        w0, w1, w2, w3, w4, w5, w6, w7,
+        w8, w9, w10, w11, w12, w13, w14, w15));
 }
 
 // Finalize SHA-512 and output 64-byte digest
@@ -224,9 +258,6 @@ inline void sha512_two_blocks(const __private uchar* block1,
 // Uses 16 SCALAR ulongs (not an array) to keep schedule in registers.
 // The W[16] array approach gets punted to local memory by NVIDIA.
 // ============================================================================
-
-// SHA-512 round macro for scalar schedule (single-line, no backslash fragility)
-#define SHA512_ROUND(i, Wi) do { ulong t1 = h + EP1_64(e) + CH64(e, f, g) + K512[(i)] + (Wi); ulong t2 = EP0_64(a) + MAJ64(a, b, c); h = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2; } while (0)
 
 // Finalize SHA-512 with exactly 64 bytes remaining, output as 8× ulong.
 // Uses 16 scalar ulongs with explicit rotation to stay in registers.

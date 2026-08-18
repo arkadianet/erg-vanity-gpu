@@ -99,20 +99,23 @@ __kernel void vanity_search(
 ) {
     uint gid = get_global_id(0);
 
+    __local uint g_local[6144];
+    g_table_prefetch(g_local);
+
     uchar seed[64];
     __global const uchar* in = seeds + ((ulong)gid * 64ul);
     for (int i = 0; i < 64; i++) seed[i] = in[i];
 
     // Step 3: Derive to external chain m/44'/429'/0'/0 (done ONCE, amortizes cost)
     uchar external_key[32], external_chain_code[32];
-    if (bip32_derive_ergo_external_chain(seed, external_key, external_chain_code) != 0) {
+    if (bip32_derive_ergo_external_chain_table(seed, external_key, external_chain_code, g_local) != 0) {
         // Invalid key (astronomically rare), skip this work item
         return;
     }
 
     // Parent pubkey is identical for every address index under this seed.
     uchar external_pub[33];
-    if (priv_to_compressed_pubkey(external_key, external_pub) != 0) {
+    if (priv_to_compressed_pubkey_table(external_key, external_pub, g_local) != 0) {
         return;
     }
 
@@ -132,7 +135,7 @@ __kernel void vanity_search(
         sc_from_bytes(key_limbs, private_key);
 
         uint point[24];
-        pt_mul_generator(point, key_limbs);
+        pt_mul_generator_table(point, key_limbs, g_local);
 
         uchar pubkey[33];
         if (pt_to_compressed_pubkey(pubkey, point) != 0) {

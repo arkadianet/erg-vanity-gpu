@@ -21,41 +21,73 @@ typedef struct {
     ulong outer_total_len;  // Cached total_len (128 after opad compress)
 } HmacSha512Ctx;
 
+// Load 8 key bytes as a big-endian word, zero-padded past key_len.
+inline ulong hmac_load_key_word(const __private uchar* key, uint key_len, uint off) {
+    ulong v = 0ul;
+    for (uint i = 0u; i < 8u; i++) {
+        uchar b = (off + i < key_len) ? key[off + i] : 0u;
+        v = (v << 8) | (ulong)b;
+    }
+    return v;
+}
+
+#define HMAC_IPAD64 0x3636363636363636ul
+#define HMAC_OPAD64 0x5c5c5c5c5c5c5c5cul
+
 // Initialize HMAC context with key.
 // If key_len > 128, caller must hash it first and pass the 64-byte hash.
 // (BIP39 mnemonics can exceed 128 bytes, so the caller handles this.)
 inline void hmac_sha512_init(__private HmacSha512Ctx* ctx,
                              const __private uchar* key, uint key_len) {
-    // Single pad buffer to reduce register pressure on NVIDIA
-    uchar pad[128];
+    ulong w0  = hmac_load_key_word(key, key_len, 0u)   ^ HMAC_IPAD64;
+    ulong w1  = hmac_load_key_word(key, key_len, 8u)   ^ HMAC_IPAD64;
+    ulong w2  = hmac_load_key_word(key, key_len, 16u)  ^ HMAC_IPAD64;
+    ulong w3  = hmac_load_key_word(key, key_len, 24u)  ^ HMAC_IPAD64;
+    ulong w4  = hmac_load_key_word(key, key_len, 32u)  ^ HMAC_IPAD64;
+    ulong w5  = hmac_load_key_word(key, key_len, 40u)  ^ HMAC_IPAD64;
+    ulong w6  = hmac_load_key_word(key, key_len, 48u)  ^ HMAC_IPAD64;
+    ulong w7  = hmac_load_key_word(key, key_len, 56u)  ^ HMAC_IPAD64;
+    ulong w8  = hmac_load_key_word(key, key_len, 64u)  ^ HMAC_IPAD64;
+    ulong w9  = hmac_load_key_word(key, key_len, 72u)  ^ HMAC_IPAD64;
+    ulong w10 = hmac_load_key_word(key, key_len, 80u)  ^ HMAC_IPAD64;
+    ulong w11 = hmac_load_key_word(key, key_len, 88u)  ^ HMAC_IPAD64;
+    ulong w12 = hmac_load_key_word(key, key_len, 96u)  ^ HMAC_IPAD64;
+    ulong w13 = hmac_load_key_word(key, key_len, 104u) ^ HMAC_IPAD64;
+    ulong w14 = hmac_load_key_word(key, key_len, 112u) ^ HMAC_IPAD64;
+    ulong w15 = hmac_load_key_word(key, key_len, 120u) ^ HMAC_IPAD64;
+
     Sha512State st;
-
-    // Build ipad: zero-pad key to block size, XOR with 0x36
-    for (uint i = 0u; i < HMAC_BLOCK_SIZE; i++) {
-        uchar k = (i < key_len) ? key[i] : 0u;
-        pad[i] = k ^ IPAD;
-    }
-
-    // Compress ipad and cache the resulting state
     sha512_init(&st);
-    sha512_compress(&st, pad);
-    st.total_len = 128ul;
-    ctx->inner_h = (ulong8)(st.h[0], st.h[1], st.h[2], st.h[3],
-                            st.h[4], st.h[5], st.h[6], st.h[7]);
-    ctx->inner_total_len = st.total_len;
+    ctx->inner_h = sha512_compress_mid16(
+        sha512_state_mid(&st),
+        w0, w1, w2, w3, w4, w5, w6, w7,
+        w8, w9, w10, w11, w12, w13, w14, w15);
+    ctx->inner_total_len = 128ul;
 
-    // Transform ipad to opad in-place: (k ^ 0x36) ^ 0x6a = k ^ 0x5c
-    for (uint i = 0u; i < HMAC_BLOCK_SIZE; i++) {
-        pad[i] ^= (IPAD ^ OPAD);  // 0x36 ^ 0x5c = 0x6a
-    }
+    // (k ^ ipad) ^ (ipad ^ opad) = k ^ opad
+    w0  ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w1  ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w2  ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w3  ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w4  ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w5  ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w6  ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w7  ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w8  ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w9  ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w10 ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w11 ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w12 ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w13 ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w14 ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
+    w15 ^= (HMAC_IPAD64 ^ HMAC_OPAD64);
 
-    // Compress opad and cache the resulting state
     sha512_init(&st);
-    sha512_compress(&st, pad);
-    st.total_len = 128ul;
-    ctx->outer_h = (ulong8)(st.h[0], st.h[1], st.h[2], st.h[3],
-                            st.h[4], st.h[5], st.h[6], st.h[7]);
-    ctx->outer_total_len = st.total_len;
+    ctx->outer_h = sha512_compress_mid16(
+        sha512_state_mid(&st),
+        w0, w1, w2, w3, w4, w5, w6, w7,
+        w8, w9, w10, w11, w12, w13, w14, w15);
+    ctx->outer_total_len = 128ul;
 }
 
 // Compute HMAC-SHA512 using preinitialized context.

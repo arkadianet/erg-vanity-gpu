@@ -143,6 +143,23 @@ inline int bip32_derive_normal(
     );
 }
 
+inline int bip32_derive_normal_table(
+    __private const uchar* parent_key,
+    __private const uchar* parent_chain_code,
+    uint index,
+    __private uchar* child_key,
+    __private uchar* child_chain_code,
+    __local const uint* g_table
+) {
+    uchar pubkey[33];
+    if (priv_to_compressed_pubkey_table(parent_key, pubkey, g_table) != 0) {
+        return 1;
+    }
+    return bip32_derive_normal_from_pub(
+        parent_key, parent_chain_code, pubkey, index, child_key, child_chain_code
+    );
+}
+
 // Normal CKD when the parent compressed pubkey is already known.
 // Avoids recomputing parent*G for every address index under the same parent.
 inline int bip32_derive_normal_from_pub(
@@ -252,6 +269,59 @@ inline int bip32_derive_ergo_external_chain(
     }
 
     // Output key and chain code at external chain level
+    for (int i = 0; i < 32; i++) {
+        key_out[i] = child_key[i];
+        chain_code_out[i] = child_chain_code[i];
+    }
+
+    return 0;
+}
+
+inline int bip32_derive_ergo_external_chain_table(
+    __private const uchar* seed,
+    __private uchar* key_out,
+    __private uchar* chain_code_out,
+    __local const uint* g_table
+) {
+    uchar key[32], chain_code[32];
+    uchar child_key[32], child_chain_code[32];
+
+    if (bip32_master_key(seed, key, chain_code) != 0) {
+        return 1;
+    }
+
+    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 44u,
+                               child_key, child_chain_code) != 0) {
+        return 2;
+    }
+    for (int i = 0; i < 32; i++) {
+        key[i] = child_key[i];
+        chain_code[i] = child_chain_code[i];
+    }
+
+    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 429u,
+                               child_key, child_chain_code) != 0) {
+        return 3;
+    }
+    for (int i = 0; i < 32; i++) {
+        key[i] = child_key[i];
+        chain_code[i] = child_chain_code[i];
+    }
+
+    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 0u,
+                               child_key, child_chain_code) != 0) {
+        return 4;
+    }
+    for (int i = 0; i < 32; i++) {
+        key[i] = child_key[i];
+        chain_code[i] = child_chain_code[i];
+    }
+
+    if (bip32_derive_normal_table(key, chain_code, 0u,
+                                  child_key, child_chain_code, g_table) != 0) {
+        return 5;
+    }
+
     for (int i = 0; i < 32; i++) {
         key_out[i] = child_key[i];
         chain_code_out[i] = child_chain_code[i];

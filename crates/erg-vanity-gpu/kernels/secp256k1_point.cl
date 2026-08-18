@@ -184,6 +184,62 @@ inline void pt_add(__private uint* r, __private const uint* p1, __private const 
     fe_mul(r + 16, t1, z2);  // Z3
 }
 
+// Jacobian + affine add (p2 has Z=1). Table points are affine.
+inline void pt_add_mixed(__private uint* r, __private const uint* p1, __private const uint* p2) {
+    if (pt_is_infinity(p1)) {
+        pt_copy(r, p2);
+        return;
+    }
+    if (pt_is_infinity(p2)) {
+        pt_copy(r, p1);
+        return;
+    }
+
+    __private const uint* x1 = p1;
+    __private const uint* y1 = p1 + 8;
+    __private const uint* z1 = p1 + 16;
+    __private const uint* x2 = p2;
+    __private const uint* y2 = p2 + 8;
+
+    uint z1_2[8], z1_3[8];
+    uint u2[8], s2[8];
+    uint h[8], rr[8], h2[8], h3[8];
+    uint u1_h2[8], t1[8];
+
+    fe_sqr(z1_2, z1);
+    fe_mul(z1_3, z1_2, z1);
+    fe_mul(u2, x2, z1_2);
+    fe_mul(s2, y2, z1_3);
+
+    fe_sub(h, u2, x1);
+    fe_sub(rr, s2, y1);
+
+    if (fe_is_zero(h)) {
+        if (fe_is_zero(rr)) {
+            pt_double(r, p1);
+            return;
+        }
+        pt_infinity(r);
+        return;
+    }
+
+    fe_sqr(h2, h);
+    fe_mul(h3, h2, h);
+    fe_mul(u1_h2, x1, h2);
+
+    fe_sqr(t1, rr);
+    fe_sub(t1, t1, h3);
+    fe_sub(t1, t1, u1_h2);
+    fe_sub(r, t1, u1_h2);
+
+    fe_sub(t1, u1_h2, r);
+    fe_mul(t1, rr, t1);
+    fe_mul(h3, y1, h3);
+    fe_sub(r + 8, t1, h3);
+
+    fe_mul(r + 16, h, z1);
+}
+
 // Scalar multiplication: r = k * p
 // Uses double-and-add algorithm, processing from LSB to MSB.
 inline void pt_mul(__private uint* r, __private const uint* k, __private const uint* p) {
@@ -216,9 +272,48 @@ inline void pt_mul(__private uint* r, __private const uint* k, __private const u
     pt_copy(r, result);
 }
 
+// Cooperative load of G_TABLE into local memory (24KB). All work-items must call this.
+inline void g_table_prefetch(__local uint* ltable) {
+    uint lid = get_local_id(0);
+    uint lsz = get_local_size(0);
+    for (uint i = lid; i < 6144u; i += lsz) {
+        ltable[i] = G_TABLE[i / 24u][i % 24u];
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+}
+
 // Multiply generator G by scalar k: r = k * G
 // 8-bit fixed windows. First byte is a table load (no doubles).
 // Uniform body: pt_double(inf)=inf and pt_add(P, inf)=P.
+inline void pt_mul_generator_table(
+    __private uint* r,
+    __private const uint* k,
+    __local const uint* g_table
+) {
+    uchar k_bytes[32];
+    sc_to_bytes(k_bytes, k);
+
+    uint buf0[24], buf1[24], selected[24];
+    __private uint* acc = buf0;
+    __private uint* tmp = buf1;
+
+    for (int j = 0; j < 24; j++) acc[j] = g_table[(uint)k_bytes[0] * 24u + (uint)j];
+
+    for (int byte_idx = 1; byte_idx < 32; byte_idx++) {
+        for (int i = 0; i < 8; i++) {
+            pt_double(tmp, acc);
+            __private uint* swap = acc; acc = tmp; tmp = swap;
+        }
+        for (int j = 0; j < 24; j++) {
+            selected[j] = g_table[(uint)k_bytes[byte_idx] * 24u + (uint)j];
+        }
+        pt_add_mixed(tmp, acc, selected);
+        { __private uint* swap = acc; acc = tmp; tmp = swap; }
+    }
+
+    pt_copy(r, acc);
+}
+
 inline void pt_mul_generator(__private uint* r, __private const uint* k) {
     uchar k_bytes[32];
     sc_to_bytes(k_bytes, k);
@@ -235,7 +330,7 @@ inline void pt_mul_generator(__private uint* r, __private const uint* k) {
             __private uint* swap = acc; acc = tmp; tmp = swap;
         }
         for (int j = 0; j < 24; j++) selected[j] = G_TABLE[k_bytes[byte_idx]][j];
-        pt_add(tmp, acc, selected);
+        pt_add_mixed(tmp, acc, selected);
         { __private uint* swap = acc; acc = tmp; tmp = swap; }
     }
 
@@ -291,5 +386,17 @@ inline int priv_to_compressed_pubkey(
     sc_from_bytes(limbs, privkey);
     uint point[24];
     pt_mul_generator(point, limbs);
+    return pt_to_compressed_pubkey(pubkey, point);
+}
+
+inline int priv_to_compressed_pubkey_table(
+    __private const uchar* privkey,
+    __private uchar* pubkey,
+    __local const uint* g_table
+) {
+    uint limbs[8];
+    sc_from_bytes(limbs, privkey);
+    uint point[24];
+    pt_mul_generator_table(point, limbs, g_table);
     return pt_to_compressed_pubkey(pubkey, point);
 }
