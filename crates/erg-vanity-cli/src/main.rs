@@ -213,7 +213,8 @@ fn main() {
     if args.bench {
         let backend = match parse_backend(&args.devices) {
             Ok(Backend::Gpu { devices }) => devices,
-            Ok(Backend::Cpu) | Ok(Backend::Auto) => {
+            Ok(Backend::Auto) => Vec::new(),
+            Ok(Backend::Cpu) => {
                 eprintln!("Error: --bench requires GPU devices");
                 std::process::exit(2);
             }

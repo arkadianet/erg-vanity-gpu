@@ -115,6 +115,15 @@ inline int bip32_derive_hardened(
     return 0;
 }
 
+inline int bip32_derive_normal_from_pub(
+    __private const uchar* parent_key,
+    __private const uchar* parent_chain_code,
+    __private const uchar* parent_pub,
+    uint index,
+    __private uchar* child_key,
+    __private uchar* child_chain_code
+);
+
 // Normal (non-hardened) child derivation.
 // Data = compressed_pubkey || index (37 bytes)
 // Returns 0 on success, 1 if derived key is invalid
@@ -125,22 +134,32 @@ inline int bip32_derive_normal(
     __private uchar* child_key,
     __private uchar* child_chain_code
 ) {
-    // Compute public key from parent private key
+    uchar pubkey[33];
+    if (priv_to_compressed_pubkey(parent_key, pubkey) != 0) {
+        return 1;
+    }
+    return bip32_derive_normal_from_pub(
+        parent_key, parent_chain_code, pubkey, index, child_key, child_chain_code
+    );
+}
+
+// Normal CKD when the parent compressed pubkey is already known.
+// Avoids recomputing parent*G for every address index under the same parent.
+inline int bip32_derive_normal_from_pub(
+    __private const uchar* parent_key,
+    __private const uchar* parent_chain_code,
+    __private const uchar* parent_pub,
+    uint index,
+    __private uchar* child_key,
+    __private uchar* child_chain_code
+) {
     uint parent_limbs[8];
     sc_from_bytes(parent_limbs, parent_key);
-
-    uint point[24];
-    pt_mul_generator(point, parent_limbs);
-
-    uchar pubkey[33];
-    if (pt_to_compressed_pubkey(pubkey, point) != 0) {
-        return 1;  // Point at infinity (shouldn't happen)
-    }
 
     // Build data: pubkey || index
     uchar data[37];
     for (int i = 0; i < 33; i++) {
-        data[i] = pubkey[i];
+        data[i] = parent_pub[i];
     }
     data[33] = (uchar)(index >> 24);
     data[34] = (uchar)(index >> 16);
@@ -253,6 +272,29 @@ inline int bip32_derive_address_index(
     uchar child_key[32], child_chain_code[32];
     if (bip32_derive_normal(external_key, external_chain_code, address_index,
                              child_key, child_chain_code) != 0) {
+        return 1;
+    }
+    for (int i = 0; i < 32; i++) {
+        final_key[i] = child_key[i];
+    }
+    return 0;
+}
+
+inline int bip32_derive_address_index_from_pub(
+    __private const uchar* external_key,
+    __private const uchar* external_chain_code,
+    __private const uchar* external_pub,
+    uint address_index,
+    __private uchar* final_key
+) {
+    uchar child_key[32], child_chain_code[32];
+    if (bip32_derive_normal_from_pub(
+            external_key,
+            external_chain_code,
+            external_pub,
+            address_index,
+            child_key,
+            child_chain_code) != 0) {
         return 1;
     }
     for (int i = 0; i < 32; i++) {

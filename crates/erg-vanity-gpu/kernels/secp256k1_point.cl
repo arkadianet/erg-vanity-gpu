@@ -382,3 +382,15 @@ inline int pt_to_compressed_pubkey(__private uchar* pubkey, __private const uint
 
     return 0;
 }
+
+// Private key (32 bytes) → compressed pubkey (33 bytes).
+inline int priv_to_compressed_pubkey(
+    __private const uchar* privkey,
+    __private uchar* pubkey
+) {
+    uint limbs[8];
+    sc_from_bytes(limbs, privkey);
+    uint point[24];
+    pt_mul_generator(point, limbs);
+    return pt_to_compressed_pubkey(pubkey, point);
+}

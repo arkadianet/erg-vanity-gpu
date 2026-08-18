@@ -232,7 +232,7 @@ impl GpuContext {
     pub fn recommended_batch_size(&self) -> usize {
         // Aim for good occupancy: compute_units * waves_per_cu * work_group_size
         let work_group_size = self.recommended_work_group_size();
-        let waves_per_cu = 4; // Target 4 wavefronts per CU
+        let waves_per_cu = 8; // Keep a 3080-class GPU near 256k work items
         let batch = (self.info.compute_units as usize).max(1) * waves_per_cu * work_group_size;
 
         // Round up to nice power of 2, cap at 1M

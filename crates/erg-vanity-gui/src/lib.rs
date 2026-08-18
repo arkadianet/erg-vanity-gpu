@@ -351,7 +351,6 @@ impl eframe::App for VanityApp {
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
                     ui.label(RichText::new("ERG-VANITY").color(AMBER).size(18.0).strong());
-                    ui.label(RichText::new("  /  miner").color(DIM).size(14.0));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let pulse = if self.running {
                             let t = self.elapsed.as_secs_f32();

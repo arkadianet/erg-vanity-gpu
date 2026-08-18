@@ -102,12 +102,20 @@ __kernel void vanity_search(
         return;
     }
 
+    // Parent pubkey is identical for every address index under this seed.
+    uchar external_pub[33];
+    if (priv_to_compressed_pubkey(external_key, external_pub) != 0) {
+        return;
+    }
+
     // Step 4-6: Loop over address indices (outer) and patterns (inner)
     // First match wins by (address_index ascending, pattern list order)
     for (uint addr_idx = 0; addr_idx < num_indices; addr_idx++) {
         // Derive key for this address index: m/44'/429'/0'/0/<addr_idx>
         uchar private_key[32];
-        if (bip32_derive_address_index(external_key, external_chain_code, addr_idx, private_key) != 0) {
+        if (bip32_derive_address_index_from_pub(
+                external_key, external_chain_code, external_pub, addr_idx, private_key
+            ) != 0) {
             continue;  // Skip invalid (astronomically rare)
         }
 

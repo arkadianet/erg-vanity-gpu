@@ -224,7 +224,12 @@ impl GpuProgram {
         combined.push_str(sources::VANITY);
         combined.push('\n');
 
-        Self::from_source(ctx, &combined)
+        eprintln!("Compiling OpenCL vanity kernel (first run after a kernel change can take a minute)...");
+        let built = Self::from_source(ctx, &combined);
+        if built.is_ok() {
+            eprintln!("OpenCL vanity kernel ready.");
+        }
+        built
     }
 
     /// Compile the benchmark program with separate kernels for each component.

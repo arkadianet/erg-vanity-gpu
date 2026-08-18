@@ -35,7 +35,7 @@ __constant ulong H512_INIT[8] = {
 };
 
 // Rotate right for 64-bit
-#define ROTR64(x, n) (((x) >> (n)) | ((x) << (64 - (n))))
+#define ROTR64(x, n) rotate((x), (ulong)(64ul - (n)))
 
 // SHA-512 functions
 #define CH64(x, y, z)  (((x) & (y)) ^ (~(x) & (z)))
@@ -518,3 +518,4 @@ inline ulong8 sha512_final_from_u8(__private Sha512State* state, ulong8 msg) {
 }
 
 #undef SHA512_ROUND
+#undef ROTR64

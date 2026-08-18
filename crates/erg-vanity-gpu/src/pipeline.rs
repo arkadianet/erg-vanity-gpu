@@ -107,6 +107,17 @@ pub(crate) fn sort_patterns_longest_first(patterns: &[String]) -> (Vec<String>, 
     (sorted, map)
 }
 
+fn local_size_for(batch: usize, recommended: usize) -> usize {
+    let mut ls = recommended.min(batch).max(1);
+    while batch % ls != 0 {
+        ls /= 2;
+        if ls == 0 {
+            return 1;
+        }
+    }
+    ls
+}
+
 /// GPU-accelerated vanity address search pipeline.
 pub struct VanityPipeline {
     ctx: GpuContext,
@@ -176,6 +187,7 @@ impl VanityPipeline {
             .name("vanity_search")
             .queue(queue.clone())
             .global_work_size(cfg.batch_size)
+            .local_work_size(local_size_for(cfg.batch_size, ctx.recommended_work_group_size()))
             .arg(&buffers.salt) // arg 0: salt
             .arg(0u64) // arg 1: counter_start (scalar, updated each batch)
             .arg(&wordlist.words8) // arg 2: words8
@@ -239,7 +251,6 @@ impl VanityPipeline {
         unsafe {
             self.kernel.enq()?;
         }
-        self.ctx.queue().finish()?;
 
         // Update counter for next batch
         // Counter is per-seed: each work item uses counter_start + gid.
@@ -266,7 +277,6 @@ impl VanityPipeline {
         unsafe {
             self.kernel.enq()?;
         }
-        self.ctx.queue().finish()?;
 
         self.addresses_checked += (self.cfg.batch_size as u64) * (self.num_indices as u64);
 
