@@ -1377,7 +1377,7 @@ mod tests {
                     "GPU private key (first 16 bytes): {:02x?}",
                     &gpu_private_key[..16]
                 );
-                println!("GPU pubkey: {:02x?}", &gpu_pubkey);
+                println!("GPU pubkey: {:02x?}", gpu_pubkey);
                 println!("GPU addr_bytes (first 16): {:02x?}", &gpu_addr_bytes[..16]);
                 println!("GPU error: {}", gpu_error[0]);
 
