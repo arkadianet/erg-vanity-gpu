@@ -7,7 +7,7 @@
 use erg_vanity_address::{encode_p2pk, Network};
 use erg_vanity_bip::bip32::ExtendedPrivateKey;
 use erg_vanity_bip::bip39::{entropy_to_mnemonic, mnemonic_to_seed};
-use erg_vanity_bip::bip44::derive_ergo_first_key;
+use erg_vanity_bip::bip44::derive_ergo_key;
 use erg_vanity_crypto::secp256k1::pubkey::PublicKey;
 use rand::{CryptoRng, RngCore};
 use std::fmt;
@@ -19,14 +19,17 @@ pub struct GeneratedAddress {
     pub address: String,
     /// The BIP39 mnemonic (24 words for 256-bit entropy)
     pub mnemonic: String,
-    /// The raw 32-byte private key at m/44'/429'/0'/0/0
+    /// The raw 32-byte private key at m/44'/429'/0'/0/{address_index}
     pub private_key: [u8; 32],
+    /// BIP44 address index used for this address.
+    pub address_index: u32,
 }
 
 impl fmt::Debug for GeneratedAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GeneratedAddress")
             .field("address", &self.address)
+            .field("address_index", &self.address_index)
             .field("mnemonic", &"<redacted>")
             .field("private_key", &"<redacted>")
             .finish()
@@ -47,38 +50,39 @@ pub fn generate_address<R: RngCore + CryptoRng>(
     generate_address_from_entropy(&entropy, network)
 }
 
-/// Generate an Ergo address from specific entropy bytes.
-///
-/// Entropy must be 16, 20, 24, 28, or 32 bytes.
+/// Generate an Ergo address from specific entropy at m/44'/429'/0'/0/0.
 pub fn generate_address_from_entropy(
     entropy: &[u8],
     network: Network,
 ) -> Result<GeneratedAddress, &'static str> {
-    // 1. Entropy → Mnemonic
+    generate_address_from_entropy_at(entropy, network, 0)
+}
+
+/// Generate an Ergo address from entropy at m/44'/429'/0'/0/{address_index}.
+///
+/// Entropy must be 16, 20, 24, 28, or 32 bytes.
+pub fn generate_address_from_entropy_at(
+    entropy: &[u8],
+    network: Network,
+    address_index: u32,
+) -> Result<GeneratedAddress, &'static str> {
     let mnemonic = entropy_to_mnemonic(entropy)?;
-
-    // 2. Mnemonic → Seed (no passphrase)
     let seed = mnemonic_to_seed(&mnemonic, "");
-
-    // 3. Seed → Master key
     let master = ExtendedPrivateKey::from_seed(&seed).map_err(|_| "invalid master key")?;
+    let ergo_key =
+        derive_ergo_key(&master, 0, 0, address_index).map_err(|_| "derivation failed")?;
 
-    // 4. Master → Ergo key at m/44'/429'/0'/0/0
-    let ergo_key = derive_ergo_first_key(&master).map_err(|_| "derivation failed")?;
-
-    // 5. Private key → Public key
     let scalar = ergo_key
         .private_key_scalar()
         .ok_or("invalid private key scalar")?;
     let pubkey = PublicKey::from_private_key(&scalar).ok_or("invalid public key")?;
-
-    // 6. Public key → Address
     let address = encode_p2pk(pubkey.as_bytes(), network);
 
     Ok(GeneratedAddress {
         address,
         mnemonic,
         private_key: *ergo_key.private_key(),
+        address_index,
     })
 }
 
@@ -138,6 +142,16 @@ mod tests {
 
         // Different addresses
         assert_ne!(mainnet.address, testnet.address);
+    }
+
+    #[test]
+    fn test_index_changes_address() {
+        let entropy = [0u8; 32];
+        let a0 = generate_address_from_entropy_at(&entropy, Network::Mainnet, 0).unwrap();
+        let a1 = generate_address_from_entropy_at(&entropy, Network::Mainnet, 1).unwrap();
+        assert_ne!(a0.address, a1.address);
+        assert_eq!(a0.mnemonic, a1.mnemonic);
+        assert_eq!(a1.address_index, 1);
     }
 
     #[test]

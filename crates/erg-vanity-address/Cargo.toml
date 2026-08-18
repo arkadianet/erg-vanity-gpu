@@ -14,4 +14,3 @@ thiserror = { workspace = true }
 [dev-dependencies]
 hex = { workspace = true }
 bs58 = { workspace = true }
-ergo-lib = { workspace = true }

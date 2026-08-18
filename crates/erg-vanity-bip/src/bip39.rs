@@ -222,10 +222,15 @@ mod tests {
         let mnemonic = entropy_to_mnemonic(&entropy).unwrap();
         let words: Vec<&str> = mnemonic.split_whitespace().collect();
         assert_eq!(words.len(), 24);
-        // First 23 words should be "abandon", last word includes checksum
+        // First 23 words should be "abandon", last word is checksum ("art")
         for word in &words[..23] {
             assert_eq!(*word, "abandon");
         }
+        assert_eq!(words[23], "art");
+        assert_eq!(
+            mnemonic,
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+        );
     }
 
     #[test]

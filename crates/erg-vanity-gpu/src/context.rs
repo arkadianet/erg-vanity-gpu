@@ -256,11 +256,24 @@ impl std::fmt::Display for DeviceInfo {
     }
 }
 
-/// Try to create a GPU context, returning None if no device available.
-/// Use this in tests to gracefully skip when no GPU is present.
+/// True when GPU integration tests should run (`ERG_RUN_GPU_TESTS=1`).
+#[cfg(test)]
+pub(crate) fn gpu_tests_enabled() -> bool {
+    std::env::var("ERG_RUN_GPU_TESTS")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+}
+
+/// Try to create a GPU context, returning None if tests are opted out or no device.
+///
+/// GPU kernel tests are opt-in: set `ERG_RUN_GPU_TESTS=1` so CI stays explicit.
 /// Also catches panics from the OpenCL library (e.g., no ICD installed).
 #[cfg(test)]
 pub(crate) fn try_ctx() -> Option<GpuContext> {
+    if !gpu_tests_enabled() {
+        eprintln!("Skipping GPU test (set ERG_RUN_GPU_TESTS=1 to run OpenCL tests)");
+        return None;
+    }
     match std::panic::catch_unwind(GpuContext::new) {
         Ok(Ok(ctx)) => Some(ctx),
         Ok(Err(e)) => {

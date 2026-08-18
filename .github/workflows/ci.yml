@@ -26,6 +26,8 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -33,6 +35,8 @@ jobs:
       - name: Install OpenCL
         run: sudo apt-get update && sudo apt-get install -y ocl-icd-opencl-dev opencl-headers
       - run: cargo test --workspace
+      - name: GPU tests are opt-in
+        run: echo "OpenCL kernel tests skip unless ERG_RUN_GPU_TESTS=1"
 
   fmt:
     name: Format

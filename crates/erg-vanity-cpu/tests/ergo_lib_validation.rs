@@ -7,7 +7,7 @@
 use std::str::FromStr;
 
 use erg_vanity_address::Network;
-use erg_vanity_cpu::generate_address_from_entropy;
+use erg_vanity_cpu::{generate_address_from_entropy, generate_address_from_entropy_at};
 
 use ergo_lib::ergotree_ir::chain::address::{Address, NetworkAddress, NetworkPrefix};
 use ergo_lib::wallet::derivation_path::DerivationPath;
@@ -17,16 +17,14 @@ use ergo_lib::wallet::mnemonic::Mnemonic;
 use bip39::{Language, Mnemonic as Bip39Mnemonic};
 
 /// Derive address from entropy using bip39 crate + ergo-lib (reference implementations).
-fn reference_addr_from_entropy(entropy: &[u8; 32], net: NetworkPrefix) -> String {
-    // Use bip39 crate for entropy → mnemonic (independent of our implementation)
+fn reference_addr_from_entropy(entropy: &[u8; 32], net: NetworkPrefix, index: u32) -> String {
     let mnemonic = Bip39Mnemonic::from_entropy_in(Language::English, entropy).unwrap();
     let mnemonic_str = mnemonic.to_string();
 
-    // Use ergo-lib for mnemonic → seed → master → derive → address
     let seed = Mnemonic::to_seed(&mnemonic_str, "");
     let master = ExtSecretKey::derive_master(seed).unwrap();
 
-    let path = DerivationPath::from_str("m/44'/429'/0'/0/0").unwrap();
+    let path = DerivationPath::from_str(&format!("m/44'/429'/0'/0/{index}")).unwrap();
     let derived = master.derive(path).unwrap();
 
     let address = Address::from(derived.public_key().unwrap());
@@ -38,7 +36,7 @@ fn test_abandon_entropy_matches_reference() {
     let entropy = [0u8; 32];
 
     let ours = generate_address_from_entropy(&entropy, Network::Mainnet).unwrap();
-    let reference = reference_addr_from_entropy(&entropy, NetworkPrefix::Mainnet);
+    let reference = reference_addr_from_entropy(&entropy, NetworkPrefix::Mainnet, 0);
 
     assert_eq!(
         ours.address, reference,
@@ -58,7 +56,7 @@ fn test_various_entropy_matches_reference() {
 
     for entropy in test_cases {
         let ours = generate_address_from_entropy(entropy, Network::Mainnet).unwrap();
-        let reference = reference_addr_from_entropy(entropy, NetworkPrefix::Mainnet);
+        let reference = reference_addr_from_entropy(entropy, NetworkPrefix::Mainnet, 0);
 
         assert_eq!(
             ours.address,
@@ -76,7 +74,7 @@ fn test_testnet_entropy_matches_reference() {
     let entropy = [0u8; 32];
 
     let ours = generate_address_from_entropy(&entropy, Network::Testnet).unwrap();
-    let reference = reference_addr_from_entropy(&entropy, NetworkPrefix::Testnet);
+    let reference = reference_addr_from_entropy(&entropy, NetworkPrefix::Testnet, 0);
 
     assert_eq!(
         ours.address, reference,
@@ -104,5 +102,20 @@ fn test_mnemonic_matches_bip39_crate() {
             ours.mnemonic,
             reference
         );
+    }
+}
+
+#[test]
+fn test_address_indices_match_reference() {
+    let entropy = [0u8; 32];
+    for index in [1u32, 9] {
+        let ours = generate_address_from_entropy_at(&entropy, Network::Mainnet, index).unwrap();
+        let reference = reference_addr_from_entropy(&entropy, NetworkPrefix::Mainnet, index);
+        assert_eq!(
+            ours.address, reference,
+            "Address mismatch at index {index}\n  Ours:      {}\n  Reference: {}",
+            ours.address, reference
+        );
+        assert_eq!(ours.address_index, index);
     }
 }

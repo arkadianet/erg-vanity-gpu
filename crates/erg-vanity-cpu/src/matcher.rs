@@ -16,35 +16,25 @@ pub enum MatchType {
 /// A compiled vanity pattern matcher.
 #[derive(Clone, Debug)]
 pub struct Pattern {
-    /// The pattern to match (case-sensitive)
     pattern: String,
-    /// The match type
     match_type: MatchType,
+    ignore_case: bool,
 }
 
 impl Pattern {
     /// Create a new prefix matcher.
     pub fn prefix(pattern: impl Into<String>) -> Self {
-        Self {
-            pattern: pattern.into(),
-            match_type: MatchType::Prefix,
-        }
+        Self::new(pattern, MatchType::Prefix)
     }
 
     /// Create a new suffix matcher.
     pub fn suffix(pattern: impl Into<String>) -> Self {
-        Self {
-            pattern: pattern.into(),
-            match_type: MatchType::Suffix,
-        }
+        Self::new(pattern, MatchType::Suffix)
     }
 
     /// Create a new contains matcher.
     pub fn contains(pattern: impl Into<String>) -> Self {
-        Self {
-            pattern: pattern.into(),
-            match_type: MatchType::Contains,
-        }
+        Self::new(pattern, MatchType::Contains)
     }
 
     /// Create a matcher with explicit match type.
@@ -52,11 +42,27 @@ impl Pattern {
         Self {
             pattern: pattern.into(),
             match_type,
+            ignore_case: false,
         }
+    }
+
+    /// Enable ASCII case-insensitive matching.
+    pub fn ignore_case(mut self, ignore: bool) -> Self {
+        self.ignore_case = ignore;
+        self
     }
 
     /// Check if the address matches the pattern.
     pub fn matches(&self, address: &str) -> bool {
+        if self.ignore_case {
+            let addr = address.to_ascii_lowercase();
+            let pat = self.pattern.to_ascii_lowercase();
+            return match self.match_type {
+                MatchType::Prefix => addr.starts_with(&pat),
+                MatchType::Suffix => addr.ends_with(&pat),
+                MatchType::Contains => addr.contains(&pat),
+            };
+        }
         match self.match_type {
             MatchType::Prefix => address.starts_with(&self.pattern),
             MatchType::Suffix => address.ends_with(&self.pattern),
@@ -85,9 +91,6 @@ impl Pattern {
     }
 
     /// Validate that the pattern contains only Base58 characters.
-    ///
-    /// Base58 alphabet: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
-    /// Excludes: 0, O, I, l (and any non-alphanumeric)
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.pattern.is_empty() {
             return Err("pattern is empty");
@@ -103,7 +106,24 @@ impl Pattern {
     }
 }
 
-/// Check if a character is in the Base58 alphabet.
+/// Index of the longest matching pattern, ties broken by list order.
+pub fn first_match(patterns: &[Pattern], address: &str) -> Option<usize> {
+    let mut best: Option<(usize, usize)> = None;
+    for (i, p) in patterns.iter().enumerate() {
+        if !p.matches(address) {
+            continue;
+        }
+        let len = p.len();
+        match best {
+            None => best = Some((len, i)),
+            Some((best_len, _)) if len > best_len => best = Some((len, i)),
+            Some((best_len, best_i)) if len == best_len && i < best_i => best = Some((len, i)),
+            _ => {}
+        }
+    }
+    best.map(|(_, i)| i)
+}
+
 fn is_base58_char(c: char) -> bool {
     matches!(c,
         '1'..='9' |
@@ -149,6 +169,23 @@ mod tests {
     }
 
     #[test]
+    fn test_ignore_case() {
+        let pattern = Pattern::prefix("ABC").ignore_case(true);
+        assert!(pattern.matches("abcdef"));
+        assert!(pattern.matches("ABCdef"));
+    }
+
+    #[test]
+    fn test_first_match_longest_wins() {
+        let patterns = vec![
+            Pattern::prefix("9e"),
+            Pattern::prefix("9ergo"),
+            Pattern::prefix("9er"),
+        ];
+        assert_eq!(first_match(&patterns, "9ergoXXXX"), Some(1));
+    }
+
+    #[test]
     fn test_empty_pattern() {
         let pattern = Pattern::prefix("");
         assert!(pattern.matches("anything"));
@@ -168,7 +205,6 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_chars_rejected() {
-        // 0, O, I, l are not in Base58
         assert!(Pattern::prefix("0abc").validate().is_err());
         assert!(Pattern::prefix("Oops").validate().is_err());
         assert!(Pattern::prefix("Invalid").validate().is_err());

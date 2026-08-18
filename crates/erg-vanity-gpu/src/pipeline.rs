@@ -4,8 +4,10 @@ use crate::buffers::{GpuBuffers, GpuHit, MAX_HITS};
 use crate::context::{GpuContext, GpuError};
 use crate::kernel::GpuProgram;
 use crate::wordlist::WordlistBuffers;
+use erg_vanity_cpu::{MatchType, Pattern};
 use ocl::Kernel;
 use rand::RngCore;
+use std::fmt;
 
 /// Configuration for vanity search.
 #[derive(Debug, Clone)]
@@ -16,6 +18,8 @@ pub struct VanityConfig {
     pub ignore_case: bool,
     /// Number of BIP44 address indices to check per seed (m/44'/429'/0'/0/{0..N-1}).
     pub num_indices: u32,
+    /// CPU verify match mode. The OpenCL kernel still searches prefixes.
+    pub match_type: MatchType,
 }
 
 impl Default for VanityConfig {
@@ -24,6 +28,7 @@ impl Default for VanityConfig {
             batch_size: 1 << 18, // 262,144 - conservative default
             ignore_case: false,
             num_indices: 1,
+            match_type: MatchType::Prefix,
         }
     }
 }
@@ -62,7 +67,7 @@ pub(crate) fn prepare_patterns_for_gpu(
 }
 
 /// Result of a successful vanity search.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct VanityResult {
     /// The entropy that produced the matching address.
     pub entropy: [u8; 32],
@@ -70,12 +75,36 @@ pub struct VanityResult {
     pub work_item_id: u32,
     /// The BIP44 address index <i> in m/44'/429'/0'/0/<i>.
     pub address_index: u32,
-    /// Index into the pattern list that matched.
+    /// Index into the original pattern list that matched.
     pub pattern_index: u32,
     /// The Ergo address (Base58 encoded).
     pub address: String,
     /// The BIP39 mnemonic (24 words).
     pub mnemonic: String,
+}
+
+impl fmt::Debug for VanityResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VanityResult")
+            .field("address", &self.address)
+            .field("address_index", &self.address_index)
+            .field("pattern_index", &self.pattern_index)
+            .field("work_item_id", &self.work_item_id)
+            .field("entropy", &"<redacted>")
+            .field("mnemonic", &"<redacted>")
+            .finish()
+    }
+}
+
+/// Sort patterns longest-first so a short prefix cannot starve a longer one.
+///
+/// Returns (sorted patterns, map from sorted index → original index).
+pub(crate) fn sort_patterns_longest_first(patterns: &[String]) -> (Vec<String>, Vec<u32>) {
+    let mut order: Vec<usize> = (0..patterns.len()).collect();
+    order.sort_by(|&a, &b| patterns[b].len().cmp(&patterns[a].len()).then(a.cmp(&b)));
+    let sorted = order.iter().map(|&i| patterns[i].clone()).collect();
+    let map = order.iter().map(|&i| i as u32).collect();
+    (sorted, map)
 }
 
 /// GPU-accelerated vanity address search pipeline.
@@ -88,9 +117,12 @@ pub struct VanityPipeline {
     wordlist: WordlistBuffers,
     kernel: Kernel,
     patterns: Vec<String>,
+    /// Maps GPU/sorted pattern index back to the caller's original order.
+    pattern_index_map: Vec<u32>,
     #[allow(dead_code)]
     num_patterns: u32,
     ignore_case: bool,
+    match_type: MatchType,
     num_indices: u32,
     #[allow(dead_code)]
     salt: [u8; 32],
@@ -129,9 +161,10 @@ impl VanityPipeline {
 
         buffers.upload_salt(&salt)?;
 
-        // Upload patterns (lowercase for GPU if ignore_case, keep originals for display)
-        let patterns_for_gpu_storage = prepare_patterns_for_gpu(patterns, cfg.ignore_case);
-        let patterns_for_gpu: &[String] = patterns_for_gpu_storage.as_deref().unwrap_or(patterns);
+        // Longest first, then lowercase for GPU if ignore_case
+        let (sorted, pattern_index_map) = sort_patterns_longest_first(patterns);
+        let patterns_for_gpu_storage = prepare_patterns_for_gpu(&sorted, cfg.ignore_case);
+        let patterns_for_gpu: &[String] = patterns_for_gpu_storage.as_deref().unwrap_or(&sorted);
         let num_patterns = buffers.upload_patterns(patterns_for_gpu)? as u32;
 
         // Build kernel with all arguments matching vanity_search signature:
@@ -165,8 +198,10 @@ impl VanityPipeline {
             wordlist,
             kernel,
             patterns: patterns.to_vec(),
+            pattern_index_map,
             num_patterns,
             ignore_case: cfg.ignore_case,
+            match_type: cfg.match_type,
             num_indices: cfg.num_indices,
             salt,
             counter: 0,
@@ -279,7 +314,20 @@ impl VanityPipeline {
     }
 
     /// Verify a hit on CPU and return the result if valid.
+    ///
+    /// Derivation errors are dropped (not fatal) so one bad hit cannot stop
+    /// a multi-GPU run. OpenCL enqueue/read errors stay fatal at the caller.
     fn verify_hit(&self, hit: &GpuHit) -> Result<Option<VanityResult>, GpuError> {
+        match self.try_verify_hit(hit) {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                eprintln!("Warning: GPU hit failed CPU verify ({e}); dropping");
+                Ok(None)
+            }
+        }
+    }
+
+    fn try_verify_hit(&self, hit: &GpuHit) -> Result<Option<VanityResult>, GpuError> {
         use erg_vanity_address::encode_p2pk_mainnet;
         use erg_vanity_bip::bip32::ExtendedPrivateKey;
         use erg_vanity_bip::bip39::{entropy_to_mnemonic, mnemonic_to_seed};
@@ -289,58 +337,50 @@ impl VanityPipeline {
 
         let entropy = hit.entropy_bytes();
 
-        // Derive mnemonic
         let mnemonic = entropy_to_mnemonic(&entropy)
             .map_err(|e| GpuError::Other(format!("mnemonic error: {}", e)))?;
 
-        // Derive seed
         let seed = mnemonic_to_seed(&mnemonic, "");
 
-        // Derive master key
         let master = ExtendedPrivateKey::from_seed(&seed)
             .map_err(|e| GpuError::Other(format!("bip32 error: {:?}", e)))?;
 
-        // Derive Ergo key at m/44'/429'/0'/0/<address_index>
         let ergo_key = derive_ergo_key(&master, 0, 0, hit.address_index)
             .map_err(|e| GpuError::Other(format!("bip44 error: {:?}", e)))?;
 
-        // Get public key
         let privkey = *ergo_key.private_key();
         let scalar = Scalar::from_bytes(&privkey)
             .ok_or_else(|| GpuError::Other("invalid scalar".to_string()))?;
         let pubkey = PublicKey::from_private_key(&scalar)
             .ok_or_else(|| GpuError::Other("invalid pubkey".to_string()))?;
 
-        // Encode address
         let address = encode_p2pk_mainnet(pubkey.as_bytes());
 
-        // Verify prefix match (must mirror ignore_case exactly, use ASCII-only compare)
-        let pattern_idx = hit.pattern_index as usize;
-        let pattern = self.patterns.get(pattern_idx).ok_or_else(|| {
-            GpuError::Other(format!("pattern_index {} out of range", pattern_idx))
+        let sorted_idx = hit.pattern_index as usize;
+        let original_idx = *self
+            .pattern_index_map
+            .get(sorted_idx)
+            .ok_or_else(|| GpuError::Other(format!("pattern_index {} out of range", sorted_idx)))?;
+        let pattern = self.patterns.get(original_idx as usize).ok_or_else(|| {
+            GpuError::Other(format!(
+                "original pattern_index {} out of range",
+                original_idx
+            ))
         })?;
 
-        let matches = if self.ignore_case {
-            // ASCII-only case-insensitive compare (no Unicode, no allocation)
-            address
-                .get(..pattern.len())
-                .map(|prefix| prefix.eq_ignore_ascii_case(pattern))
-                .unwrap_or(false)
-        } else {
-            address.starts_with(pattern)
-        };
+        let matcher = Pattern::new(pattern.clone(), self.match_type).ignore_case(self.ignore_case);
+        let matches = matcher.matches(&address);
 
         if matches {
             Ok(Some(VanityResult {
                 entropy,
                 work_item_id: hit.work_item_id,
                 address_index: hit.address_index,
-                pattern_index: hit.pattern_index,
+                pattern_index: original_idx,
                 address,
                 mnemonic,
             }))
         } else {
-            // False positive (shouldn't happen with correct GPU code)
             eprintln!(
                 "Warning: GPU hit did not verify on CPU (addr={}, pattern={}, index={}, icase={})",
                 address, pattern, hit.address_index, self.ignore_case
@@ -355,6 +395,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_sort_patterns_longest_first() {
+        let patterns = vec!["9e".into(), "9ergo".into(), "9er".into()];
+        let (sorted, map) = sort_patterns_longest_first(&patterns);
+        assert_eq!(sorted, vec!["9ergo", "9er", "9e"]);
+        assert_eq!(map, vec![1, 2, 0]);
+    }
+
+    #[test]
+    fn test_vanity_result_debug_redacts_secrets() {
+        let result = dummy_result(1, 0, 0);
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("<redacted>"));
+        assert!(!debug.contains("abandon"));
+    }
+
+    #[test]
     fn test_pipeline_compiles() {
         // Skip if no GPU available
         let Some(_ctx) = crate::context::try_ctx() else {
@@ -365,6 +421,7 @@ mod tests {
             batch_size: 1024,
             ignore_case: false,
             num_indices: 1,
+            match_type: MatchType::Prefix,
         };
 
         let pipe = VanityPipeline::new(&["9".to_string()], cfg).expect("pipeline creation failed");
@@ -378,8 +435,8 @@ mod tests {
             work_item_id,
             address_index,
             pattern_index,
-            address: String::new(),
-            mnemonic: String::new(),
+            address: "9test".into(),
+            mnemonic: "secret-words-here".into(),
         }
     }
 

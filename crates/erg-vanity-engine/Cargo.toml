@@ -1,0 +1,15 @@
+[package]
+name = "erg-vanity-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Shared vanity search engine for CLI and GUI"
+
+[dependencies]
+erg-vanity-address = { path = "../erg-vanity-address" }
+erg-vanity-cpu = { path = "../erg-vanity-cpu" }
+erg-vanity-gpu = { path = "../erg-vanity-gpu" }
+ergo-lib = { workspace = true }
+bip39 = "=2.1.0"
+rand = { workspace = true }

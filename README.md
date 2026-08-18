@@ -4,7 +4,9 @@
 
 GPU-accelerated Ergo vanity address generator using OpenCL.
 
-Generate Ergo addresses matching custom prefixes at high speed using your GPU. Supports multi-GPU configurations, case-insensitive matching, and multiple patterns simultaneously.
+This is the surviving repo for arkadianet vanity tools. The older CPU/GUI project [ergo-vanitygen-rust](https://github.com/arkadianet/ergo-vanitygen-rust) is superseded here: GPU prefix search, CPU fallback (suffix/contains, no GPU), `--estimate`, and a refreshed desktop UI.
+
+Generate Ergo addresses matching custom patterns. Prefix search uses the GPU when OpenCL is available; otherwise the CPU path runs.
 
 > **WARNING: Early Development**
 >
@@ -14,12 +16,14 @@ Generate Ergo addresses matching custom prefixes at high speed using your GPU. S
 
 ## Features
 
-- **GPU-accelerated** - OpenCL-based parallel address generation
-- **Multi-GPU support** - Use multiple GPUs simultaneously
-- **Multiple patterns** - Search for up to 64 patterns at once
-- **Case-insensitive** - Optional case-insensitive matching
-- **BIP44 compliant** - Standard derivation path `m/44'/429'/0'/0/{index}`
-- **Benchmark mode** - Per-component GPU timing analysis
+- **GPU-accelerated** - OpenCL prefix search
+- **CPU fallback** - `--devices cpu`, or automatic when no GPU is present
+- **Suffix / contains** - CPU-only (`-e` / `--contains`)
+- **Desktop UI** - `erg-vanity` with no patterns opens the GUI
+- **Estimate** - `--estimate` before a long search
+- **Multi-GPU** - `--devices 0,1` or `all`
+- **Multiple patterns** - up to 64; longest prefix wins
+- **BIP44** - `m/44'/429'/0'/0/{index}`
 
 ## Installation
 
@@ -72,6 +76,15 @@ The binary is at `./target/release/erg-vanity`.
 
 # Time-limited search (60 seconds)
 ./target/release/erg-vanity -p 9err --duration-secs 60
+
+# CPU-only, suffix match
+./target/release/erg-vanity -p cafe -e --devices cpu
+
+# Difficulty estimate
+./target/release/erg-vanity -p 9ergo --estimate
+
+# Open the GUI
+./target/release/erg-vanity
 ```
 
 ### Multi-GPU Usage
@@ -101,11 +114,16 @@ The binary is at `./target/release/erg-vanity`.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `-p, --pattern <patterns>` | String | (required) | Comma-separated patterns to search |
+| `-p, --pattern <patterns>` | String | (required for CLI) | Comma-separated patterns |
+| `-e, --suffix` | Flag | `false` | Match at end of address (CPU) |
+| `--contains` | Flag | `false` | Match anywhere (CPU) |
 | `-i, --ignore-case` | Flag | `false` | Case-insensitive matching |
 | `-n, --max-results <N>` | Integer | `1` | Stop after finding N matches |
 | `--index <N>` | Integer | `1` | BIP44 indices per seed (1-100) |
-| `--devices <list>` | String | `0` | Device indices (e.g., `0,1,2`) or `all` |
+| `--devices <list>` | String | `0` | `0,1`, `all`, or `cpu` |
+| `--batch-size <N>` | Integer | device default | Search batch size |
+| `--estimate` | Flag | `false` | Print difficulty and exit |
+| `--no-gui` | Flag | `false` | Do not open the GUI |
 | `--duration-secs <N>` | Integer | - | Maximum runtime in seconds |
 | `--list-devices` | Flag | - | List available GPUs and exit |
 | `--bench` | Flag | - | Run GPU microbenchmark |
@@ -195,8 +213,9 @@ erg-vanity-gpu/
 │   ├── erg-vanity-address/   # Ergo P2PK address encoding
 │   ├── erg-vanity-cpu/       # CPU reference implementation
 │   ├── erg-vanity-gpu/       # OpenCL kernels and GPU pipeline
-│   │   └── kernels/          # 23 OpenCL kernel files
-│   └── erg-vanity-cli/       # CLI binary
+│   ├── erg-vanity-engine/    # Shared search engine (CLI + GUI)
+│   ├── erg-vanity-gui/       # Desktop UI
+│   └── erg-vanity-cli/       # `erg-vanity` binary
 └── docs/                     # Documentation
 ```
 
