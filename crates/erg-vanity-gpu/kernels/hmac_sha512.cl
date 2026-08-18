@@ -15,9 +15,9 @@
 // Caching the SHA-512 state after compressing ipad/opad blocks
 // eliminates 2 redundant compressions per HMAC call.
 typedef struct {
-    ulong inner_h[8];       // SHA-512 state after compressing ipad
+    ulong8 inner_h;         // SHA-512 state after compressing ipad
+    ulong8 outer_h;         // SHA-512 state after compressing opad
     ulong inner_total_len;  // Cached total_len (128 after ipad compress)
-    ulong outer_h[8];       // SHA-512 state after compressing opad
     ulong outer_total_len;  // Cached total_len (128 after opad compress)
 } HmacSha512Ctx;
 
@@ -40,9 +40,8 @@ inline void hmac_sha512_init(__private HmacSha512Ctx* ctx,
     sha512_init(&st);
     sha512_compress(&st, pad);
     st.total_len = 128ul;
-    for (int i = 0; i < 8; i++) {
-        ctx->inner_h[i] = st.h[i];
-    }
+    ctx->inner_h = (ulong8)(st.h[0], st.h[1], st.h[2], st.h[3],
+                            st.h[4], st.h[5], st.h[6], st.h[7]);
     ctx->inner_total_len = st.total_len;
 
     // Transform ipad to opad in-place: (k ^ 0x36) ^ 0x6a = k ^ 0x5c
@@ -54,9 +53,8 @@ inline void hmac_sha512_init(__private HmacSha512Ctx* ctx,
     sha512_init(&st);
     sha512_compress(&st, pad);
     st.total_len = 128ul;
-    for (int i = 0; i < 8; i++) {
-        ctx->outer_h[i] = st.h[i];
-    }
+    ctx->outer_h = (ulong8)(st.h[0], st.h[1], st.h[2], st.h[3],
+                            st.h[4], st.h[5], st.h[6], st.h[7]);
     ctx->outer_total_len = st.total_len;
 }
 
@@ -73,9 +71,10 @@ inline void hmac_sha512(__private HmacSha512Ctx* ctx,
     Sha512State state;
 
     // Restore cached inner state (ipad already compressed)
-    for (int i = 0; i < 8; i++) {
-        state.h[i] = ctx->inner_h[i];
-    }
+    state.h[0] = ctx->inner_h.s0; state.h[1] = ctx->inner_h.s1;
+    state.h[2] = ctx->inner_h.s2; state.h[3] = ctx->inner_h.s3;
+    state.h[4] = ctx->inner_h.s4; state.h[5] = ctx->inner_h.s5;
+    state.h[6] = ctx->inner_h.s6; state.h[7] = ctx->inner_h.s7;
     state.total_len = ctx->inner_total_len;
 
     // Compress any full 128-byte blocks of data
@@ -92,9 +91,10 @@ inline void hmac_sha512(__private HmacSha512Ctx* ctx,
     sha512_final(&state, data + full_blocks * 128u, remainder, inner_hash);
 
     // Restore cached outer state (opad already compressed)
-    for (int i = 0; i < 8; i++) {
-        state.h[i] = ctx->outer_h[i];
-    }
+    state.h[0] = ctx->outer_h.s0; state.h[1] = ctx->outer_h.s1;
+    state.h[2] = ctx->outer_h.s2; state.h[3] = ctx->outer_h.s3;
+    state.h[4] = ctx->outer_h.s4; state.h[5] = ctx->outer_h.s5;
+    state.h[6] = ctx->outer_h.s6; state.h[7] = ctx->outer_h.s7;
     state.total_len = ctx->outer_total_len;
 
     // Finalize outer hash: H(o_key_pad || inner_hash)
@@ -119,21 +119,6 @@ inline void hmac_sha512_oneshot(const __private uchar* key, uint key_len,
 // No arrays, no pointers in hot path - keeps everything in registers.
 // Uses cached midstates to skip ipad/opad compression.
 static inline ulong8 hmac_sha512_msg64_u8(__private HmacSha512Ctx* ctx, ulong8 msg) {
-    Sha512State s;
-
-    // Inner hash: restore cached state (ipad already compressed)
-    s.h[0] = ctx->inner_h[0]; s.h[1] = ctx->inner_h[1];
-    s.h[2] = ctx->inner_h[2]; s.h[3] = ctx->inner_h[3];
-    s.h[4] = ctx->inner_h[4]; s.h[5] = ctx->inner_h[5];
-    s.h[6] = ctx->inner_h[6]; s.h[7] = ctx->inner_h[7];
-    s.total_len = ctx->inner_total_len;
-    ulong8 inner = sha512_final_from_u8(&s, msg);
-
-    // Outer hash: restore cached state (opad already compressed)
-    s.h[0] = ctx->outer_h[0]; s.h[1] = ctx->outer_h[1];
-    s.h[2] = ctx->outer_h[2]; s.h[3] = ctx->outer_h[3];
-    s.h[4] = ctx->outer_h[4]; s.h[5] = ctx->outer_h[5];
-    s.h[6] = ctx->outer_h[6]; s.h[7] = ctx->outer_h[7];
-    s.total_len = ctx->outer_total_len;
-    return sha512_final_from_u8(&s, inner);
+    ulong8 inner = sha512_final_from_mid_u8(ctx->inner_h, ctx->inner_total_len, msg);
+    return sha512_final_from_mid_u8(ctx->outer_h, ctx->outer_total_len, inner);
 }

@@ -218,5 +218,57 @@ __kernel void pt_self_test(__global uint* result) {
         failures |= (1u << 13);
     }
 
+    // Test 15: pt_mul_generator(0) = infinity
+    pt_mul_generator(zero_g, zero);
+    if (!pt_is_infinity(zero_g)) {
+        failures |= (1u << 15);
+    }
+
+    // Test 16: pt_mul_generator(1) = G
+    pt_mul_generator(one_g, one);
+    if (pt_to_affine(tmpx, tmpy, one_g) != 0) {
+        failures |= (1u << 16);
+    } else {
+        eq = 1;
+        for (int i = 0; i < 8; i++) {
+            if (gx[i] != tmpx[i] || gy[i] != tmpy[i]) eq = 0;
+        }
+        if (!eq) {
+            failures |= (1u << 16);
+        }
+    }
+
+    // Test 17: pt_mul_generator(2) matches known 2G.x
+    pt_mul_generator(two_g_mul, two);
+    if (pt_to_affine(x1, y1, two_g_mul) != 0) {
+        failures |= (1u << 17);
+    } else {
+        uint two_g_x_expected[8];
+        fe_from_constant_bytes(two_g_x_expected, TWO_G_X_BYTES);
+        eq = 1;
+        for (int i = 0; i < 8; i++) {
+            if (x1[i] != two_g_x_expected[i]) eq = 0;
+        }
+        if (!eq) {
+            failures |= (1u << 17);
+        }
+    }
+
+    // Test 18: pt_mul_generator(3) matches known 3G.x
+    pt_mul_generator(three_g, three);
+    if (pt_to_affine(three_g_x, three_g_y, three_g) != 0) {
+        failures |= (1u << 18);
+    } else {
+        uint three_g_x_expected[8];
+        fe_from_constant_bytes(three_g_x_expected, THREE_G_X_BYTES);
+        eq = 1;
+        for (int i = 0; i < 8; i++) {
+            if (three_g_x[i] != three_g_x_expected[i]) eq = 0;
+        }
+        if (!eq) {
+            failures |= (1u << 18);
+        }
+    }
+
     *result = failures;
 }

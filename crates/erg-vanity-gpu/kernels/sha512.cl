@@ -470,8 +470,9 @@ inline ulong8 sha512_final_64_u8(__private Sha512State* state,
                     state->h[4], state->h[5], state->h[6], state->h[7]);
 }
 
-// Finalize SHA-512 where 64-byte message is ulong8, return as ulong8.
-inline ulong8 sha512_final_from_u8(__private Sha512State* state, ulong8 msg) {
+// PBKDF2 hot path: finalize from midstate + 64-byte ulong8 message.
+// No Sha512State writeback — HMAC restores midstate every iteration.
+inline ulong8 sha512_final_from_mid_u8(ulong8 mid, ulong total_len, ulong8 msg) {
     ulong w0  = msg.s0;
     ulong w1  = msg.s1;
     ulong w2  = msg.s2;
@@ -487,11 +488,12 @@ inline ulong8 sha512_final_from_u8(__private Sha512State* state, ulong8 msg) {
     ulong w12 = 0ul;
     ulong w13 = 0ul;
     ulong w14 = 0ul;
-    ulong w15 = (state->total_len + 64ul) * 8ul;
+    ulong w15 = (total_len + 64ul) * 8ul;
 
-    ulong a = state->h[0], b = state->h[1], c = state->h[2], d = state->h[3];
-    ulong e = state->h[4], f = state->h[5], g = state->h[6], h = state->h[7];
+    ulong a = mid.s0, b = mid.s1, c = mid.s2, d = mid.s3;
+    ulong e = mid.s4, f = mid.s5, g = mid.s6, h = mid.s7;
 
+    #pragma unroll
     for (int i = 0; i < 64; i++) {
         SHA512_ROUND(i, w0);
         ulong newW = SIG1_64(w14) + w9 + SIG0_64(w1) + w0;
@@ -510,11 +512,18 @@ inline ulong8 sha512_final_from_u8(__private Sha512State* state, ulong8 msg) {
     SHA512_ROUND(76, w12); SHA512_ROUND(77, w13);
     SHA512_ROUND(78, w14); SHA512_ROUND(79, w15);
 
-    state->h[0] += a; state->h[1] += b; state->h[2] += c; state->h[3] += d;
-    state->h[4] += e; state->h[5] += f; state->h[6] += g; state->h[7] += h;
+    return (ulong8)(mid.s0 + a, mid.s1 + b, mid.s2 + c, mid.s3 + d,
+                    mid.s4 + e, mid.s5 + f, mid.s6 + g, mid.s7 + h);
+}
 
-    return (ulong8)(state->h[0], state->h[1], state->h[2], state->h[3],
-                    state->h[4], state->h[5], state->h[6], state->h[7]);
+// Finalize SHA-512 where 64-byte message is ulong8, return as ulong8.
+inline ulong8 sha512_final_from_u8(__private Sha512State* state, ulong8 msg) {
+    ulong8 mid = (ulong8)(state->h[0], state->h[1], state->h[2], state->h[3],
+                          state->h[4], state->h[5], state->h[6], state->h[7]);
+    ulong8 out = sha512_final_from_mid_u8(mid, state->total_len, msg);
+    state->h[0] = out.s0; state->h[1] = out.s1; state->h[2] = out.s2; state->h[3] = out.s3;
+    state->h[4] = out.s4; state->h[5] = out.s5; state->h[6] = out.s6; state->h[7] = out.s7;
+    return out;
 }
 
 #undef SHA512_ROUND
