@@ -99,7 +99,8 @@ __kernel void bench_bip32(
     __global const uchar* words8,         // Unused, kept for uniform signature
     __global const uchar* word_lens,      // Unused
     uint num_indices,
-    __global uint* checksums
+    __global uint* checksums,
+    __global const uint* comb
 ) {
     uint gid = get_global_id(0);
 
@@ -109,7 +110,7 @@ __kernel void bench_bip32(
 
     // EXACT production: derive external chain m/44'/429'/0'/0
     uchar external_key[32], external_chain_code[32];
-    if (bip32_derive_ergo_external_chain(seed, external_key, external_chain_code) != 0) {
+    if (bip32_derive_ergo_external_chain_comb(seed, external_key, external_chain_code, comb) != 0) {
         checksums[gid] = 0xDEAD0001u;
         return;
     }
@@ -118,8 +119,8 @@ __kernel void bench_bip32(
     uint checksum = 0;
     for (uint addr_idx = 0; addr_idx < num_indices; addr_idx++) {
         uchar private_key[32];
-        if (bip32_derive_address_index(external_key, external_chain_code,
-                                        addr_idx, private_key) != 0) {
+        if (bip32_derive_address_index_comb(external_key, external_chain_code,
+                                            addr_idx, private_key, comb) != 0) {
             continue;
         }
         for (int j = 0; j < 32; j++) checksum ^= private_key[j];
@@ -141,7 +142,8 @@ __kernel void bench_secp256k1(
     __global const uchar* words8,
     __global const uchar* word_lens,
     uint num_indices,
-    __global uint* checksums
+    __global uint* checksums,
+    __global const uint* comb
 ) {
     uint gid = get_global_id(0);
 
@@ -162,7 +164,7 @@ __kernel void bench_secp256k1(
         sc_from_bytes(key_limbs, privkey);
 
         uint point[24];
-        pt_mul_generator(point, key_limbs);
+        pt_mul_generator_comb(point, key_limbs, comb);
 
         uchar pubkey[33];
         if (pt_to_compressed_pubkey(pubkey, point) != 0) {

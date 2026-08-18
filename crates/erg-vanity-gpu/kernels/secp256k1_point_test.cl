@@ -23,7 +23,7 @@ __constant uchar THREE_G_X_BYTES[32] = {
 
 // Comprehensive self-test kernel for point operations
 // Returns 0 if all tests pass, non-zero otherwise (bit mask of failed tests)
-__kernel void pt_self_test(__global uint* result) {
+__kernel void pt_self_test(__global uint* result, __global const uint* comb) {
     if (get_global_id(0) != 0u) return;
 
     uint failures = 0u;
@@ -267,6 +267,56 @@ __kernel void pt_self_test(__global uint* result) {
         }
         if (!eq) {
             failures |= (1u << 18);
+        }
+    }
+
+    // Tests 20-23: 8-bit comb k·G (production path)
+    uint comb0[24], comb1[24], comb2[24], comb3[24];
+    pt_mul_generator_comb(comb0, zero, comb);
+    if (!pt_is_infinity(comb0)) {
+        failures |= (1u << 19);
+    }
+
+    pt_mul_generator_comb(comb1, one, comb);
+    if (pt_to_affine(tmpx, tmpy, comb1) != 0) {
+        failures |= (1u << 20);
+    } else {
+        eq = 1;
+        for (int i = 0; i < 8; i++) {
+            if (gx[i] != tmpx[i] || gy[i] != tmpy[i]) eq = 0;
+        }
+        if (!eq) {
+            failures |= (1u << 20);
+        }
+    }
+
+    pt_mul_generator_comb(comb2, two, comb);
+    if (pt_to_affine(x1, y1, comb2) != 0) {
+        failures |= (1u << 21);
+    } else {
+        uint two_g_x_expected_comb[8];
+        fe_from_constant_bytes(two_g_x_expected_comb, TWO_G_X_BYTES);
+        eq = 1;
+        for (int i = 0; i < 8; i++) {
+            if (x1[i] != two_g_x_expected_comb[i]) eq = 0;
+        }
+        if (!eq) {
+            failures |= (1u << 21);
+        }
+    }
+
+    pt_mul_generator_comb(comb3, three, comb);
+    if (pt_to_affine(three_g_x, three_g_y, comb3) != 0) {
+        failures |= (1u << 22);
+    } else {
+        uint three_g_x_expected_comb[8];
+        fe_from_constant_bytes(three_g_x_expected_comb, THREE_G_X_BYTES);
+        eq = 1;
+        for (int i = 0; i < 8; i++) {
+            if (three_g_x[i] != three_g_x_expected_comb[i]) eq = 0;
+        }
+        if (!eq) {
+            failures |= (1u << 22);
         }
     }
 

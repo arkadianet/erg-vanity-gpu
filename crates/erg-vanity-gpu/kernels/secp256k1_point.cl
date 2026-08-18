@@ -272,19 +272,49 @@ inline void pt_mul(__private uint* r, __private const uint* k, __private const u
     pt_copy(r, result);
 }
 
-// Cooperative load of G_TABLE into local memory (24KB). All work-items must call this.
-inline void g_table_prefetch(__local uint* ltable) {
-    uint lid = get_local_id(0);
-    uint lsz = get_local_size(0);
-    for (uint i = lid; i < 6144u; i += lsz) {
-        ltable[i] = G_TABLE[i / 24u][i % 24u];
+// 8-bit comb: COMB[w][b] = b · (2^{8*(31-w)} G), affine XY (16 uints).
+// Window 0 = MSB of sc_to_bytes. b=0 is infinity (not stored).
+#define COMB_XY_LIMBS 16u
+#define COMB_WINDOW_STRIDE (256u * 16u)
+
+inline void comb_select(
+    __private uint* p,
+    __global const uint* comb,
+    uint window,
+    uchar b
+) {
+    if (b == 0) {
+        pt_infinity(p);
+        return;
     }
-    barrier(CLK_LOCAL_MEM_FENCE);
+    uint off = window * COMB_WINDOW_STRIDE + (uint)b * COMB_XY_LIMBS;
+    for (int j = 0; j < 16; j++) p[j] = comb[off + (uint)j];
+    fe_one(p + 16);
 }
 
-// Multiply generator G by scalar k: r = k * G
-// 8-bit fixed windows. First byte is a table load (no doubles).
-// Uniform body: pt_double(inf)=inf and pt_add(P, inf)=P.
+// k·G = T_0[k0] + … + T_31[k31]: 31 mixed adds, 0 doubles.
+inline void pt_mul_generator_comb(
+    __private uint* r,
+    __private const uint* k,
+    __global const uint* comb
+) {
+    uchar k_bytes[32];
+    sc_to_bytes(k_bytes, k);
+
+    uint buf0[24], buf1[24], selected[24];
+    __private uint* acc = buf0;
+    __private uint* tmp = buf1;
+
+    comb_select(acc, comb, 0u, k_bytes[0]);
+    for (int w = 1; w < 32; w++) {
+        comb_select(selected, comb, (uint)w, k_bytes[w]);
+        pt_add_mixed(tmp, acc, selected);
+        { __private uint* swap = acc; acc = tmp; tmp = swap; }
+    }
+
+    pt_copy(r, acc);
+}
+
 inline void pt_mul_generator_table(
     __private uint* r,
     __private const uint* k,
@@ -398,5 +428,17 @@ inline int priv_to_compressed_pubkey_table(
     sc_from_bytes(limbs, privkey);
     uint point[24];
     pt_mul_generator_table(point, limbs, g_table);
+    return pt_to_compressed_pubkey(pubkey, point);
+}
+
+inline int priv_to_compressed_pubkey_comb(
+    __private const uchar* privkey,
+    __private uchar* pubkey,
+    __global const uint* comb
+) {
+    uint limbs[8];
+    sc_from_bytes(limbs, privkey);
+    uint point[24];
+    pt_mul_generator_comb(point, limbs, comb);
     return pt_to_compressed_pubkey(pubkey, point);
 }

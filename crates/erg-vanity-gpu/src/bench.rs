@@ -3,6 +3,7 @@
 //! Measures per-component GPU kernel time for PBKDF2, BIP32, secp256k1, and Base58
 //! stages using OpenCL event profiling timestamps.
 
+use crate::comb::CombTableBuffer;
 use crate::context::{DeviceInfo, GpuContext, GpuError};
 use crate::kernel::GpuProgram;
 use crate::wordlist::WordlistBuffers;
@@ -101,6 +102,7 @@ pub fn run_bench_on_device(
 
     // Upload BIP39 wordlist (required for PBKDF2 kernel, passed to others for uniform signature)
     let wordlist = WordlistBuffers::upload(queue)?;
+    let comb = CombTableBuffer::upload(queue)?;
 
     // Upload dummy salt once
     let salt = [0x42u8; 32];
@@ -135,6 +137,7 @@ pub fn run_bench_on_device(
         .arg(&wordlist.lens)
         .arg(cfg.num_indices)
         .arg(&checksum_buf)
+        .arg(&comb.table)
         .build()?;
 
     let kernel_secp256k1 = Kernel::builder()
@@ -148,6 +151,7 @@ pub fn run_bench_on_device(
         .arg(&wordlist.lens)
         .arg(cfg.num_indices)
         .arg(&checksum_buf)
+        .arg(&comb.table)
         .build()?;
 
     let kernel_base58 = Kernel::builder()

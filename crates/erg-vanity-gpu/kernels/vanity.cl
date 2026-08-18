@@ -95,12 +95,10 @@ __kernel void vanity_search(
     uint num_indices,
     __global VanityHit* hits,
     __global volatile int* hit_count,
-    uint max_hits
+    uint max_hits,
+    __global const uint* comb
 ) {
     uint gid = get_global_id(0);
-
-    __local uint g_local[6144];
-    g_table_prefetch(g_local);
 
     uchar seed[64];
     __global const uchar* in = seeds + ((ulong)gid * 64ul);
@@ -108,14 +106,14 @@ __kernel void vanity_search(
 
     // Step 3: Derive to external chain m/44'/429'/0'/0 (done ONCE, amortizes cost)
     uchar external_key[32], external_chain_code[32];
-    if (bip32_derive_ergo_external_chain_table(seed, external_key, external_chain_code, g_local) != 0) {
+    if (bip32_derive_ergo_external_chain_comb(seed, external_key, external_chain_code, comb) != 0) {
         // Invalid key (astronomically rare), skip this work item
         return;
     }
 
     // Parent pubkey is identical for every address index under this seed.
     uchar external_pub[33];
-    if (priv_to_compressed_pubkey_table(external_key, external_pub, g_local) != 0) {
+    if (priv_to_compressed_pubkey_comb(external_key, external_pub, comb) != 0) {
         return;
     }
 
@@ -135,7 +133,7 @@ __kernel void vanity_search(
         sc_from_bytes(key_limbs, private_key);
 
         uint point[24];
-        pt_mul_generator_table(point, key_limbs, g_local);
+        pt_mul_generator_comb(point, key_limbs, comb);
 
         uchar pubkey[33];
         if (pt_to_compressed_pubkey(pubkey, point) != 0) {
@@ -194,7 +192,8 @@ __kernel void vanity_derive_address(
     __global uchar* private_key_out,      // 32 bytes
     __global uchar* pubkey_out,           // 33 bytes
     __global uchar* addr_bytes_out,       // 38 bytes
-    __global int* error_out               // Error code (0 = success)
+    __global int* error_out,              // Error code (0 = success)
+    __global const uint* comb
 ) {
     if (get_global_id(0) != 0u) return;
 
@@ -211,9 +210,23 @@ __kernel void vanity_derive_address(
         seed_out[i] = seed[i];
     }
 
-    // BIP32: seed → private key
+    // BIP32: seed → private key (same comb k·G as vanity_search)
+    uchar external_key[32], external_chain_code[32];
+    int err = bip32_derive_ergo_external_chain_comb(
+        seed, external_key, external_chain_code, comb
+    );
     uchar private_key[32];
-    int err = bip32_derive_ergo(seed, private_key);
+    if (err == 0) {
+        uchar external_pub[33];
+        if (priv_to_compressed_pubkey_comb(external_key, external_pub, comb) != 0) {
+            err = 5;
+        } else {
+            err = bip32_derive_address_index_from_pub(
+                external_key, external_chain_code, external_pub, 0u, private_key
+            );
+            if (err != 0) err = 6;
+        }
+    }
     *error_out = err;
     if (err != 0) return;
 
@@ -226,7 +239,7 @@ __kernel void vanity_derive_address(
     sc_from_bytes(key_limbs, private_key);
 
     uint point[24];
-    pt_mul_generator(point, key_limbs);
+    pt_mul_generator_comb(point, key_limbs, comb);
 
     uchar pubkey[33];
     if (pt_to_compressed_pubkey(pubkey, point) != 0) {

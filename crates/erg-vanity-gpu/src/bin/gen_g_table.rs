@@ -1,12 +1,25 @@
-//! Generate the 8-bit G_TABLE for windowed k·G.
+//! Generate G_TABLE (8-bit windowed k·G) and the 8-bit comb table.
 //!
 //! cargo run -p erg-vanity-gpu --bin gen_g_table
 
+use erg_vanity_crypto::secp256k1::field::FieldElement;
 use erg_vanity_crypto::secp256k1::point::Point;
 use erg_vanity_crypto::secp256k1::scalar::Scalar;
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
+
+const EXPECTED_GX: [u32; 8] = [
+    0x16F81798, 0x59F2815B, 0x2DCE28D9, 0x029BFCDB, 0xCE870B07, 0x55A06295, 0xF9DCBBAC, 0x79BE667E,
+];
+const EXPECTED_GY: [u32; 8] = [
+    0xFB10D4B8, 0x9C47D08F, 0xA6855419, 0xFD17B448, 0x0E1108A8, 0x5DA4FBFC, 0x26A3C465, 0x483ADA77,
+];
+
+const COMB_WINDOWS: usize = 32;
+const COMB_ENTRIES: usize = 256;
+const COMB_XY_LIMBS: usize = 16;
+const COMB_BYTES: usize = COMB_WINDOWS * COMB_ENTRIES * COMB_XY_LIMBS * 4;
 
 fn bytes_to_limbs(bytes: &[u8; 32]) -> [u32; 8] {
     let mut limbs = [0u32; 8];
@@ -18,6 +31,15 @@ fn bytes_to_limbs(bytes: &[u8; 32]) -> [u32; 8] {
             | (bytes[off + 3] as u32);
     }
     limbs
+}
+
+fn limbs_to_bytes(limbs: &[u32; 8]) -> [u8; 32] {
+    let mut bytes = [0u8; 32];
+    for (i, limb) in limbs.iter().enumerate() {
+        let off = (7 - i) * 4;
+        bytes[off..off + 4].copy_from_slice(&limb.to_be_bytes());
+    }
+    bytes
 }
 
 fn point_limbs(i: u16) -> ([u32; 8], [u32; 8], [u32; 8]) {
@@ -39,16 +61,7 @@ fn point_limbs(i: u16) -> ([u32; 8], [u32; 8], [u32; 8]) {
     )
 }
 
-fn write_table<W: Write>(mut out: W) -> io::Result<()> {
-    const EXPECTED_GX: [u32; 8] = [
-        0x16F81798, 0x59F2815B, 0x2DCE28D9, 0x029BFCDB, 0xCE870B07, 0x55A06295, 0xF9DCBBAC,
-        0x79BE667E,
-    ];
-    const EXPECTED_GY: [u32; 8] = [
-        0xFB10D4B8, 0x9C47D08F, 0xA6855419, 0xFD17B448, 0x0E1108A8, 0x5DA4FBFC, 0x26A3C465,
-        0x483ADA77,
-    ];
-
+fn write_g_table<W: Write>(mut out: W) -> io::Result<()> {
     writeln!(
         out,
         "// Precomputed table: G_TABLE[i] = i * G for i = 0..255"
@@ -87,10 +100,107 @@ fn write_table<W: Write>(mut out: W) -> io::Result<()> {
     Ok(())
 }
 
+fn store_xy(buf: &mut [u8], window: usize, b: usize, x: &[u32; 8], y: &[u32; 8]) {
+    let off = (window * COMB_ENTRIES + b) * COMB_XY_LIMBS * 4;
+    for (i, limb) in x.iter().chain(y.iter()).enumerate() {
+        let o = off + i * 4;
+        buf[o..o + 4].copy_from_slice(&limb.to_le_bytes());
+    }
+}
+
+fn load_affine(buf: &[u8], window: usize, b: usize) -> Point {
+    if b == 0 {
+        return Point::INFINITY;
+    }
+    let off = (window * COMB_ENTRIES + b) * COMB_XY_LIMBS * 4;
+    let mut x_limbs = [0u32; 8];
+    let mut y_limbs = [0u32; 8];
+    for i in 0..8 {
+        x_limbs[i] = u32::from_le_bytes(buf[off + i * 4..off + i * 4 + 4].try_into().unwrap());
+        y_limbs[i] = u32::from_le_bytes(buf[off + 32 + i * 4..off + 36 + i * 4].try_into().unwrap());
+    }
+    let x = FieldElement::from_bytes(&limbs_to_bytes(&x_limbs)).expect("comb X in field");
+    let y = FieldElement::from_bytes(&limbs_to_bytes(&y_limbs)).expect("comb Y in field");
+    Point::from_affine(x, y)
+}
+
+fn build_comb_table() -> Vec<u8> {
+    let mut buf = vec![0u8; COMB_BYTES];
+    let mut base = Point::generator();
+
+    for window in (0..COMB_WINDOWS).rev() {
+        let mut acc = Point::INFINITY;
+        for b in 1..COMB_ENTRIES {
+            acc = acc.add(&base);
+            let (x, y) = acc.to_affine().expect("b*base is not infinity");
+            store_xy(
+                &mut buf,
+                window,
+                b,
+                &bytes_to_limbs(&x.to_bytes()),
+                &bytes_to_limbs(&y.to_bytes()),
+            );
+        }
+        if window > 0 {
+            for _ in 0..8 {
+                base = base.double();
+            }
+        }
+    }
+
+    let g = load_affine(&buf, 31, 1);
+    let (gx, gy) = g.to_affine().expect("T[31][1] is G");
+    assert_eq!(bytes_to_limbs(&gx.to_bytes()), EXPECTED_GX, "comb T[31][1] X");
+    assert_eq!(bytes_to_limbs(&gy.to_bytes()), EXPECTED_GY, "comb T[31][1] Y");
+    eprintln!("comb T[31][1] matches G");
+
+    let two = load_affine(&buf, 31, 2);
+    assert_eq!(two, Point::generator().double(), "comb T[31][2] is 2G");
+
+    for k_bytes in [
+        [0u8; 32],
+        {
+            let mut k = [0u8; 32];
+            k[31] = 1;
+            k
+        },
+        {
+            let mut k = [0u8; 32];
+            k[31] = 3;
+            k
+        },
+        {
+            let mut k = [0u8; 32];
+            k[0] = 0x01;
+            k[15] = 0xAB;
+            k[31] = 0x7F;
+            k
+        },
+    ] {
+        let scalar = Scalar::from_bytes(&k_bytes).expect("test scalar in range");
+        let expected = Point::mul_generator(&scalar);
+        let mut acc = Point::INFINITY;
+        for (window, &b) in k_bytes.iter().enumerate() {
+            acc = acc.add(&load_affine(&buf, window, b as usize));
+        }
+        assert_eq!(acc, expected, "comb reconstruct mismatch");
+    }
+    eprintln!("comb reconstruct checks passed");
+
+    buf
+}
+
 fn main() {
-    let dest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("kernels/g_table.cl");
-    let mut buf = Vec::new();
-    write_table(&mut buf).unwrap();
-    fs::write(&dest, buf).unwrap();
-    eprintln!("wrote {}", dest.display());
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("kernels");
+
+    let g_dest = dir.join("g_table.cl");
+    let mut g_buf = Vec::new();
+    write_g_table(&mut g_buf).unwrap();
+    fs::write(&g_dest, g_buf).unwrap();
+    eprintln!("wrote {}", g_dest.display());
+
+    let comb_dest = dir.join("comb_table.bin");
+    let comb = build_comb_table();
+    fs::write(&comb_dest, &comb).unwrap();
+    eprintln!("wrote {} ({} bytes)", comb_dest.display(), comb.len());
 }

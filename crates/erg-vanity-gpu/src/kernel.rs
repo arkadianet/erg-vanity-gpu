@@ -66,11 +66,24 @@ impl GpuProgram {
             eprintln!("[diag] NVIDIA verbose mode enabled");
         }
 
-        let program = Program::builder()
-            .src(source)
-            .devices(ctx.device())
-            .cmplr_opt(&opts)
-            .build(ctx.context())?;
+        // NVIDIA's OpenCL compiler can overflow the default thread stack on the
+        // full vanity program (tests already use 16 MiB).
+        let source = source.to_owned();
+        let device = ctx.device();
+        let cl_ctx = ctx.context().clone();
+        let program = std::thread::Builder::new()
+            .name("cl-compile".into())
+            .stack_size(16 * 1024 * 1024)
+            .spawn(move || {
+                Program::builder()
+                    .src(source)
+                    .devices(device)
+                    .cmplr_opt(&opts)
+                    .build(&cl_ctx)
+            })
+            .map_err(|e| GpuError::Other(format!("failed to spawn OpenCL compile thread: {e}")))?
+            .join()
+            .unwrap_or_else(|e| std::panic::resume_unwind(e))?;
 
         // Print build log if verbose and NVIDIA
         if is_nvidia && verbose {
@@ -1024,12 +1037,15 @@ mod tests {
 
             result_buf.write(&[0xFFFF_FFFFu32][..]).enq().unwrap();
 
+            let comb = crate::comb::CombTableBuffer::upload(queue).expect("upload comb table");
+
             let kernel = ocl::Kernel::builder()
                 .program(program.program())
                 .name("pt_self_test")
                 .queue(queue.clone())
                 .global_work_size(1)
                 .arg(&result_buf)
+                .arg(&comb.table)
                 .build()
                 .unwrap();
 
@@ -1046,7 +1062,7 @@ mod tests {
             println!("secp256k1 point self-test result: 0x{:08x}", failures);
 
             if failures != 0 {
-                const TEST_NAMES: [&str; 19] = [
+                const TEST_NAMES: [&str; 23] = [
                     "G is not infinity",
                     "infinity is infinity",
                     "G + infinity = G",
@@ -1066,6 +1082,10 @@ mod tests {
                     "pt_mul_generator(1) = G",
                     "pt_mul_generator(2) matches 2G.x",
                     "pt_mul_generator(3) matches 3G.x",
+                    "pt_mul_generator_comb(0) = infinity",
+                    "pt_mul_generator_comb(1) = G",
+                    "pt_mul_generator_comb(2) matches 2G.x",
+                    "pt_mul_generator_comb(3) matches 3G.x",
                 ];
                 for (bit, name) in TEST_NAMES.iter().enumerate() {
                     if failures & (1u32 << bit) != 0 {
@@ -1078,7 +1098,7 @@ mod tests {
                 );
             }
 
-            println!("secp256k1 point self-test passed (all 19 tests)!");
+            println!("secp256k1 point self-test passed (all 23 tests)!");
         });
     }
 
@@ -1252,6 +1272,7 @@ mod tests {
             use erg_vanity_crypto::secp256k1::scalar::Scalar;
 
             let wordlist = WordlistBuffers::upload(queue).expect("upload wordlist");
+            let comb = crate::comb::CombTableBuffer::upload(queue).expect("upload comb table");
 
             // Create reusable buffers
             let entropy_buf = Buffer::<u8>::builder()
@@ -1347,6 +1368,7 @@ mod tests {
                     .arg(&pubkey_buf)
                     .arg(&addr_bytes_buf)
                     .arg(&error_buf)
+                    .arg(&comb.table)
                     .build()
                     .unwrap();
 
