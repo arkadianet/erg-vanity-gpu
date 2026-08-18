@@ -1,218 +1,75 @@
-# Development Guide
+# Development
 
-Build, test, and contribution instructions derived from source code.
+Author: arkadianet
 
-## Prerequisites
+Hub usage is in the [README](../README.md). This page is for building, testing, and GPU work.
 
-### Rust Toolchain
-
-<!-- Source: Cargo.toml:15 -->
-
-- **Edition:** 2021
-- **Toolchain:** Stable (no nightly features required)
-
-### OpenCL Development Headers
-
-<!-- Source: .github/workflows/ci.yml:23, 34, 58 -->
-
-Required packages (Ubuntu/Debian):
-```bash
-sudo apt-get install ocl-icd-opencl-dev opencl-headers
-```
-
-## Building
-
-### Release Build
+## Build and test
 
 ```bash
 cargo build --release -p erg-vanity-cli
-```
-
-Binary location: `./target/release/erg-vanity`
-
-### Debug Build
-
-```bash
-cargo build -p erg-vanity-cli
-```
-
-### All Crates
-
-```bash
-cargo build --workspace
-```
-
-## Release Profile
-
-<!-- Source: Cargo.toml:57-60 -->
-
-```toml
-[profile.release]
-lto = true
-codegen-units = 1
-opt-level = 3
-```
-
-## Testing
-
-### Run All Tests
-
-```bash
 cargo test --workspace
-```
-
-### Stack Size Configuration
-
-<!-- Source: .cargo/config.toml:1-7 -->
-
-OpenCL kernel compilation requires a larger stack. The repository includes automatic configuration:
-
-```toml
-# .cargo/config.toml
-[env]
-RUST_MIN_STACK = "16777216"
-```
-
-No manual environment variable needed.
-
-### Manual Stack Override
-
-If needed:
-```bash
-RUST_MIN_STACK=16777216 cargo test
-```
-
-## Linting
-
-### Format Check
-
-```bash
-cargo fmt --all --check
-```
-
-### Format Fix
-
-```bash
 cargo fmt --all
-```
-
-### Clippy
-
-```bash
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-## CI Pipeline
+PowerShell: use `;` between commands, not `&&`.
 
-<!-- Source: .github/workflows/ci.yml:14-59 -->
+`.cargo/config.toml` sets `RUST_MIN_STACK=16777216` (OpenCL compile). Windows MSVC/GNU targets also raise the link stack.
 
-| Job | Commands |
-|-----|----------|
-| `check` | `cargo check --workspace --all-targets` |
-| `test` | `cargo test --workspace` |
-| `fmt` | `cargo fmt --all --check` |
-| `clippy` | `cargo clippy --workspace --all-targets -- -D warnings` |
-
-All jobs run on `ubuntu-latest` with:
-- `dtolnay/rust-toolchain@stable`
-- OpenCL headers installed
-
-GPU kernel tests are opt-in. They skip unless `ERG_RUN_GPU_TESTS=1` (no GPU on GitHub runners). Locally:
+GPU kernel tests skip unless `ERG_RUN_GPU_TESTS=1`:
 
 ```bash
+# Unix
 ERG_RUN_GPU_TESTS=1 cargo test -p erg-vanity-gpu
+
+# PowerShell
+$env:ERG_RUN_GPU_TESTS=1; cargo test -p erg-vanity-gpu
 ```
 
-## Validation Tests
+Release profile: LTO, `codegen-units = 1`, `opt-level = 3`.
 
-### ergo-lib Validation
+CI (`ubuntu-latest`): check, test, rustfmt, clippy. OpenCL headers are installed; runners have no GPU, so kernel tests stay skipped.
 
-<!-- Source: crates/erg-vanity-cpu/tests/ergo_lib_validation.rs -->
+## Crates
 
-Tests CPU implementation against reference `ergo-lib` library:
+```
+erg-vanity-cli  → engine, gui, gpu (bench)
+erg-vanity-gui  → engine (eframe/egui)
+erg-vanity-engine → cpu, gpu, address, ergo-lib verify
+erg-vanity-gpu  → bip, address, crypto, core   (+ cpu for tests)
+erg-vanity-cpu  → bip, address, crypto, core
+erg-vanity-bip / address → crypto → core
+```
+
+`erg-vanity` with no patterns opens the GUI (`--no-gui` to skip).
+
+## GPU kernels
+
+Sources live in `crates/erg-vanity-gpu/kernels/`. They are concatenated at runtime (`-cl-std=CL1.2`):
+
+`sha256` → `sha512` → `hmac_sha512` → `pbkdf2` → `secp256k1_fe` → `secp256k1_scalar` → `g_table` → `secp256k1_point` → `blake2b` → `base58` → `bip39` → `bip32` → `vanity`
+
+`g_table.cl` is the 8-bit windowed *k*·G table (regenerate with `cargo run -p erg-vanity-gpu --bin gen_g_table`).
+
+NVIDIA compile diagnostics:
 
 ```bash
-cargo test -p erg-vanity-cpu ergo_lib_validation
+ERG_CL_VERBOSE=1 cargo test -p erg-vanity-gpu
 ```
 
-Tests verify:
-- Entropy → Address derivation matches reference
-- Mnemonic generation matches bip39 crate
+Limits that matter when changing kernels: 1024 hits/batch, 64 patterns, 1024 bytes of pattern data, `--index` max 100. Default batch is device-chosen for search; `--bench` defaults to 262144.
 
-### GPU Kernel Tests
+## Benchmarks
 
-<!-- Source: crates/erg-vanity-gpu/src/kernel.rs (test modules) -->
+`--bench` times isolated PBKDF2, BIP32, secp256k1, and Base58 kernels (event timestamps). PBKDF2 is per seed; the others scale with `--index`.
 
-```bash
-cargo test -p erg-vanity-gpu
-```
+`--bench` is not live search. On RTX 3080 Ti (18 Aug 2026, `--index 1`) isolated PBKDF2 is ~1600 ns/seed (~56–64% of isolated time), BIP32 ~628 ns, secp ~285 ns. Live search is ~368k seeds/s after 8-bit *k*·G (earlier live baseline ~330k).
 
-Tests each cryptographic kernel against reference implementations.
+## Environment
 
-## Feature Flags
-
-### erg-vanity-gpu
-
-<!-- Source: crates/erg-vanity-gpu/Cargo.toml -->
-
-| Feature | Purpose |
-|---------|---------|
-| `test-kernels` | Include test kernels in build |
-
-## Adding New Features
-
-### New CLI Option
-
-1. Add field to `Args` struct in `crates/erg-vanity-cli/src/main.rs:33`
-2. Add clap attributes (`#[arg(...)]`)
-3. Add validation logic if needed
-4. Update usage in `main()` function
-
-### New Pattern Validation
-
-1. Modify `validate_pattern()` in `main.rs:91-179`
-2. Add constants to `main.rs:14-26` if needed
-3. Update error messages
-
-### New GPU Kernel
-
-1. Create `.cl` file in `crates/erg-vanity-gpu/kernels/`
-2. Add `include_str!()` in `kernel.rs` sources module
-3. Add to compilation chain in `GpuProgram::vanity()`
-4. Create test kernel in `*_test.cl`
-5. Add test in `kernel.rs` test module
-
-### New Benchmark Component
-
-1. Add kernel to `bench.cl`
-2. Add `ComponentStats` field in `bench.rs`
-3. Update `run_bench_on_device()` and `print_bench_results()`
-
-## Binary: gen_g_table
-
-<!-- Source: crates/erg-vanity-gpu/src/bin/gen_g_table.rs -->
-
-Utility to generate precomputed generator table for windowed scalar multiplication:
-
-```bash
-cargo run -p erg-vanity-gpu --bin gen_g_table
-```
-
-## Environment Variables
-
-| Variable | Purpose | Source |
-|----------|---------|--------|
-| `ERG_CL_VERBOSE` | Enable NVIDIA OpenCL diagnostics | `kernel.rs:58` |
-| `RUST_MIN_STACK` | Stack size for tests | `.cargo/config.toml:7` |
-
----
-
-## Verification Checklist
-
-- [x] Edition: `Cargo.toml:15`
-- [x] OpenCL packages: `.github/workflows/ci.yml:23`
-- [x] Release profile: `Cargo.toml:57-60`
-- [x] Stack config: `.cargo/config.toml:7`
-- [x] CI jobs: `.github/workflows/ci.yml:14-59`
-- [x] Validation tests: `crates/erg-vanity-cpu/tests/ergo_lib_validation.rs`
-- [x] gen_g_table: `crates/erg-vanity-gpu/src/bin/gen_g_table.rs`
+| Variable | Purpose |
+|----------|---------|
+| `ERG_CL_VERBOSE=1` | NVIDIA OpenCL register/spill log |
+| `ERG_RUN_GPU_TESTS=1` | Run OpenCL kernel unit tests |
+| `RUST_MIN_STACK` | Set automatically via `.cargo/config.toml` |

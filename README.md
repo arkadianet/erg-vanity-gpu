@@ -2,52 +2,37 @@
 
 [![CI](https://github.com/arkadianet/erg-vanity-gpu/actions/workflows/ci.yml/badge.svg)](https://github.com/arkadianet/erg-vanity-gpu/actions/workflows/ci.yml)
 
-GPU-accelerated Ergo vanity address generator using OpenCL.
+GPU-accelerated Ergo vanity address generator (OpenCL). Prefix search uses the GPU when OpenCL is available; otherwise the CPU path runs. Suffix and contains matching are CPU-only.
 
-This is the surviving repo for arkadianet vanity tools. The older CPU/GUI project [ergo-vanitygen-rust](https://github.com/arkadianet/ergo-vanitygen-rust) is superseded here: GPU prefix search, CPU fallback (suffix/contains, no GPU), `--estimate`, and a refreshed desktop UI.
+This is the surviving repo for arkadianet vanity tools. The older CPU/GUI project [ergo-vanitygen-rust](https://github.com/arkadianet/ergo-vanitygen-rust) is superseded here.
 
-Generate Ergo addresses matching custom patterns. Prefix search uses the GPU when OpenCL is available; otherwise the CPU path runs.
-
-> **WARNING: Early Development**
+> **Early development — use at your own risk.**
 >
-> This project is in early development. While initial testing looks promising, the code has not been audited or extensively tested. The cryptographic implementations (BIP39, BIP32, secp256k1, etc.) were written from scratch and may contain bugs.
+> Crypto (BIP39, BIP32, secp256k1, …) was written from scratch and is not audited. Do not store significant funds on a generated address until you independently verify the mnemonic in trusted software (for example the official Ergo wallet).
 >
-> **Use at your own risk.** Do not use generated addresses for significant funds without independently verifying the mnemonic produces the expected address using trusted software (e.g., official Ergo wallet).
+> **Mnemonics and entropy are secrets.** Treat match output as a wallet dump. `Debug` redacts them; stdout does not.
 
 ## Features
 
-- **GPU-accelerated** - OpenCL prefix search
-- **CPU fallback** - `--devices cpu`, or automatic when no GPU is present
-- **Suffix / contains** - CPU-only (`-e` / `--contains`)
-- **Desktop UI** - `erg-vanity` with no patterns opens the GUI
-- **Estimate** - `--estimate` before a long search
-- **Multi-GPU** - `--devices 0,1` or `all`
-- **Multiple patterns** - up to 64; longest prefix wins
-- **BIP44** - `m/44'/429'/0'/0/{index}`
+- GPU prefix search (OpenCL); CPU fallback when no GPU is present
+- Suffix / contains matching (`-e` / `--contains`) — CPU only
+- Desktop GUI — run `erg-vanity` with no patterns
+- `--estimate` before a long search
+- Multi-GPU (`--devices 0,1` or `all`)
+- Multiple patterns (up to 64; longest prefix wins)
+- BIP44 path `m/44'/429'/0'/0/{index}` (default `--index 1`)
 
-## Installation
+## Install
 
-### Prerequisites
+**Prerequisites:** Rust stable (2021 edition) and an OpenCL runtime.
 
-- Rust 2021 edition (stable toolchain)
-- OpenCL runtime and development headers
-
-**Ubuntu/Debian:**
 ```bash
+# Ubuntu/Debian
 sudo apt-get install ocl-icd-opencl-dev opencl-headers
-```
 
-**macOS:**
-```bash
-# OpenCL is included with macOS
+# macOS: OpenCL is included
+# Windows: install the GPU vendor OpenCL SDK (NVIDIA CUDA, AMD, or Intel)
 ```
-
-**Windows:**
-```bash
-# Install GPU vendor's OpenCL SDK (NVIDIA CUDA Toolkit, AMD ROCm, or Intel OpenCL)
-```
-
-### Build
 
 ```bash
 git clone https://github.com/arkadianet/erg-vanity-gpu.git
@@ -55,102 +40,85 @@ cd erg-vanity-gpu
 cargo build --release -p erg-vanity-cli
 ```
 
-The binary is at `./target/release/erg-vanity`.
+Binary: `./target/release/erg-vanity` (Windows: `.\target\release\erg-vanity.exe`).
 
-## Usage
+PowerShell chains commands with `;`, not `&&`.
 
-### Basic Examples
+## Run
 
 ```bash
-# Find an address starting with "9err"
+# Prefix search (GPU if available)
 ./target/release/erg-vanity 9err
-
-# Multiple patterns (finds any match)
 ./target/release/erg-vanity -p 9err,9ego,9fun
-
-# Case-insensitive search
 ./target/release/erg-vanity -p 9ErGo -i
-
-# Find 5 matching addresses
 ./target/release/erg-vanity -p 9err -n 5
-
-# Time-limited search (60 seconds)
 ./target/release/erg-vanity -p 9err --duration-secs 60
 
-# CPU-only, suffix match
+# CPU-only suffix
 ./target/release/erg-vanity -p cafe -e --devices cpu
 
 # Difficulty estimate
 ./target/release/erg-vanity -p 9ergo --estimate
 
-# Open the GUI
+# Desktop GUI
 ./target/release/erg-vanity
 ```
 
-### Multi-GPU Usage
+`--index` defaults to **1** (`m/44'/429'/0'/0/0`). Pass `--index N` (1–100) if you want extra address slots on the same seed. Do not raise the default.
+
+### Devices
 
 ```bash
-# List available GPUs
 ./target/release/erg-vanity --list-devices
-
-# Use specific GPUs by index
 ./target/release/erg-vanity -p 9err --devices 0,1
-
-# Use all available GPUs
 ./target/release/erg-vanity -p 9err --devices all
+./target/release/erg-vanity -p 9err --devices cpu
 ```
 
-### Advanced Options
+Default `--devices` is `auto` (GPU if present, else CPU).
 
-```bash
-# Check multiple BIP44 address indices per seed (increases matches per seed)
-./target/release/erg-vanity -p 9err --index 10
+### CLI
 
-# Combined: all GPUs, case-insensitive, 5 matches, 10 indices per seed
-./target/release/erg-vanity -p 9err --devices all -i -n 5 --index 10
-```
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --pattern <patterns>` | (required for CLI) | Comma-separated patterns |
+| `[PATTERN]` | — | Legacy single positional pattern |
+| `-e, --suffix` | off | Match at end of address (CPU) |
+| `--contains` | off | Match anywhere (CPU) |
+| `-i, --ignore-case` | off | Case-insensitive |
+| `-n, --max-results <N>` | `1` | Stop after N matches |
+| `--index <N>` | `1` | BIP44 indices per seed (1–100) |
+| `--devices <list>` | `auto` | `auto`, `0,1`, `all`, or `cpu` |
+| `--batch-size <N>` | device default | Search batch size |
+| `--estimate` | off | Print difficulty and exit |
+| `--no-gui` | off | Do not open the GUI |
+| `--duration-secs <N>` | — | Maximum runtime |
+| `--list-devices` | — | List GPUs and exit |
+| `--bench` | off | GPU microbenchmark |
+| `--bench-iters <N>` | `100` | Timed iterations |
+| `--bench-warmup <N>` | `5` | Warmup iterations |
+| `--bench-batch-size <N>` | `262144` | Bench batch size |
+| `--bench-num-indices <N>` | from `--index` | Bench address indices |
+| `--bench-validate` | off | Check bench kernels for degenerate output |
 
-## CLI Reference
+Exit codes: `0` success, `1` runtime error, `2` bad arguments / invalid pattern.
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `-p, --pattern <patterns>` | String | (required for CLI) | Comma-separated patterns |
-| `-e, --suffix` | Flag | `false` | Match at end of address (CPU) |
-| `--contains` | Flag | `false` | Match anywhere (CPU) |
-| `-i, --ignore-case` | Flag | `false` | Case-insensitive matching |
-| `-n, --max-results <N>` | Integer | `1` | Stop after finding N matches |
-| `--index <N>` | Integer | `1` | BIP44 indices per seed (1-100) |
-| `--devices <list>` | String | `0` | `0,1`, `all`, or `cpu` |
-| `--batch-size <N>` | Integer | device default | Search batch size |
-| `--estimate` | Flag | `false` | Print difficulty and exit |
-| `--no-gui` | Flag | `false` | Do not open the GUI |
-| `--duration-secs <N>` | Integer | - | Maximum runtime in seconds |
-| `--list-devices` | Flag | - | List available GPUs and exit |
-| `--bench` | Flag | - | Run GPU microbenchmark |
-| `--bench-iters <N>` | Integer | `100` | Benchmark iterations |
-| `--bench-warmup <N>` | Integer | `5` | Benchmark warmup iterations |
-| `--bench-batch-size <N>` | Integer | `262144` | Benchmark batch size |
-| `--bench-validate` | Flag | `false` | Validate benchmark outputs |
+### Pattern rules
 
-See [docs/cli-reference.md](docs/cli-reference.md) for complete documentation.
+Prefix (GPU) patterns must look like a mainnet P2PK start:
 
-### Pattern Rules
+- First character `9`
+- Second character `e`, `f`, `g`, `h`, or `i` (uppercase allowed with `-i`)
+- Base58 only (no `0`, `O`, `I`, `l`)
+- Max 32 characters per pattern, 64 patterns, 1024 bytes total
 
-Ergo mainnet P2PK addresses have specific constraints:
+Valid: `9e`, `9err`, `9ergo`, `9fUN`, `9heLLo`
 
-- **First character:** Must be `9`
-- **Second character:** Must be `e`, `f`, `g`, `h`, or `i`
-- **Valid characters:** Base58 alphabet (no `0`, `O`, `I`, `l`)
-- **Maximum length:** 32 characters per pattern
-- **Maximum patterns:** 64
+Invalid prefix: `9a` (second char), `9eO` (Base58), `8err` (first char)
 
-**Valid examples:** `9e`, `9err`, `9ergo`, `9fUN`, `9heLLo`
+Suffix / contains skip the `9e`–`9i` prefix rule.
 
-**Invalid examples:** `9a` (wrong second char), `9eO` (invalid Base58), `8err` (wrong first char)
-
-## Output Format
-
-When a match is found:
+## Output
 
 ```
 === Match 1 ===
@@ -158,178 +126,64 @@ Device:   0
 Address:  9errK7Qa3oBVHbS4uGFPSe7ETvfHkZGcskV1gqGf6fqLUPAamo
 Pattern:  9err
 Path:     m/44'/429'/0'/0/0
-Mnemonic: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art
-Entropy:  0000000000000000000000000000000000000000000000000000000000000000
+Mnemonic: … 24 words …
+Entropy:  … 64 hex chars …
 ```
 
-| Field | Description |
-|-------|-------------|
-| `Device` | GPU index that found the match |
-| `Address` | Generated Ergo P2PK address |
-| `Pattern` | Which pattern matched |
-| `Path` | BIP44 derivation path |
-| `Mnemonic` | 24-word recovery phrase (**SENSITIVE**) |
-| `Entropy` | 32-byte hex seed (**SENSITIVE**) |
+`Mnemonic` and `Entropy` recover the wallet. Every shown hit is re-checked with `ergo-lib` before print.
 
-See [docs/output-format.md](docs/output-format.md) for all output formats.
-
-## Benchmarking
-
-Measure per-component GPU performance:
-
-```bash
-# Basic benchmark
-./target/release/erg-vanity --bench
-
-# With validation (ensures kernels produce correct output)
-./target/release/erg-vanity --bench --bench-validate
-
-# Custom configuration
-./target/release/erg-vanity --bench --bench-iters 200 --bench-batch-size 524288
-```
-
-**Example output:**
-```
-GPU microbench (event timestamps), batch=262144, iters=100, num_indices=1
-
-Device 0: NVIDIA Corporation - NVIDIA GeForce RTX 3080 Ti
-PBKDF2:       4521.3 ms (85.2%)  avg   45.213 ms   172473 ns/seed
-secp256k1:     421.7 ms ( 7.9%)  avg    4.217 ms    16083 ns/addr
-BIP32:         312.5 ms ( 5.9%)  avg    3.125 ms    11921 ns/addr
-Base58:         52.1 ms ( 1.0%)  avg    0.521 ms     1987 ns/addr
-TOTAL:        5307.6 ms
-```
-
-See [docs/benchmarking.md](docs/benchmarking.md) for details.
-
-## Project Structure
-
-```
-erg-vanity-gpu/
-├── crates/
-│   ├── erg-vanity-core/      # BIP39 wordlist, error types
-│   ├── erg-vanity-crypto/    # SHA, HMAC, PBKDF2, secp256k1, Blake2b, Base58
-│   ├── erg-vanity-bip/       # BIP39/BIP32/BIP44 implementation
-│   ├── erg-vanity-address/   # Ergo P2PK address encoding
-│   ├── erg-vanity-cpu/       # CPU reference implementation
-│   ├── erg-vanity-gpu/       # OpenCL kernels and GPU pipeline
-│   ├── erg-vanity-engine/    # Shared search engine (CLI + GUI)
-│   ├── erg-vanity-gui/       # Desktop UI
-│   └── erg-vanity-cli/       # `erg-vanity` binary
-└── docs/                     # Documentation
-```
-
-See [docs/architecture.md](docs/architecture.md) for crate dependencies and data flow.
-
-## Development
-
-### Building
-
-```bash
-# Debug build
-cargo build -p erg-vanity-cli
-
-# Release build (optimized)
-cargo build --release -p erg-vanity-cli
-
-# Build all crates
-cargo build --workspace
-```
-
-### Testing
-
-```bash
-# Run all tests
-cargo test --workspace
-
-# Run specific crate tests
-cargo test -p erg-vanity-gpu
-```
-
-The repository includes `.cargo/config.toml` which automatically sets `RUST_MIN_STACK=16777216` for OpenCL kernel compilation.
-
-### Linting
-
-```bash
-# Check formatting
-cargo fmt --all --check
-
-# Run clippy
-cargo clippy --workspace --all-targets -- -D warnings
-```
-
-See [docs/development.md](docs/development.md) for contribution guidelines.
-
-## Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `ERG_CL_VERBOSE=1` | Enable NVIDIA OpenCL compiler diagnostics (register usage, spills) |
-
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [CLI Reference](docs/cli-reference.md) | Complete CLI argument documentation |
-| [Output Formats](docs/output-format.md) | All stdout/stderr output specifications |
-| [Architecture](docs/architecture.md) | Crate structure, dependencies, data flow |
-| [GPU Implementation](docs/gpu-implementation.md) | OpenCL kernels, memory layout, device selection |
-| [Development](docs/development.md) | Build, test, CI, contribution guide |
-| [Benchmarking](docs/benchmarking.md) | GPU benchmark mode and interpretation |
-| [Security](docs/security.md) | Entropy sources, key handling, unsafe audit |
-| [Limitations](docs/limitations.md) | Known limitations, resource constraints |
-| [Glossary](docs/glossary.md) | Term definitions with code references |
-
-## How It Works
-
-1. **Entropy Generation:** Random 32-byte salt combined with counter via Blake2b
-2. **BIP39:** Entropy → SHA-256 checksum → 24-word mnemonic
-3. **PBKDF2:** Mnemonic → 64-byte seed (2048 rounds HMAC-SHA512)
-4. **BIP32:** Seed → Master key → Derive `m/44'/429'/0'/0/{index}`
-5. **secp256k1:** Private key → Compressed public key (33 bytes)
-6. **Address:** Prefix + pubkey + Blake2b checksum → Base58 encoding
-7. **Pattern Match:** Compare address prefix against patterns
-
-The GPU parallelizes steps 1-7 across thousands of work items simultaneously.
+Progress goes to stderr: `Checked: N (rate addr/s) [found/target]`.
 
 ## Performance
 
-Performance depends on GPU model and pattern length. Longer patterns are rarer and take longer to find.
+Measured **RTX 3080 Ti**, 18 Aug 2026, default `--index 1`, after 8-bit windowed *k*·G:
 
-| GPU | Approximate Rate |
-|-----|------------------|
-| RTX 3080 Ti | ~330K addr/s |
-| RTX 4090 | ~500K addr/s (estimated) |
+| Mode | Result |
+|------|--------|
+| Live search | ~368k seeds/s (earlier live baseline ~330k) |
+| Isolated PBKDF2 | ~1600 ns/seed (~56–64% of isolated time) |
+| Isolated BIP32 | ~628 ns/addr |
+| Isolated secp256k1 | ~285 ns/addr |
 
-**Expected search times (RTX 3080 Ti, single pattern):**
+`--bench` times isolated kernels (OpenCL event timestamps). Isolated PBKDF2 share is **not** ~85% and **not** ~172 µs/seed — those figures are stale.
 
-| Pattern Length | Combinations | Expected Time |
-|----------------|--------------|---------------|
+```bash
+./target/release/erg-vanity --bench
+./target/release/erg-vanity --bench --bench-validate
+```
+
+Expected wait for a **single** prefix on a 3080 Ti at ~368k seeds/s:
+
+| Pattern | Combinations | Expected time |
+|---------|--------------|---------------|
 | 4 chars (`9err`) | ~200K | < 1 second |
 | 5 chars (`9ergo`) | ~11M | ~30 seconds |
 | 6 chars (`9ergoo`) | ~650M | ~30 minutes |
-| 7 chars | ~38B | ~1.3 days |
+| 7 chars | ~38B | ~1.2 days |
 
-## Security
+Rates vary by GPU, driver, and pattern. RTX 4090 is higher; we have not published a current measurement.
 
-- **Entropy:** Uses `rand::thread_rng()` (platform CSPRNG)
-- **Memory only:** Keys never written to disk
-- **Validation:** Tested against `ergo-lib` reference implementation
+## How it works
 
-See [docs/security.md](docs/security.md) for details.
+1. Entropy from CSPRNG salt + counter (Blake2b on GPU)
+2. BIP39: 24-word mnemonic
+3. PBKDF2-HMAC-SHA512 (2048 rounds) → seed
+4. BIP32/44: `m/44'/429'/0'/0/{index}`
+5. secp256k1 compressed pubkey
+6. Ergo P2PK (Blake2b checksum + Base58)
+7. Pattern match
+
+GPU work items run that pipeline in parallel. P2PK mainnet only; path is not configurable. Short patterns can overflow the 1024-hit GPU buffer (a warning is printed).
+
+## Docs
+
+| Document | Contents |
+|----------|----------|
+| [Security](docs/security.md) | Secrets, Debug redaction, entropy, verification |
+| [Development](docs/development.md) | Build, test, CI, GPU kernels, crate map |
 
 ## License
 
-MIT
+MIT. Author: arkadianet.
 
-## Contributing
-
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Run `cargo fmt` and `cargo clippy`
-4. Add tests for new functionality
-5. Submit a pull request
-
-See [docs/development.md](docs/development.md) for details.
+Contributions welcome: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, and tests. See [docs/development.md](docs/development.md).
