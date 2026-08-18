@@ -91,6 +91,46 @@ inline void pbkdf2_sha512(__private const uchar* password, uint password_len,
     unpack_be64(acc.s7, &out[56]);
 }
 
+// BIP39 vanity: salt is always "mnemonic", block index 1 (12-byte U1 message).
+// Avoids salt_block[260] so vanity_seed occupancy is set by the 2047-iter body.
+inline void pbkdf2_sha512_mnemonic(
+    __private const uchar* password, uint password_len,
+    __private uchar* out
+) {
+    if (password_len > 128u) {
+        for (int i = 0; i < 64; i++) out[i] = 0u;
+        return;
+    }
+
+    HmacSha512Ctx ctx;
+    hmac_sha512_init(&ctx, password, password_len);
+
+    // Inner: "mnemonic" || INT_32BE(1) after ipad. Bit length = (128+12)*8 = 1120.
+    ulong8 u = sha512_compress_mid16(
+        ctx.inner_h,
+        pack_be64((uchar)'m', (uchar)'n', (uchar)'e', (uchar)'m',
+                  (uchar)'o', (uchar)'n', (uchar)'i', (uchar)'c'),
+        0x0000000180000000ul,
+        0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul,
+        1120ul);
+    u = sha512_final_from_mid_u8(ctx.outer_h, ctx.outer_total_len, u);
+
+    ulong8 acc = u;
+    for (uint iter = 1u; iter < 2048u; iter++) {
+        u = hmac_sha512_msg64_u8(&ctx, u);
+        acc = acc ^ u;
+    }
+
+    unpack_be64(acc.s0, &out[0]);
+    unpack_be64(acc.s1, &out[8]);
+    unpack_be64(acc.s2, &out[16]);
+    unpack_be64(acc.s3, &out[24]);
+    unpack_be64(acc.s4, &out[32]);
+    unpack_be64(acc.s5, &out[40]);
+    unpack_be64(acc.s6, &out[48]);
+    unpack_be64(acc.s7, &out[56]);
+}
+
 // BIP39-specific wrapper: handles long mnemonics by pre-hashing.
 //
 // mnemonic: the mnemonic string (may exceed 128 bytes for 24-word)

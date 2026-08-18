@@ -5,3 +5,10 @@
 
 [env]
 RUST_MIN_STACK = "16777216"
+
+# NVIDIA's in-process OpenCL compiler overflows the default 1MB Windows stack.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:16777216"]
+
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-arg=-Wl,--stack,16777216"]

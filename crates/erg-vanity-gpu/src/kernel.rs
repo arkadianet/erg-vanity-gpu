@@ -12,6 +12,7 @@ pub mod sources {
     pub const PBKDF2: &str = include_str!("../kernels/pbkdf2.cl");
     pub const SECP256K1_FE: &str = include_str!("../kernels/secp256k1_fe.cl");
     pub const SECP256K1_SCALAR: &str = include_str!("../kernels/secp256k1_scalar.cl");
+    pub const G_TABLE: &str = include_str!("../kernels/g_table.cl");
     pub const SECP256K1_POINT: &str = include_str!("../kernels/secp256k1_point.cl");
     pub const BLAKE2B: &str = include_str!("../kernels/blake2b.cl");
     pub const BASE58: &str = include_str!("../kernels/base58.cl");
@@ -147,9 +148,10 @@ impl GpuProgram {
     #[cfg(any(test, feature = "test-kernels"))]
     pub fn secp256k1_point_test(ctx: &GpuContext) -> Result<Self, GpuError> {
         let combined = format!(
-            "{}\n{}\n{}\n{}",
+            "{}\n{}\n{}\n{}\n{}",
             sources::SECP256K1_FE,
             sources::SECP256K1_SCALAR,
+            sources::G_TABLE,
             sources::SECP256K1_POINT,
             sources::SECP256K1_POINT_TEST
         );
@@ -183,6 +185,7 @@ impl GpuProgram {
                 + sources::PBKDF2.len()
                 + sources::SECP256K1_FE.len()
                 + sources::SECP256K1_SCALAR.len()
+                + sources::G_TABLE.len()
                 + sources::SECP256K1_POINT.len()
                 + sources::BLAKE2B.len()
                 + sources::BASE58.len()
@@ -207,6 +210,8 @@ impl GpuProgram {
         combined.push_str(sources::SECP256K1_FE);
         combined.push_str("\n\n// === secp256k1_scalar.cl ===\n");
         combined.push_str(sources::SECP256K1_SCALAR);
+        combined.push_str("\n\n// === g_table.cl ===\n");
+        combined.push_str(sources::G_TABLE);
         combined.push_str("\n\n// === secp256k1_point.cl ===\n");
         combined.push_str(sources::SECP256K1_POINT);
 
@@ -224,7 +229,14 @@ impl GpuProgram {
         combined.push_str(sources::VANITY);
         combined.push('\n');
 
-        Self::from_source(ctx, &combined)
+        eprintln!(
+            "Compiling OpenCL vanity kernel (first run after a kernel change can take a minute)..."
+        );
+        let built = Self::from_source(ctx, &combined);
+        if built.is_ok() {
+            eprintln!("OpenCL vanity kernel ready.");
+        }
+        built
     }
 
     /// Compile the benchmark program with separate kernels for each component.
@@ -240,6 +252,7 @@ impl GpuProgram {
                 + sources::PBKDF2.len()
                 + sources::SECP256K1_FE.len()
                 + sources::SECP256K1_SCALAR.len()
+                + sources::G_TABLE.len()
                 + sources::SECP256K1_POINT.len()
                 + sources::BLAKE2B.len()
                 + sources::BASE58.len()
@@ -263,6 +276,8 @@ impl GpuProgram {
         combined.push_str(sources::SECP256K1_FE);
         combined.push_str("\n\n// === secp256k1_scalar.cl ===\n");
         combined.push_str(sources::SECP256K1_SCALAR);
+        combined.push_str("\n\n// === g_table.cl ===\n");
+        combined.push_str(sources::G_TABLE);
         combined.push_str("\n\n// === secp256k1_point.cl ===\n");
         combined.push_str(sources::SECP256K1_POINT);
 
@@ -1031,7 +1046,7 @@ mod tests {
             println!("secp256k1 point self-test result: 0x{:08x}", failures);
 
             if failures != 0 {
-                const TEST_NAMES: [&str; 15] = [
+                const TEST_NAMES: [&str; 19] = [
                     "G is not infinity",
                     "infinity is infinity",
                     "G + infinity = G",
@@ -1047,6 +1062,10 @@ mod tests {
                     "pubkey prefix 0x02/0x03",
                     "pubkey x bytes match Gx",
                     "G affine conversion failed",
+                    "pt_mul_generator(0) = infinity",
+                    "pt_mul_generator(1) = G",
+                    "pt_mul_generator(2) matches 2G.x",
+                    "pt_mul_generator(3) matches 3G.x",
                 ];
                 for (bit, name) in TEST_NAMES.iter().enumerate() {
                     if failures & (1u32 << bit) != 0 {
@@ -1059,7 +1078,7 @@ mod tests {
                 );
             }
 
-            println!("secp256k1 point self-test passed (all 15 tests)!");
+            println!("secp256k1 point self-test passed (all 19 tests)!");
         });
     }
 
@@ -1358,7 +1377,7 @@ mod tests {
                     "GPU private key (first 16 bytes): {:02x?}",
                     &gpu_private_key[..16]
                 );
-                println!("GPU pubkey: {:02x?}", &gpu_pubkey);
+                println!("GPU pubkey: {:02x?}", gpu_pubkey);
                 println!("GPU addr_bytes (first 16): {:02x?}", &gpu_addr_bytes[..16]);
                 println!("GPU error: {}", gpu_error[0]);
 

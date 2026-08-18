@@ -63,42 +63,59 @@ inline void build_ergo_address(
     addr_bytes[37] = checksum[3];
 }
 
-// Main vanity search kernel
-// Supports multiple patterns, multiple address indices, and case-insensitive matching.
-// Deterministic ordering: first match wins by (address_index ascending, pattern list order).
+// PBKDF2 is isolated so the 2048-iter HMAC loop is not compiled into the
+// same entry as secp/BIP32 (those force 255 regs + stack spills on sm_86).
+__kernel void vanity_seed(
+    __global const uchar* salt,
+    ulong counter_start,
+    __global const uchar* words8,
+    __global const uchar* word_lens,
+    __global uchar* seeds
+) {
+    uint gid = get_global_id(0);
+    uchar entropy[32];
+    generate_entropy(gid, counter_start, salt, entropy);
+    uchar seed[64];
+    bip39_entropy_to_seed(entropy, words8, word_lens, seed);
+    __global uchar* out = seeds + ((ulong)gid * 64ul);
+    for (int i = 0; i < 64; i++) out[i] = seed[i];
+}
+
+// BIP32 + k·G + address match. Seeds come from vanity_seed.
+// First match wins by (address_index ascending, pattern list order).
 __kernel void vanity_search(
-    // Entropy generation
-    __global const uchar* salt,           // 32 bytes
-    ulong counter_start,                  // Starting counter value
-    // Wordlist (for BIP39)
-    __global const uchar* words8,         // 2048 * 8 bytes
-    __global const uchar* word_lens,      // 2048 bytes
-    // Pattern matching (multi-pattern support)
-    __global const char* patterns,        // Concatenated patterns (no NUL terminators)
-    __global const uint* pattern_offsets, // Offset of each pattern
-    __global const uint* pattern_lens,    // Length of each pattern
-    uint num_patterns,                    // Number of patterns
-    uint ignore_case,                     // 0 = case-sensitive, 1 = case-insensitive
-    uint num_indices,                     // Number of address indices to check per seed
-    // Output
-    __global VanityHit* hits,             // Hit buffer
-    __global volatile int* hit_count,     // Atomic counter
-    uint max_hits                         // Max hits to store
+    __global const uchar* salt,
+    ulong counter_start,
+    __global const uchar* seeds,
+    __global const char* patterns,
+    __global const uint* pattern_offsets,
+    __global const uint* pattern_lens,
+    uint num_patterns,
+    uint ignore_case,
+    uint num_indices,
+    __global VanityHit* hits,
+    __global volatile int* hit_count,
+    uint max_hits
 ) {
     uint gid = get_global_id(0);
 
-    // Step 1: Generate entropy
-    uchar entropy[32];
-    generate_entropy(gid, counter_start, salt, entropy);
+    __local uint g_local[6144];
+    g_table_prefetch(g_local);
 
-    // Step 2: Entropy → BIP39 seed (PBKDF2 - dominant cost, done ONCE per work item)
     uchar seed[64];
-    bip39_entropy_to_seed(entropy, words8, word_lens, seed);
+    __global const uchar* in = seeds + ((ulong)gid * 64ul);
+    for (int i = 0; i < 64; i++) seed[i] = in[i];
 
     // Step 3: Derive to external chain m/44'/429'/0'/0 (done ONCE, amortizes cost)
     uchar external_key[32], external_chain_code[32];
-    if (bip32_derive_ergo_external_chain(seed, external_key, external_chain_code) != 0) {
+    if (bip32_derive_ergo_external_chain_table(seed, external_key, external_chain_code, g_local) != 0) {
         // Invalid key (astronomically rare), skip this work item
+        return;
+    }
+
+    // Parent pubkey is identical for every address index under this seed.
+    uchar external_pub[33];
+    if (priv_to_compressed_pubkey_table(external_key, external_pub, g_local) != 0) {
         return;
     }
 
@@ -107,7 +124,9 @@ __kernel void vanity_search(
     for (uint addr_idx = 0; addr_idx < num_indices; addr_idx++) {
         // Derive key for this address index: m/44'/429'/0'/0/<addr_idx>
         uchar private_key[32];
-        if (bip32_derive_address_index(external_key, external_chain_code, addr_idx, private_key) != 0) {
+        if (bip32_derive_address_index_from_pub(
+                external_key, external_chain_code, external_pub, addr_idx, private_key
+            ) != 0) {
             continue;  // Skip invalid (astronomically rare)
         }
 
@@ -116,7 +135,7 @@ __kernel void vanity_search(
         sc_from_bytes(key_limbs, private_key);
 
         uint point[24];
-        pt_mul_generator(point, key_limbs);
+        pt_mul_generator_table(point, key_limbs, g_local);
 
         uchar pubkey[33];
         if (pt_to_compressed_pubkey(pubkey, point) != 0) {
@@ -140,7 +159,9 @@ __kernel void vanity_search(
             }
 
             if (match) {
-                // Match found! Store hit with entropy packed as LE u32 words
+                // Match found! Recompute entropy (cheap vs PBKDF2) for CPU verify.
+                uchar entropy[32];
+                generate_entropy(gid, counter_start, salt, entropy);
                 uint hit_idx = (uint)atomic_inc(hit_count);
                 if (hit_idx < max_hits) {
                     for (int w = 0; w < 8; w++) {

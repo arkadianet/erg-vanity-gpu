@@ -438,37 +438,70 @@ inline void fe_sqr(__private uint* r, __private const uint* a) {
     fe_mul(r, a, a);
 }
 
+inline void fe_sqr_n(__private uint* r, int n) {
+    for (int i = 0; i < n; i++) {
+        fe_sqr(r, r);
+    }
+}
+
 // Modular inversion: r = a^(-1) mod p
-// Uses Fermat's little theorem: a^(-1) = a^(p-2) mod p
+// libsecp256k1 addition chain for a^(p-2). ~255 sqr + 15 mul vs Fermat's ~250 mul.
 inline void fe_inv(__private uint* r, __private const uint* a) {
     if (fe_is_zero(a)) {
         fe_zero(r);
         return;
     }
 
-    uint exp[8] = {
-        0xFFFFFC2Du, 0xFFFFFFFEu, 0xFFFFFFFFu, 0xFFFFFFFFu,
-        0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu
-    };
+    uint x2[8], x3[8], x22[8], x44[8], t[8], u[8];
 
-    uint result[8];
-    fe_one(result);
+    fe_sqr(x2, a);
+    fe_mul(x2, x2, a);
 
-    uint base[8];
-    fe_copy(base, a);
+    fe_sqr(x3, x2);
+    fe_mul(x3, x3, a);
 
-    for (int limb = 0; limb < 8; limb++) {
-        uint e = exp[limb];
-        for (int bit = 0; bit < 32; bit++) {
-            if (e & 1u) {
-                fe_mul(result, result, base);
-            }
-            fe_sqr(base, base);
-            e >>= 1;
-        }
-    }
+    // t = x6, then x9, then x11
+    fe_copy(t, x3);
+    fe_sqr_n(t, 3);
+    fe_mul(t, t, x3);
+    fe_sqr_n(t, 3);
+    fe_mul(t, t, x3);
+    fe_sqr_n(t, 2);
+    fe_mul(t, t, x2);
 
-    fe_copy(r, result);
+    fe_copy(x22, t);
+    fe_sqr_n(x22, 11);
+    fe_mul(x22, x22, t);
+
+    fe_copy(x44, x22);
+    fe_sqr_n(x44, 22);
+    fe_mul(x44, x44, x22);
+
+    // t = x88
+    fe_copy(t, x44);
+    fe_sqr_n(t, 44);
+    fe_mul(t, t, x44);
+
+    // u = x176
+    fe_copy(u, t);
+    fe_sqr_n(u, 88);
+    fe_mul(u, u, t);
+
+    // t = x220, then x223
+    fe_copy(t, u);
+    fe_sqr_n(t, 44);
+    fe_mul(t, t, x44);
+    fe_sqr_n(t, 3);
+    fe_mul(t, t, x3);
+
+    fe_sqr_n(t, 23);
+    fe_mul(t, t, x22);
+    fe_sqr_n(t, 5);
+    fe_mul(t, t, a);
+    fe_sqr_n(t, 3);
+    fe_mul(t, t, x2);
+    fe_sqr_n(t, 2);
+    fe_mul(r, a, t);
 }
 
 // Convert big-endian bytes to field element

@@ -307,6 +307,7 @@ fn run_cpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
 }
 
 enum WorkerMsg {
+    Ready,
     Hit(Hit),
     Error { device: usize, message: String },
     Stats { dropped: u64 },
@@ -390,6 +391,7 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
                     return;
                 }
             };
+            let _ = wtx.send(WorkerMsg::Ready);
             while !stop.load(Ordering::Relaxed) {
                 let counter_start = counter.fetch_add(cfg.batch_size as u64, Ordering::Relaxed);
                 let batch = match pipeline.run_batch_with_counter(counter_start) {
@@ -431,19 +433,13 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
     }
     drop(wtx);
 
-    if let Some(d) = req.duration {
-        let stop = Arc::clone(&stop);
-        thread::spawn(move || {
-            thread::sleep(d);
-            stop.store(true, Ordering::Relaxed);
-        });
-    }
-
-    let start = Instant::now();
+    let mut start: Option<Instant> = None;
     let mut last_report = Instant::now();
     let mut found = 0usize;
     let mut dropped_total = 0u64;
     let mut first_error: Option<String> = None;
+    let mut workers_left = handles.len();
+    let mut duration_armed = false;
     let _ = tx.send(SearchEvent::Progress {
         checked: 0,
         rate: 0.0,
@@ -452,12 +448,33 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
 
     loop {
         match wrx.recv_timeout(Duration::from_millis(200)) {
+            Ok(WorkerMsg::Ready) => {
+                if start.is_none() {
+                    let now = Instant::now();
+                    start = Some(now);
+                    last_report = now;
+                }
+                if !duration_armed {
+                    if let Some(d) = req.duration {
+                        let stop = Arc::clone(&stop);
+                        thread::spawn(move || {
+                            thread::sleep(d);
+                            stop.store(true, Ordering::Relaxed);
+                        });
+                    }
+                    duration_armed = true;
+                }
+            }
             Ok(WorkerMsg::Hit(hit)) => {
                 accept_hit(hit, &tx, &mut found, req.max_results, &stop);
             }
             Ok(WorkerMsg::Error { device, message }) => {
                 if first_error.is_none() {
                     first_error = Some(format!("Device {device} error: {message}"));
+                }
+                workers_left = workers_left.saturating_sub(1);
+                if workers_left == 0 && !duration_armed {
+                    duration_armed = true;
                 }
             }
             Ok(WorkerMsg::Stats { dropped }) => {
@@ -468,7 +485,9 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
         }
         if last_report.elapsed().as_secs_f64() >= 0.2 {
             let checked = total_checked.load(Ordering::Relaxed);
-            let rate = checked as f64 / start.elapsed().as_secs_f64().max(0.001);
+            let rate = start.map_or(0.0, |t| {
+                checked as f64 / t.elapsed().as_secs_f64().max(0.001)
+            });
             let _ = tx.send(SearchEvent::Progress {
                 checked,
                 rate,
@@ -494,7 +513,7 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
     let _ = tx.send(SearchEvent::Done {
         checked: total_checked.load(Ordering::Relaxed),
         found,
-        elapsed: start.elapsed(),
+        elapsed: start.map_or(Duration::ZERO, |t| t.elapsed()),
     });
 }
 

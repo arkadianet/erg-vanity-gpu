@@ -5,9 +5,13 @@ use crate::context::{GpuContext, GpuError};
 use crate::kernel::GpuProgram;
 use crate::wordlist::WordlistBuffers;
 use erg_vanity_cpu::{MatchType, Pattern};
+use ocl::enums::{KernelWorkGroupInfo, KernelWorkGroupInfoResult};
 use ocl::Kernel;
 use rand::RngCore;
 use std::fmt;
+
+/// `__local uint g_local[6144]` in vanity_search (24 KiB).
+const G_TABLE_LOCAL_BYTES: u64 = 6144 * 4;
 
 /// Configuration for vanity search.
 #[derive(Debug, Clone)]
@@ -107,6 +111,24 @@ pub(crate) fn sort_patterns_longest_first(patterns: &[String]) -> (Vec<String>, 
     (sorted, map)
 }
 
+fn local_size_for(batch: usize, recommended: usize) -> usize {
+    let mut ls = recommended.min(batch).max(1);
+    while !batch.is_multiple_of(ls) {
+        ls /= 2;
+        if ls == 0 {
+            return 1;
+        }
+    }
+    ls
+}
+
+fn kernel_work_group_limit(kernel: &Kernel, device: ocl::Device, fallback: usize) -> usize {
+    match kernel.wg_info(device, KernelWorkGroupInfo::WorkGroupSize) {
+        Ok(KernelWorkGroupInfoResult::WorkGroupSize(n)) if n > 0 => n,
+        _ => fallback,
+    }
+}
+
 /// GPU-accelerated vanity address search pipeline.
 pub struct VanityPipeline {
     ctx: GpuContext,
@@ -115,6 +137,7 @@ pub struct VanityPipeline {
     buffers: GpuBuffers,
     #[allow(dead_code)]
     wordlist: WordlistBuffers,
+    seed_kernel: Kernel,
     kernel: Kernel,
     patterns: Vec<String>,
     /// Maps GPU/sorted pattern index back to the caller's original order.
@@ -152,6 +175,12 @@ impl VanityPipeline {
         }
 
         let ctx = GpuContext::with_device(device_index)?;
+        if ctx.info().local_mem_size < G_TABLE_LOCAL_BYTES {
+            return Err(GpuError::Other(format!(
+                "device local memory {} bytes is below the {G_TABLE_LOCAL_BYTES}-byte G_TABLE requirement",
+                ctx.info().local_mem_size
+            )));
+        }
         let program = GpuProgram::vanity(&ctx)?;
         let queue = ctx.queue();
 
@@ -167,35 +196,58 @@ impl VanityPipeline {
         let patterns_for_gpu: &[String] = patterns_for_gpu_storage.as_deref().unwrap_or(&sorted);
         let num_patterns = buffers.upload_patterns(patterns_for_gpu)? as u32;
 
-        // Build kernel with all arguments matching vanity_search signature:
-        // salt, counter_start, words8, word_lens,
-        // patterns, pattern_offsets, pattern_lens, num_patterns, ignore_case, num_indices,
-        // hits, hit_count, max_hits
-        let kernel = Kernel::builder()
+        let recommended = ctx.recommended_work_group_size();
+        let local = local_size_for(cfg.batch_size, recommended);
+
+        // vanity_seed: salt, counter_start, words8, word_lens, seeds
+        let mut seed_kernel = Kernel::builder()
+            .program(program.program())
+            .name("vanity_seed")
+            .queue(queue.clone())
+            .global_work_size(cfg.batch_size)
+            .local_work_size(local)
+            .arg(&buffers.salt)
+            .arg(0u64)
+            .arg(&wordlist.words8)
+            .arg(&wordlist.lens)
+            .arg(&buffers.seeds)
+            .build()?;
+
+        // vanity_search: salt, counter_start, seeds, patterns..., hits
+        let mut kernel = Kernel::builder()
             .program(program.program())
             .name("vanity_search")
             .queue(queue.clone())
             .global_work_size(cfg.batch_size)
-            .arg(&buffers.salt) // arg 0: salt
-            .arg(0u64) // arg 1: counter_start (scalar, updated each batch)
-            .arg(&wordlist.words8) // arg 2: words8
-            .arg(&wordlist.lens) // arg 3: word_lens
-            .arg(&buffers.patterns) // arg 4: patterns
-            .arg(&buffers.pattern_offsets) // arg 5: pattern_offsets
-            .arg(&buffers.pattern_lens) // arg 6: pattern_lens
-            .arg(num_patterns) // arg 7: num_patterns
-            .arg(if cfg.ignore_case { 1u32 } else { 0u32 }) // arg 8: ignore_case
-            .arg(cfg.num_indices) // arg 9: num_indices
-            .arg(&buffers.hits) // arg 10: hits
-            .arg(&buffers.hit_count) // arg 11: hit_count
-            .arg(MAX_HITS as u32) // arg 12: max_hits
+            .local_work_size(local)
+            .arg(&buffers.salt)
+            .arg(0u64)
+            .arg(&buffers.seeds)
+            .arg(&buffers.patterns)
+            .arg(&buffers.pattern_offsets)
+            .arg(&buffers.pattern_lens)
+            .arg(num_patterns)
+            .arg(if cfg.ignore_case { 1u32 } else { 0u32 })
+            .arg(cfg.num_indices)
+            .arg(&buffers.hits)
+            .arg(&buffers.hit_count)
+            .arg(MAX_HITS as u32)
             .build()?;
+
+        let device = ctx.device();
+        let capped = recommended
+            .min(kernel_work_group_limit(&seed_kernel, device, recommended))
+            .min(kernel_work_group_limit(&kernel, device, recommended));
+        let local = local_size_for(cfg.batch_size, capped);
+        seed_kernel.set_default_local_work_size(local.into());
+        kernel.set_default_local_work_size(local.into());
 
         Ok(Self {
             ctx,
             program,
             buffers,
             wordlist,
+            seed_kernel,
             kernel,
             patterns: patterns.to_vec(),
             pattern_index_map,
@@ -232,14 +284,14 @@ impl VanityPipeline {
         // Reset hit counter
         self.buffers.reset_hits()?;
 
-        // Update counter_start (arg index 1)
+        // Update counter_start (arg index 1) on both kernels
+        self.seed_kernel.set_arg(1, self.counter)?;
         self.kernel.set_arg(1, self.counter)?;
 
-        // Run kernel
         unsafe {
+            self.seed_kernel.enq()?;
             self.kernel.enq()?;
         }
-        self.ctx.queue().finish()?;
 
         // Update counter for next batch
         // Counter is per-seed: each work item uses counter_start + gid.
@@ -259,14 +311,13 @@ impl VanityPipeline {
         // Reset hit counter
         self.buffers.reset_hits()?;
 
-        // Update counter_start (arg index 1)
+        self.seed_kernel.set_arg(1, counter_start)?;
         self.kernel.set_arg(1, counter_start)?;
 
-        // Run kernel
         unsafe {
+            self.seed_kernel.enq()?;
             self.kernel.enq()?;
         }
-        self.ctx.queue().finish()?;
 
         self.addresses_checked += (self.cfg.batch_size as u64) * (self.num_indices as u64);
 
@@ -393,6 +444,14 @@ impl VanityPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_size_divides_batch_and_respects_cap() {
+        assert_eq!(local_size_for(4096, 256), 256);
+        assert_eq!(local_size_for(1000, 256), 8);
+        assert_eq!(local_size_for(1024, 2048), 1024);
+        assert_eq!(local_size_for(1000, 1), 1);
+    }
 
     #[test]
     fn test_sort_patterns_longest_first() {
