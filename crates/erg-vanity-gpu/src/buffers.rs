@@ -11,6 +11,9 @@ pub const MAX_HITS: usize = 1024;
 /// Size of entropy in bytes (256-bit for 24-word mnemonic).
 pub const ENTROPY_SIZE: usize = 32;
 
+/// BIP39 seed size written by `vanity_seed` (64 bytes per work item).
+pub const SEED_SIZE: usize = 64;
+
 /// Maximum total size of pattern data (concatenated patterns).
 pub const MAX_PATTERN_DATA: usize = 1024;
 
@@ -63,6 +66,8 @@ pub struct GpuBuffers {
     pub hits: Buffer<GpuHit>,
     /// Atomic hit counter (i32 to match kernel's `volatile int*`)
     pub hit_count: Buffer<i32>,
+    /// PBKDF2 seeds (64 bytes per work item), written by `vanity_seed`
+    pub seeds: Buffer<u8>,
     /// Batch size this was allocated for
     batch_size: usize,
 }
@@ -114,6 +119,12 @@ impl GpuBuffers {
             .len(1)
             .build()?;
 
+        let seeds = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().read_write())
+            .len(batch_size * SEED_SIZE)
+            .build()?;
+
         Ok(Self {
             salt,
             patterns,
@@ -121,6 +132,7 @@ impl GpuBuffers {
             pattern_lens,
             hits,
             hit_count,
+            seeds,
             batch_size,
         })
     }

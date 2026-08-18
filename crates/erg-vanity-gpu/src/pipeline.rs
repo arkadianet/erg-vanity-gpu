@@ -126,6 +126,7 @@ pub struct VanityPipeline {
     buffers: GpuBuffers,
     #[allow(dead_code)]
     wordlist: WordlistBuffers,
+    seed_kernel: Kernel,
     kernel: Kernel,
     patterns: Vec<String>,
     /// Maps GPU/sorted pattern index back to the caller's original order.
@@ -178,29 +179,41 @@ impl VanityPipeline {
         let patterns_for_gpu: &[String] = patterns_for_gpu_storage.as_deref().unwrap_or(&sorted);
         let num_patterns = buffers.upload_patterns(patterns_for_gpu)? as u32;
 
-        // Build kernel with all arguments matching vanity_search signature:
-        // salt, counter_start, words8, word_lens,
-        // patterns, pattern_offsets, pattern_lens, num_patterns, ignore_case, num_indices,
-        // hits, hit_count, max_hits
+        let local = local_size_for(cfg.batch_size, ctx.recommended_work_group_size());
+
+        // vanity_seed: salt, counter_start, words8, word_lens, seeds
+        let seed_kernel = Kernel::builder()
+            .program(program.program())
+            .name("vanity_seed")
+            .queue(queue.clone())
+            .global_work_size(cfg.batch_size)
+            .local_work_size(local)
+            .arg(&buffers.salt)
+            .arg(0u64)
+            .arg(&wordlist.words8)
+            .arg(&wordlist.lens)
+            .arg(&buffers.seeds)
+            .build()?;
+
+        // vanity_search: salt, counter_start, seeds, patterns..., hits
         let kernel = Kernel::builder()
             .program(program.program())
             .name("vanity_search")
             .queue(queue.clone())
             .global_work_size(cfg.batch_size)
-            .local_work_size(local_size_for(cfg.batch_size, ctx.recommended_work_group_size()))
-            .arg(&buffers.salt) // arg 0: salt
-            .arg(0u64) // arg 1: counter_start (scalar, updated each batch)
-            .arg(&wordlist.words8) // arg 2: words8
-            .arg(&wordlist.lens) // arg 3: word_lens
-            .arg(&buffers.patterns) // arg 4: patterns
-            .arg(&buffers.pattern_offsets) // arg 5: pattern_offsets
-            .arg(&buffers.pattern_lens) // arg 6: pattern_lens
-            .arg(num_patterns) // arg 7: num_patterns
-            .arg(if cfg.ignore_case { 1u32 } else { 0u32 }) // arg 8: ignore_case
-            .arg(cfg.num_indices) // arg 9: num_indices
-            .arg(&buffers.hits) // arg 10: hits
-            .arg(&buffers.hit_count) // arg 11: hit_count
-            .arg(MAX_HITS as u32) // arg 12: max_hits
+            .local_work_size(local)
+            .arg(&buffers.salt)
+            .arg(0u64)
+            .arg(&buffers.seeds)
+            .arg(&buffers.patterns)
+            .arg(&buffers.pattern_offsets)
+            .arg(&buffers.pattern_lens)
+            .arg(num_patterns)
+            .arg(if cfg.ignore_case { 1u32 } else { 0u32 })
+            .arg(cfg.num_indices)
+            .arg(&buffers.hits)
+            .arg(&buffers.hit_count)
+            .arg(MAX_HITS as u32)
             .build()?;
 
         Ok(Self {
@@ -208,6 +221,7 @@ impl VanityPipeline {
             program,
             buffers,
             wordlist,
+            seed_kernel,
             kernel,
             patterns: patterns.to_vec(),
             pattern_index_map,
@@ -244,11 +258,12 @@ impl VanityPipeline {
         // Reset hit counter
         self.buffers.reset_hits()?;
 
-        // Update counter_start (arg index 1)
+        // Update counter_start (arg index 1) on both kernels
+        self.seed_kernel.set_arg(1, self.counter)?;
         self.kernel.set_arg(1, self.counter)?;
 
-        // Run kernel
         unsafe {
+            self.seed_kernel.enq()?;
             self.kernel.enq()?;
         }
 
@@ -270,11 +285,11 @@ impl VanityPipeline {
         // Reset hit counter
         self.buffers.reset_hits()?;
 
-        // Update counter_start (arg index 1)
+        self.seed_kernel.set_arg(1, counter_start)?;
         self.kernel.set_arg(1, counter_start)?;
 
-        // Run kernel
         unsafe {
+            self.seed_kernel.enq()?;
             self.kernel.enq()?;
         }
 
