@@ -7,6 +7,7 @@ use erg_vanity_engine::{
     SearchEvent, SearchRequest,
 };
 use std::collections::VecDeque;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Arc;
@@ -25,6 +26,8 @@ const ERR: Color32 = Color32::from_rgb(208, 88, 64);
 /// CLI estimate table uses these two rates; suffix/contains are CPU-only.
 const GPU_ASSUMED_RATE: f64 = 330_000.0;
 const CPU_ASSUMED_RATE: f64 = 10_000.0;
+const COMPILE_HINT: &str =
+    "Compiling OpenCL (first run after a kernel change can take a minute)…";
 
 /// Launch the native window.
 pub fn run() -> Result<(), eframe::Error> {
@@ -75,6 +78,15 @@ struct VanityApp {
     rate_hist: VecDeque<f32>,
     had_error: bool,
     secret_notice: Option<(String, Instant)>,
+    save_draft: Option<SaveDraft>,
+}
+
+struct SaveDraft {
+    address: String,
+    pattern: String,
+    mnemonic: String,
+    address_index: u32,
+    dest: String,
 }
 
 impl VanityApp {
@@ -135,6 +147,7 @@ impl VanityApp {
             rate_hist: VecDeque::with_capacity(48),
             had_error: false,
             secret_notice: None,
+            save_draft: None,
         }
     }
 
@@ -346,6 +359,27 @@ impl VanityApp {
         Ok(Some(n))
     }
 
+    fn is_compiling(&self) -> bool {
+        self.running
+            && !self.stopping
+            && self.checked == 0
+            && self.uses_gpu()
+            && self
+                .started_at
+                .is_some_and(|t| t.elapsed() >= Duration::from_millis(300))
+    }
+
+    fn refresh_run_status(&mut self) {
+        if self.had_error || self.stopping || !self.running {
+            return;
+        }
+        if self.is_compiling() {
+            self.status = COMPILE_HINT.into();
+        } else if self.status.starts_with("Compiling OpenCL") {
+            self.status = format!("Searching · {}", self.engine_label());
+        }
+    }
+
     fn start(&mut self) {
         if self.running || self.stopping {
             return;
@@ -513,14 +547,15 @@ impl VanityApp {
 impl eframe::App for VanityApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll();
-        self.refresh_estimate();
-        self.handle_shortcuts(ctx);
         if self.running {
             if let Some(start) = self.started_at {
                 self.elapsed = start.elapsed();
             }
             ctx.request_repaint_after(Duration::from_millis(33));
         }
+        self.refresh_run_status();
+        self.refresh_estimate();
+        self.handle_shortcuts(ctx);
         if let Some((_, t)) = self.secret_notice {
             if t.elapsed() > Duration::from_secs(8) {
                 self.secret_notice = None;
@@ -531,10 +566,11 @@ impl eframe::App for VanityApp {
 
         let issue = self.pattern_issue();
         let hard = self.hard_pattern_warning();
+        let compiling = self.is_compiling();
         let locked = self.running;
         let status_color = if self.had_error {
             ERR
-        } else if self.stopping {
+        } else if self.stopping || compiling {
             WARN
         } else {
             CREAM
@@ -794,9 +830,10 @@ impl eframe::App for VanityApp {
                 ui.add_space(6.0);
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     if self.results.is_empty() {
-                        empty_hits(ui, self.running);
+                        empty_hits(ui, self.running, compiling);
                     }
                     let mut copied = false;
+                    let mut save_req: Option<(String, String, String, u32)> = None;
                     for (i, row) in self.results.iter_mut().enumerate() {
                         egui::Frame::NONE
                             .fill(PANEL)
@@ -822,6 +859,19 @@ impl eframe::App for VanityApp {
                                     RichText::new(format!(
                                         "{}  ·  m/44'/429'/0'/0/{}",
                                         row.hit.device_label, row.hit.address_index
+                                    ))
+                                    .small()
+                                    .color(DIM),
+                                );
+                                ui.label(
+                                    RichText::new("Verified (ergo-lib)")
+                                        .small()
+                                        .color(LIVE),
+                                );
+                                ui.label(
+                                    RichText::new(format!(
+                                        "Restore: 24 words, account 0, address index {}. Send dust and confirm before funding.",
+                                        row.hit.address_index
                                     ))
                                     .small()
                                     .color(DIM),
@@ -862,6 +912,20 @@ impl eframe::App for VanityApp {
                                     if ui.button("Copy address").clicked() {
                                         ui.ctx().copy_text(row.hit.address.clone());
                                     }
+                                    if ui
+                                        .button("Save")
+                                        .on_hover_text(
+                                            "Write address, path, pattern, and mnemonic to a file you choose",
+                                        )
+                                        .clicked()
+                                    {
+                                        save_req = Some((
+                                            row.hit.address.clone(),
+                                            row.pattern.clone(),
+                                            row.hit.mnemonic.clone(),
+                                            row.hit.address_index,
+                                        ));
+                                    }
                                 });
                             });
                         ui.add_space(8.0);
@@ -872,12 +936,111 @@ impl eframe::App for VanityApp {
                             Instant::now(),
                         ));
                     }
+                    if let Some((address, pattern, mnemonic, index)) = save_req {
+                        self.save_draft = Some(SaveDraft {
+                            dest: suggested_save_path(&address),
+                            address,
+                            pattern,
+                            mnemonic,
+                            address_index: index,
+                        });
+                    }
                 });
             });
+
+        self.draw_save_dialog(ctx);
     }
 }
 
-fn empty_hits(ui: &mut egui::Ui, running: bool) {
+impl VanityApp {
+    fn draw_save_dialog(&mut self, ctx: &egui::Context) {
+        let Some(draft) = self.save_draft.as_mut() else {
+            return;
+        };
+        let mut open = true;
+        let mut write = false;
+        let mut cancel = false;
+        egui::Window::new("Save hit")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .open(&mut open)
+            .show(ctx, |ui| {
+                ui.set_min_width(420.0);
+                ui.label(
+                    RichText::new("This file can spend funds. Choose where to write it.")
+                        .color(WARN)
+                        .small(),
+                );
+                ui.add_space(6.0);
+                ui.add(
+                    egui::TextEdit::singleline(&mut draft.dest)
+                        .desired_width(f32::INFINITY)
+                        .font(egui::TextStyle::Monospace),
+                );
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(
+                            egui::Button::new(RichText::new("Write").strong())
+                                .min_size(egui::vec2(72.0, 28.0)),
+                        )
+                        .clicked()
+                    {
+                        write = true;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        cancel = true;
+                    }
+                });
+            });
+        if !open || cancel {
+            self.save_draft = None;
+            return;
+        }
+        if !write {
+            return;
+        }
+        let Some(draft) = self.save_draft.take() else {
+            return;
+        };
+        let dest = PathBuf::from(draft.dest.trim());
+        if dest.as_os_str().is_empty() {
+            self.secret_notice = Some(("Save needs a file path.".into(), Instant::now()));
+            return;
+        }
+        match write_hit_file(
+            &dest,
+            &draft.address,
+            &draft.pattern,
+            &draft.mnemonic,
+            draft.address_index,
+        ) {
+            Ok(acl_ok) => {
+                let extra = if acl_ok && cfg!(windows) {
+                    "ACL limited to your Windows user."
+                } else if acl_ok {
+                    "File mode set to 600."
+                } else {
+                    "Restrict that file yourself — it can spend funds."
+                };
+                self.secret_notice = Some((
+                    format!("Saved {}. {extra}", dest.display()),
+                    Instant::now(),
+                ));
+            }
+            Err(e) => {
+                self.secret_notice = Some((format!("Save failed: {e}"), Instant::now()));
+            }
+        }
+    }
+}
+
+fn empty_hits(ui: &mut egui::Ui, running: bool, compiling: bool) {
+    if compiling {
+        ui.label(RichText::new(COMPILE_HINT).color(WARN));
+        return;
+    }
     if running {
         ui.label(RichText::new("Listening for matches…").color(DIM));
         return;
@@ -962,6 +1125,86 @@ fn draw_sparkline(ui: &mut egui::Ui, hist: &VecDeque<f32>, running: bool) {
     ));
 }
 
+fn format_hit_file(address: &str, path: &str, pattern: &str, mnemonic: &str) -> String {
+    format!(
+        "Address:  {address}\nPath:     {path}\nPattern:  {pattern}\nMnemonic: {mnemonic}\n"
+    )
+}
+
+fn suggested_save_path(address: &str) -> String {
+    let prefix: String = address.chars().take(8).collect();
+    let name = format!("erg-vanity-{prefix}.txt");
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_else(|_| ".".into());
+    let docs = PathBuf::from(&home).join("Documents").join(&name);
+    if docs.parent().is_some_and(|p| p.is_dir()) {
+        docs.to_string_lossy().into_owned()
+    } else {
+        PathBuf::from(home).join(name).to_string_lossy().into_owned()
+    }
+}
+
+fn write_hit_file(
+    dest: &Path,
+    address: &str,
+    pattern: &str,
+    mnemonic: &str,
+    address_index: u32,
+) -> Result<bool, String> {
+    if let Some(parent) = dest.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+    }
+    let bip44 = format!("m/44'/429'/0'/0/{address_index}");
+    let body = format_hit_file(address, &bip44, pattern, mnemonic);
+    std::fs::write(dest, body.as_bytes()).map_err(|e| e.to_string())?;
+    Ok(restrict_owner_acl(dest))
+}
+
+fn restrict_owner_acl(path: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let user = match (
+            std::env::var("USERDOMAIN").ok().filter(|s| !s.is_empty()),
+            std::env::var("USERNAME").ok().filter(|s| !s.is_empty()),
+        ) {
+            (Some(domain), Some(name)) => format!("{domain}\\{name}"),
+            (_, Some(name)) => name,
+            _ => return false,
+        };
+        std::process::Command::new("icacls")
+            .arg(path)
+            .arg("/inheritance:r")
+            .arg("/grant:r")
+            .arg(format!("{user}:(R,W)"))
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let Ok(meta) = std::fs::metadata(path) else {
+            return false;
+        };
+        let mut perms = meta.permissions();
+        perms.set_mode(0o600);
+        std::fs::set_permissions(path, perms).is_ok()
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        let _ = path;
+        false
+    }
+}
+
 fn format_count(n: u64) -> String {
     let s = n.to_string();
     let mut out = String::new();
@@ -1032,5 +1275,31 @@ mod tests {
         assert_eq!(format_elapsed(Duration::from_secs(5)), "0:05");
         assert_eq!(format_elapsed(Duration::from_secs(83)), "1:23");
         assert_eq!(format_elapsed(Duration::from_secs(3723)), "1:02:03");
+    }
+
+    #[test]
+    fn hit_file_has_wallet_fields() {
+        let text = format_hit_file(
+            "9errExampleAddress",
+            "m/44'/429'/0'/0/3",
+            "9err",
+            "abandon abandon about",
+        );
+        assert!(text.contains("Address:  9errExampleAddress"));
+        assert!(text.contains("Path:     m/44'/429'/0'/0/3"));
+        assert!(text.contains("Pattern:  9err"));
+        assert!(text.contains("Mnemonic: abandon abandon about"));
+    }
+
+    #[test]
+    fn write_hit_file_roundtrip() {
+        let dest = std::env::temp_dir().join("erg-vanity-gui-hit-test.txt");
+        write_hit_file(&dest, "9errAddr", "9err", "abandon abandon about", 2).unwrap();
+        let text = std::fs::read_to_string(&dest).expect("read saved hit");
+        let _ = std::fs::remove_file(&dest);
+        assert!(text.contains("Address:  9errAddr"));
+        assert!(text.contains("Path:     m/44'/429'/0'/0/2"));
+        assert!(text.contains("Pattern:  9err"));
+        assert!(text.contains("Mnemonic: abandon abandon about"));
     }
 }
