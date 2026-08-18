@@ -3,8 +3,8 @@
 use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, RichText, Stroke};
 use erg_vanity_cpu::MatchType;
 use erg_vanity_engine::{
-    estimate_pattern, format_time, list_gpu_devices, run_search, Backend, Hit, SearchEvent,
-    SearchRequest,
+    estimate_pattern, format_time, list_gpu_devices, run_search, Backend, Hit,
+    SearchEvent, SearchRequest,
 };
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,13 +20,18 @@ const DIM: Color32 = Color32::from_rgb(140, 124, 100);
 const AMBER: Color32 = Color32::from_rgb(232, 148, 42);
 const LIVE: Color32 = Color32::from_rgb(72, 196, 120);
 const WARN: Color32 = Color32::from_rgb(196, 140, 64);
+const ERR: Color32 = Color32::from_rgb(208, 88, 64);
+
+/// CLI estimate table uses these two rates; suffix/contains are CPU-only.
+const GPU_ASSUMED_RATE: f64 = 330_000.0;
+const CPU_ASSUMED_RATE: f64 = 10_000.0;
 
 /// Launch the native window.
 pub fn run() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1080.0, 700.0])
-            .with_min_inner_size([880.0, 560.0])
+            .with_inner_size([1100.0, 720.0])
+            .with_min_inner_size([920.0, 600.0])
             .with_title("erg-vanity"),
         ..Default::default()
     };
@@ -39,6 +44,7 @@ pub fn run() -> Result<(), eframe::Error> {
 
 struct GuiHit {
     hit: Hit,
+    pattern: String,
     revealed: bool,
 }
 
@@ -53,18 +59,22 @@ struct VanityApp {
     status: String,
     estimate_text: String,
     running: bool,
+    stopping: bool,
     checked: u64,
     rate: f64,
     found: usize,
     results: Vec<GuiHit>,
+    search_patterns: Vec<String>,
     stop: Option<Arc<AtomicBool>>,
     rx: Option<Receiver<SearchEvent>>,
     worker: Option<JoinHandle<()>>,
     devices_hint: String,
+    gpu_present: bool,
     started_at: Option<Instant>,
     elapsed: Duration,
     rate_hist: VecDeque<f32>,
     had_error: bool,
+    secret_notice: Option<(String, Instant)>,
 }
 
 impl VanityApp {
@@ -89,12 +99,13 @@ impl VanityApp {
         style.spacing.button_padding = egui::vec2(12.0, 6.0);
         cc.egui_ctx.set_style(style);
 
-        let devices_hint = match list_gpu_devices() {
-            Ok(list) if list.is_empty() => {
-                "No OpenCL GPU — prefix search falls back to CPU.".into()
-            }
-            Ok(list) => list.join("  ·  "),
-            Err(e) => format!("OpenCL: {e}"),
+        let (gpu_present, devices_hint) = match list_gpu_devices() {
+            Ok(list) if list.is_empty() => (
+                false,
+                "No OpenCL GPU — prefix search falls back to CPU.".into(),
+            ),
+            Ok(list) => (true, list.join("  ·  ")),
+            Err(e) => (false, format!("OpenCL: {e}")),
         };
 
         Self {
@@ -105,21 +116,25 @@ impl VanityApp {
             max_results: 1,
             devices: "auto".into(),
             batch_size: String::new(),
-            status: "Idle".into(),
+            status: "Idle — Start searches the default 9err prefix.".into(),
             estimate_text: String::new(),
             running: false,
+            stopping: false,
             checked: 0,
             rate: 0.0,
             found: 0,
             results: Vec::new(),
+            search_patterns: Vec::new(),
             stop: None,
             rx: None,
             worker: None,
             devices_hint,
+            gpu_present,
             started_at: None,
             elapsed: Duration::ZERO,
             rate_hist: VecDeque::with_capacity(48),
             had_error: false,
+            secret_notice: None,
         }
     }
 
@@ -161,22 +176,45 @@ impl VanityApp {
         Ok(Backend::Gpu { devices: parsed })
     }
 
-    fn refresh_estimate(&mut self) {
-        let mt = self.match_type();
-        let mut lines = Vec::new();
-        for p in self.pattern_list() {
-            let est = estimate_pattern(&p, mt, self.ignore_case);
-            if est.has_invalid_chars {
-                lines.push(format!("{p}: impossible (invalid Base58)"));
-            } else {
-                lines.push(format!(
-                    "{p}: ~{:.0} attempts · {}",
-                    est.attempts_needed,
-                    format_time(est.attempts_needed / 330_000.0)
-                ));
-            }
+    fn uses_gpu(&self) -> bool {
+        if !matches!(self.match_type(), MatchType::Prefix) {
+            return false;
         }
-        self.estimate_text = lines.join("\n");
+        if !self.gpu_present {
+            return false;
+        }
+        !matches!(self.backend(), Ok(Backend::Cpu))
+    }
+
+    fn assumed_rate(&self) -> f64 {
+        if self.uses_gpu() {
+            GPU_ASSUMED_RATE
+        } else {
+            CPU_ASSUMED_RATE
+        }
+    }
+
+    fn display_rate(&self) -> f64 {
+        if self.running && self.rate >= 1.0 {
+            self.rate
+        } else {
+            self.assumed_rate()
+        }
+    }
+
+    fn engine_label(&self) -> String {
+        match self.match_type() {
+            MatchType::Suffix => "CPU · suffix".into(),
+            MatchType::Contains => "CPU · contains".into(),
+            MatchType::Prefix if self.uses_gpu() => match self.backend() {
+                Ok(Backend::Gpu { devices }) if !devices.is_empty() => {
+                    format!("GPU · {}", self.devices.trim())
+                }
+                Ok(Backend::Gpu { .. }) => "GPU · all".into(),
+                _ => "GPU · auto".into(),
+            },
+            MatchType::Prefix => "CPU · prefix".into(),
+        }
     }
 
     fn pattern_list(&self) -> Vec<String> {
@@ -185,6 +223,113 @@ impl VanityApp {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect()
+    }
+
+    fn pattern_issue(&self) -> Option<String> {
+        let patterns = self.pattern_list();
+        if patterns.is_empty() {
+            return Some("Enter a Base58 pattern (example: 9err).".into());
+        }
+        if let Err(e) = self.backend() {
+            return Some(e);
+        }
+        if let Err(e) = self.parse_batch_size() {
+            return Some(e);
+        }
+        let req = SearchRequest {
+            patterns,
+            match_type: self.match_type(),
+            ignore_case: self.ignore_case,
+            max_results: self.max_results.max(1),
+            num_indices: self.num_indices.max(1),
+            duration: None,
+            backend: Backend::Auto,
+            batch_size: None,
+        };
+        req.validate().err()
+    }
+
+    fn refresh_estimate(&mut self) {
+        let mt = self.match_type();
+        let rate = self.display_rate();
+        let rate_note = if self.running && self.rate >= 1.0 {
+            format!("{:.0}/s live", self.rate)
+        } else if self.uses_gpu() {
+            "330k/s assumed GPU".into()
+        } else {
+            "10k/s assumed CPU".into()
+        };
+        let mut lines = Vec::new();
+        for p in self.pattern_list() {
+            let est = estimate_pattern(&p, mt, self.ignore_case);
+            if est.has_invalid_chars {
+                let bad: String = est.invalid_chars.iter().collect();
+                lines.push(format!("{p}: impossible (not Base58: {bad})"));
+            } else {
+                let left = if self.running {
+                    (est.attempts_needed - self.checked as f64).max(0.0)
+                } else {
+                    est.attempts_needed
+                };
+                lines.push(format!(
+                    "{p}: ~{:.0} attempts · {} ({rate_note})",
+                    est.attempts_needed,
+                    format_time(left / rate.max(1.0))
+                ));
+            }
+        }
+        if let Some(issue) = self.pattern_issue() {
+            if lines.is_empty() {
+                lines.push(issue);
+            }
+        }
+        self.estimate_text = lines.join("\n");
+    }
+
+    fn easiest_attempts(&self) -> Option<f64> {
+        let mt = self.match_type();
+        let mut best = f64::INFINITY;
+        for p in self.pattern_list() {
+            let est = estimate_pattern(&p, mt, self.ignore_case);
+            if !est.has_invalid_chars && est.attempts_needed < best {
+                best = est.attempts_needed;
+            }
+        }
+        if best.is_finite() {
+            Some(best)
+        } else {
+            None
+        }
+    }
+
+    fn eta_label(&self) -> String {
+        if self.pattern_issue().is_some() {
+            return "—".into();
+        }
+        let Some(attempts) = self.easiest_attempts() else {
+            return "—".into();
+        };
+        let remaining = if self.running {
+            (attempts - self.checked as f64).max(0.0)
+        } else {
+            attempts
+        };
+        format!("~{}", format_time(remaining / self.display_rate().max(1.0)))
+    }
+
+    fn hard_pattern_warning(&self) -> Option<String> {
+        if self.pattern_issue().is_some() {
+            return None;
+        }
+        let attempts = self.easiest_attempts()?;
+        let secs = attempts / self.assumed_rate().max(1.0);
+        if secs >= 86_400.0 {
+            Some("This pattern is likely days or longer. Shorten it or expect a long run.".into())
+        } else if secs >= 3_600.0 {
+            Some("This pattern is likely an hour or more at typical rates.".into())
+        } else {
+            None
+        }
     }
 
     fn parse_batch_size(&self) -> Result<Option<usize>, String> {
@@ -202,7 +347,7 @@ impl VanityApp {
     }
 
     fn start(&mut self) {
-        if self.running {
+        if self.running || self.stopping {
             return;
         }
         let patterns = self.pattern_list();
@@ -210,6 +355,7 @@ impl VanityApp {
             Ok(b) => b,
             Err(e) => {
                 self.status = e;
+                self.had_error = true;
                 return;
             }
         };
@@ -217,11 +363,12 @@ impl VanityApp {
             Ok(b) => b,
             Err(e) => {
                 self.status = e;
+                self.had_error = true;
                 return;
             }
         };
         let req = SearchRequest {
-            patterns,
+            patterns: patterns.clone(),
             match_type: self.match_type(),
             ignore_case: self.ignore_case,
             max_results: self.max_results.max(1),
@@ -232,16 +379,19 @@ impl VanityApp {
         };
         if let Err(e) = req.validate() {
             self.status = e;
+            self.had_error = true;
             return;
         }
         self.refresh_estimate();
         self.results.clear();
+        self.search_patterns = patterns;
         self.found = 0;
         self.checked = 0;
         self.rate = 0.0;
         self.rate_hist.clear();
         self.had_error = false;
-        self.status = "Searching".into();
+        self.stopping = false;
+        self.status = format!("Searching · {}", self.engine_label());
         let now = Instant::now();
         self.started_at = Some(now);
         self.elapsed = Duration::ZERO;
@@ -256,13 +406,19 @@ impl VanityApp {
     }
 
     fn stop_search(&mut self) {
+        if !self.running || self.stopping {
+            return;
+        }
         if let Some(stop) = &self.stop {
             stop.store(true, Ordering::Relaxed);
         }
+        self.stopping = true;
+        self.status = "Stopping…".into();
     }
 
     fn finish(&mut self) {
         self.running = false;
+        self.stopping = false;
         if let Some(h) = self.worker.take() {
             let _ = h.join();
         }
@@ -293,8 +449,14 @@ impl VanityApp {
                     }
                 }
                 SearchEvent::Hit(hit) => {
+                    let pattern = self
+                        .search_patterns
+                        .get(hit.pattern_index as usize)
+                        .cloned()
+                        .unwrap_or_else(|| "—".into());
                     self.results.push(GuiHit {
                         hit,
+                        pattern,
                         revealed: false,
                     });
                     self.found = self.results.len();
@@ -316,9 +478,11 @@ impl VanityApp {
                     self.found = found;
                     self.elapsed = elapsed;
                     if !self.had_error {
-                        self.status = format!("Done in {:.1}s", elapsed.as_secs_f64());
+                        let verb = if self.stopping { "Stopped" } else { "Done" };
+                        self.status = format!("{verb} in {}", format_elapsed(elapsed));
                     }
                     self.running = false;
+                    self.stopping = false;
                 }
             }
         }
@@ -329,17 +493,52 @@ impl VanityApp {
         }
         self.finish();
     }
+
+    fn handle_shortcuts(&mut self, ctx: &egui::Context) {
+        let (escape, ctrl_enter) = ctx.input(|i| {
+            (
+                i.key_pressed(egui::Key::Escape),
+                i.modifiers.command && i.key_pressed(egui::Key::Enter),
+            )
+        });
+        if escape && self.running {
+            self.stop_search();
+        }
+        if ctrl_enter && !self.running {
+            self.start();
+        }
+    }
 }
 
 impl eframe::App for VanityApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll();
+        self.refresh_estimate();
+        self.handle_shortcuts(ctx);
         if self.running {
             if let Some(start) = self.started_at {
                 self.elapsed = start.elapsed();
             }
             ctx.request_repaint_after(Duration::from_millis(33));
         }
+        if let Some((_, t)) = self.secret_notice {
+            if t.elapsed() > Duration::from_secs(8) {
+                self.secret_notice = None;
+            } else {
+                ctx.request_repaint_after(Duration::from_millis(250));
+            }
+        }
+
+        let issue = self.pattern_issue();
+        let hard = self.hard_pattern_warning();
+        let locked = self.running;
+        let status_color = if self.had_error {
+            ERR
+        } else if self.stopping {
+            WARN
+        } else {
+            CREAM
+        };
 
         egui::TopBottomPanel::top("masthead")
             .exact_height(52.0)
@@ -351,8 +550,10 @@ impl eframe::App for VanityApp {
             .show(ctx, |ui| {
                 ui.horizontal_centered(|ui| {
                     ui.label(RichText::new("ERG-VANITY").color(AMBER).size(18.0).strong());
+                    ui.add_space(10.0);
+                    ui.label(RichText::new(self.engine_label()).color(DIM).size(12.0));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let pulse = if self.running {
+                        let pulse = if self.running && !self.stopping {
                             let t = self.elapsed.as_secs_f32();
                             0.35 + 0.65 * (t * 4.0).sin().abs()
                         } else {
@@ -360,23 +561,35 @@ impl eframe::App for VanityApp {
                         };
                         let (dot, _) =
                             ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-                        ui.painter().circle_filled(
-                            dot.center(),
-                            5.0,
-                            if self.running {
-                                LIVE.gamma_multiply(pulse)
-                            } else {
-                                DIM
-                            },
-                        );
+                        let live_color = if self.stopping {
+                            WARN
+                        } else if self.running {
+                            LIVE.gamma_multiply(pulse)
+                        } else {
+                            DIM
+                        };
+                        ui.painter().circle_filled(dot.center(), 5.0, live_color);
+                        let live_text = if self.stopping {
+                            "STOPPING"
+                        } else if self.running {
+                            "LIVE"
+                        } else {
+                            "IDLE"
+                        };
                         ui.label(
-                            RichText::new(if self.running { "LIVE" } else { "IDLE" })
-                                .color(if self.running { LIVE } else { DIM })
+                            RichText::new(live_text)
+                                .color(if self.stopping {
+                                    WARN
+                                } else if self.running {
+                                    LIVE
+                                } else {
+                                    DIM
+                                })
                                 .size(12.0)
                                 .strong(),
                         );
                         ui.add_space(12.0);
-                        ui.label(RichText::new(&self.status).color(CREAM).size(13.0));
+                        ui.label(RichText::new(&self.status).color(status_color).size(13.0));
                     });
                 });
             });
@@ -389,76 +602,155 @@ impl eframe::App for VanityApp {
             )
             .show(ctx, |ui| {
                 ui.label(RichText::new(&self.devices_hint).small().color(DIM));
-                ui.label(
-                    RichText::new("Mnemonics can spend funds. Verify in a trusted Ergo wallet.")
+                if let Some((notice, _)) = &self.secret_notice {
+                    ui.label(RichText::new(notice).small().color(WARN));
+                } else {
+                    ui.label(
+                        RichText::new(
+                            "A match is a BIP39 wallet. Reveal only to copy. Verify in a trusted Ergo wallet before funding.",
+                        )
                         .small()
                         .color(WARN),
-                );
+                    );
+                }
             });
 
         egui::SidePanel::left("settings")
             .resizable(false)
-            .exact_width(300.0)
+            .exact_width(320.0)
             .frame(
                 egui::Frame::NONE
                     .fill(PANEL)
                     .inner_margin(egui::Margin::same(16)),
             )
             .show(ctx, |ui| {
-                ui.label(RichText::new("PATTERN").color(AMBER).size(11.0).strong());
-                ui.add_space(4.0);
-                ui.add(egui::TextEdit::singleline(&mut self.patterns).desired_width(f32::INFINITY));
-                ui.add_space(10.0);
-                ui.label(RichText::new("MATCH").color(AMBER).size(11.0).strong());
-                ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.match_mode, 0, "Prefix");
-                    ui.selectable_value(&mut self.match_mode, 1, "Suffix");
-                    ui.selectable_value(&mut self.match_mode, 2, "Contains");
+                ui.add_enabled_ui(!locked, |ui| {
+                    ui.label(RichText::new("PATTERN").color(AMBER).size(11.0).strong());
+                    ui.add_space(4.0);
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.patterns)
+                            .desired_width(f32::INFINITY)
+                            .hint_text("9err, 9ego")
+                            .font(egui::TextStyle::Monospace),
+                    );
+                    ui.label(
+                        RichText::new("Comma-separated. Prefix must start 9e–9i (mainnet P2PK).")
+                            .small()
+                            .color(DIM),
+                    );
+                    if let Some(issue) = &issue {
+                        ui.label(RichText::new(issue).small().color(ERR));
+                    } else if let Some(hard) = &hard {
+                        ui.label(RichText::new(hard).small().color(WARN));
+                    }
+                    ui.add_space(10.0);
+                    ui.label(RichText::new("MATCH").color(AMBER).size(11.0).strong());
+                    ui.horizontal(|ui| {
+                        ui.selectable_value(&mut self.match_mode, 0, "Prefix")
+                            .on_hover_text("GPU when OpenCL is available");
+                        ui.selectable_value(&mut self.match_mode, 1, "Suffix")
+                            .on_hover_text("CPU only");
+                        ui.selectable_value(&mut self.match_mode, 2, "Contains")
+                            .on_hover_text("CPU only");
+                    });
+                    ui.checkbox(&mut self.ignore_case, "Ignore case");
+                    if !matches!(self.match_type(), MatchType::Prefix) {
+                        ui.label(
+                            RichText::new("Suffix and contains run on CPU only.")
+                                .small()
+                                .color(WARN),
+                        );
+                    } else if !self.gpu_present {
+                        ui.label(
+                            RichText::new("No GPU listed — prefix will use CPU.")
+                                .small()
+                                .color(WARN),
+                        );
+                    }
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("INDICES / SEED").color(AMBER).size(11.0).strong());
+                    ui.add(
+                        egui::Slider::new(&mut self.num_indices, 1..=100)
+                            .text("BIP44 slots")
+                            .integer(),
+                    )
+                    .on_hover_text(
+                        "How many receive addresses to derive from each mnemonic. Default 1. This is not a GPU count.",
+                    );
+                    let last = self.num_indices.saturating_sub(1);
+                    let index_color = if self.num_indices > 1 { WARN } else { DIM };
+                    ui.label(
+                        RichText::new(format!("m/44'/429'/0'/0/{{0..{last}}}  ·  default 1"))
+                            .small()
+                            .color(index_color),
+                    );
+                    if self.num_indices > 1 {
+                        ui.label(
+                            RichText::new(
+                                "Extra slots on the same seed. Raise only if you want those addresses.",
+                            )
+                            .small()
+                            .color(WARN),
+                        );
+                    }
+                    ui.add(egui::Slider::new(&mut self.max_results, 1..=20).text("max results"));
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("DEVICES").color(AMBER).size(11.0).strong());
+                    ui.label(RichText::new("auto · 0 · all · cpu").small().color(DIM));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.devices)
+                            .desired_width(f32::INFINITY)
+                            .hint_text("auto"),
+                    );
+                    ui.label(RichText::new("BATCH").color(AMBER).size(11.0).strong());
+                    ui.label(RichText::new("blank = device default").small().color(DIM));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.batch_size)
+                            .desired_width(f32::INFINITY)
+                            .hint_text("device default"),
+                    );
                 });
-                ui.checkbox(&mut self.ignore_case, "Ignore case");
-                ui.add_space(8.0);
-                ui.add(egui::Slider::new(&mut self.num_indices, 1..=100).text("indices / seed"));
-                ui.add(egui::Slider::new(&mut self.max_results, 1..=20).text("max results"));
-                ui.add_space(8.0);
-                ui.label(RichText::new("DEVICES").color(AMBER).size(11.0).strong());
-                ui.label(RichText::new("auto · 0 · all · cpu").small().color(DIM));
-                ui.add(egui::TextEdit::singleline(&mut self.devices).desired_width(f32::INFINITY));
-                ui.label(RichText::new("BATCH").color(AMBER).size(11.0).strong());
-                ui.label(RichText::new("blank = device default").small().color(DIM));
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.batch_size).desired_width(f32::INFINITY),
-                );
                 ui.add_space(14.0);
                 ui.horizontal(|ui| {
                     if !self.running {
-                        if ui
-                            .add_sized(
-                                [88.0, 32.0],
-                                egui::Button::new(RichText::new("Start").strong()),
-                            )
-                            .clicked()
-                        {
+                        let start = ui.add_enabled(
+                            issue.is_none(),
+                            egui::Button::new(RichText::new("Start").strong())
+                                .min_size(egui::vec2(88.0, 32.0)),
+                        );
+                        if start.clicked() {
                             self.start();
                         }
-                    } else if ui
-                        .add_sized(
-                            [88.0, 32.0],
-                            egui::Button::new(RichText::new("Stop").strong()),
-                        )
-                        .clicked()
-                    {
-                        self.stop_search();
-                    }
-                    if ui
-                        .add_sized([88.0, 32.0], egui::Button::new("Estimate"))
-                        .clicked()
-                    {
-                        self.refresh_estimate();
+                        if issue.is_some() {
+                            start.on_hover_text("Fix the pattern or settings first");
+                        } else {
+                            start.on_hover_text("Ctrl+Enter");
+                        }
+                    } else {
+                        let stop = ui.add_enabled(
+                            !self.stopping,
+                            egui::Button::new(RichText::new(if self.stopping {
+                                "Stopping…"
+                            } else {
+                                "Stop"
+                            })
+                            .strong())
+                            .min_size(egui::vec2(88.0, 32.0)),
+                        );
+                        if stop.clicked() {
+                            self.stop_search();
+                        }
+                        stop.on_hover_text("Esc");
                     }
                 });
                 if !self.estimate_text.is_empty() {
                     ui.add_space(12.0);
                     ui.label(RichText::new("ESTIMATE").color(AMBER).size(11.0).strong());
+                    ui.label(
+                        RichText::new("Guess before/during search — not a timer guarantee.")
+                            .small()
+                            .color(DIM),
+                    );
                     ui.label(RichText::new(&self.estimate_text).color(CREAM).small());
                 }
             });
@@ -473,14 +765,20 @@ impl eframe::App for VanityApp {
                 ui.horizontal(|ui| {
                     stat_card(ui, "CHECKED", &format_count(self.checked), CREAM);
                     ui.add_space(8.0);
-                    stat_card(ui, "RATE", &format!("{:.0} /s", self.rate), LIVE);
-                    ui.add_space(8.0);
                     stat_card(
                         ui,
-                        "ELAPSED",
-                        &format!("{:.1}s", self.elapsed.as_secs_f64()),
-                        AMBER,
+                        "RATE",
+                        &if self.running && self.rate >= 1.0 {
+                            format!("{:.0} /s", self.rate)
+                        } else {
+                            "—".into()
+                        },
+                        LIVE,
                     );
+                    ui.add_space(8.0);
+                    stat_card(ui, "ETA", &self.eta_label(), AMBER);
+                    ui.add_space(8.0);
+                    stat_card(ui, "ELAPSED", &format_elapsed(self.elapsed), AMBER);
                     ui.add_space(8.0);
                     stat_card(
                         ui,
@@ -496,15 +794,9 @@ impl eframe::App for VanityApp {
                 ui.add_space(6.0);
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     if self.results.is_empty() {
-                        ui.label(
-                            RichText::new(if self.running {
-                                "Listening for matches…"
-                            } else {
-                                "No matches yet."
-                            })
-                            .color(DIM),
-                        );
+                        empty_hits(ui, self.running);
                     }
+                    let mut copied = false;
                     for (i, row) in self.results.iter_mut().enumerate() {
                         egui::Frame::NONE
                             .fill(PANEL)
@@ -517,12 +809,15 @@ impl eframe::App for VanityApp {
                                             .strong(),
                                     );
                                     ui.label(
-                                        RichText::new(&row.hit.address)
-                                            .monospace()
-                                            .color(CREAM)
-                                            .size(15.0),
+                                        RichText::new(&row.pattern).color(AMBER).small().strong(),
                                     );
                                 });
+                                ui.label(
+                                    RichText::new(&row.hit.address)
+                                        .monospace()
+                                        .color(CREAM)
+                                        .size(15.0),
+                                );
                                 ui.label(
                                     RichText::new(format!(
                                         "{}  ·  m/44'/429'/0'/0/{}",
@@ -534,12 +829,34 @@ impl eframe::App for VanityApp {
                                 ui.horizontal(|ui| {
                                     if row.revealed {
                                         ui.label(
-                                            RichText::new(&row.hit.mnemonic).monospace().small(),
+                                            RichText::new("24-word spend key — do not screenshot")
+                                                .small()
+                                                .color(WARN),
                                         );
+                                    }
+                                });
+                                if row.revealed {
+                                    ui.label(
+                                        RichText::new(&row.hit.mnemonic)
+                                            .monospace()
+                                            .small()
+                                            .color(CREAM),
+                                    );
+                                }
+                                ui.horizontal(|ui| {
+                                    if row.revealed {
+                                        if ui.button("Hide").clicked() {
+                                            row.revealed = false;
+                                        }
                                         if ui.button("Copy mnemonic").clicked() {
                                             ui.ctx().copy_text(row.hit.mnemonic.clone());
+                                            copied = true;
                                         }
-                                    } else if ui.button("Reveal").clicked() {
+                                    } else if ui
+                                        .button("Reveal mnemonic")
+                                        .on_hover_text("Shows the 24-word spend key")
+                                        .clicked()
+                                    {
                                         row.revealed = true;
                                     }
                                     if ui.button("Copy address").clicked() {
@@ -549,19 +866,46 @@ impl eframe::App for VanityApp {
                             });
                         ui.add_space(8.0);
                     }
+                    if copied {
+                        self.secret_notice = Some((
+                            "Mnemonic is on the clipboard until you overwrite it.".into(),
+                            Instant::now(),
+                        ));
+                    }
                 });
             });
     }
 }
 
+fn empty_hits(ui: &mut egui::Ui, running: bool) {
+    if running {
+        ui.label(RichText::new("Listening for matches…").color(DIM));
+        return;
+    }
+    ui.label(RichText::new("No matches yet.").color(DIM).size(14.0));
+    ui.add_space(8.0);
+    ui.label(
+        RichText::new(
+            "Prefix 9e–9i uses the GPU when OpenCL is available. Suffix and contains are CPU-only.",
+        )
+        .color(DIM),
+    );
+    ui.label(
+        RichText::new(
+            "Start runs a search. Estimate updates as you type. A hit is a wallet — leave the mnemonic hidden until you need it.",
+        )
+        .color(DIM),
+    );
+}
+
 fn stat_card(ui: &mut egui::Ui, label: &str, value: &str, value_color: Color32) {
     egui::Frame::NONE
         .fill(PANEL)
-        .inner_margin(egui::Margin::symmetric(12, 10))
+        .inner_margin(egui::Margin::symmetric(10, 10))
         .show(ui, |ui| {
-            ui.set_min_width(140.0);
+            ui.set_min_width(118.0);
             ui.label(RichText::new(label).color(DIM).size(10.0).strong());
-            ui.label(RichText::new(value).color(value_color).size(22.0).strong());
+            ui.label(RichText::new(value).color(value_color).size(20.0).strong());
         });
 }
 
@@ -619,12 +963,26 @@ fn draw_sparkline(ui: &mut egui::Ui, hist: &VecDeque<f32>, running: bool) {
 }
 
 fn format_count(n: u64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.2}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}k", n as f64 / 1_000.0)
+    let s = n.to_string();
+    let mut out = String::new();
+    for (i, c) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out.chars().rev().collect()
+}
+
+fn format_elapsed(d: Duration) -> String {
+    let s = d.as_secs();
+    let h = s / 3600;
+    let m = (s % 3600) / 60;
+    let sec = s % 60;
+    if h > 0 {
+        format!("{h}:{m:02}:{sec:02}")
     } else {
-        n.to_string()
+        format!("{m}:{sec:02}")
     }
 }
 
@@ -641,18 +999,38 @@ fn install_fonts(ctx: &egui::Context) {
         let mut fonts = FontDefinitions::default();
         fonts
             .font_data
-            .insert("miner".into(), FontData::from_owned(bytes).into());
+            .insert("mono".into(), FontData::from_owned(bytes).into());
         fonts
             .families
             .entry(FontFamily::Proportional)
             .or_default()
-            .insert(0, "miner".into());
+            .insert(0, "mono".into());
         fonts
             .families
             .entry(FontFamily::Monospace)
             .or_default()
-            .insert(0, "miner".into());
+            .insert(0, "mono".into());
         ctx.set_fonts(fonts);
         return;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_count_groups_thousands() {
+        assert_eq!(format_count(0), "0");
+        assert_eq!(format_count(999), "999");
+        assert_eq!(format_count(1_234), "1,234");
+        assert_eq!(format_count(1_000_000), "1,000,000");
+    }
+
+    #[test]
+    fn format_elapsed_hms() {
+        assert_eq!(format_elapsed(Duration::from_secs(5)), "0:05");
+        assert_eq!(format_elapsed(Duration::from_secs(83)), "1:23");
+        assert_eq!(format_elapsed(Duration::from_secs(3723)), "1:02:03");
     }
 }
