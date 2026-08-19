@@ -6,11 +6,31 @@ GPU-accelerated Ergo vanity address generator (OpenCL). Prefix search uses the G
 
 This is the surviving repo for arkadianet vanity tools. The older CPU/GUI project [ergo-vanitygen-rust](https://github.com/arkadianet/ergo-vanitygen-rust) is superseded here.
 
-> **Early development — use at your own risk.**
+> **Unaudited crypto — use at your own risk.**
 >
-> Crypto (BIP39, BIP32, secp256k1, …) was written from scratch and is not audited. Do not store significant funds on a generated address until you independently verify the mnemonic in trusted software (for example the official Ergo wallet).
+> BIP39, BIP32, secp256k1, and the rest were written from scratch and are not audited. Do not store significant funds on a generated address until you independently verify the mnemonic in trusted software (for example the official Ergo wallet).
 >
 > **Mnemonics and entropy are secrets.** Treat match output as a wallet dump. `Debug` redacts them; stdout does not.
+
+## Quick start
+
+Download a [release](https://github.com/arkadianet/erg-vanity-gpu/releases) binary (Windows zip, Linux or macOS tarball), or build:
+
+```bash
+cargo build --release -p erg-vanity-cli
+```
+
+Run `erg-vanity` / `erg-vanity.exe` with no arguments for the GUI. Use `--no-gui` to stay in the terminal.
+
+- Prefix patterns must start `9e`–`9i` (Ergo mainnet P2PK)
+- Prefix uses the GPU when OpenCL is available; **suffix and contains are CPU-only**
+- Devices: `auto` / `0` / `all` / `cpu`
+- BIP44 slots default **1**. More slots = more addr/s on the same seeds
+- Stop to keep hits. Verify the mnemonic in a trusted Ergo wallet before funding
+
+![erg-vanity GUI during a prefix search](docs/images/gui-search.png)
+
+*Live ~14.5M addr/s with BIP44 slots set to 100 on an RTX 3080 Ti. That is not the `--index 1` seed rate (~600k seeds/s on the same card).*
 
 ## Features
 
@@ -136,11 +156,11 @@ Progress goes to stderr: `Checked: N (rate addr/s) [found/target]`.
 
 ## Performance
 
-Measured **RTX 3080 Ti**, 18 Aug 2026, default `--index 1`, after cheaper *k*·G and slimmer SHA-512 init:
+Measured **RTX 3080 Ti**, 19 Aug 2026, default `--index 1`, after comb *k*·G and batched SHA-512 W:
 
 | Mode | Result |
 |------|--------|
-| Live search | ~455k seeds/s (earlier live baselines ~330k then ~368k) |
+| Live search | ~600k seeds/s (measured ~590–610k; earlier ~330k → ~368k → ~455k) |
 | Isolated PBKDF2 | ~1600 ns/seed (~56–64% of isolated time) |
 | Isolated BIP32 | ~628 ns/addr |
 | Isolated secp256k1 | ~285 ns/addr |
@@ -152,16 +172,16 @@ Measured **RTX 3080 Ti**, 18 Aug 2026, default `--index 1`, after cheaper *k*·G
 ./target/release/erg-vanity --bench --bench-validate
 ```
 
-Expected wait for a **single** prefix on a 3080 Ti at ~455k seeds/s (`5 × 58^(n−2)` combinations, 1.2× `--estimate` factor):
+Expected wait for a **single** prefix on a 3080 Ti at ~600k seeds/s (`5 × 58^(n−2)` combinations, 1.2× `--estimate` factor). Pre-search GUI/CLI times are a hardware guess; live ETA uses the measured addr/s.
 
 | Pattern | Combinations | Expected time |
 |---------|--------------|---------------|
 | 4 chars (`9err`) | ~17K | < 1 second |
-| 5 chars (`9ergo`) | ~976K | ~3 seconds |
-| 6 chars (`9ergoo`) | ~57M | ~2.5 minutes |
-| 7 chars | ~3.3B | ~2.4 hours |
+| 5 chars (`9ergo`) | ~976K | ~2 seconds |
+| 6 chars (`9ergoo`) | ~57M | ~1.9 minutes |
+| 7 chars | ~3.3B | ~1.8 hours |
 
-Rates vary by GPU, driver, and pattern. RTX 4090 is higher; we have not published a current measurement.
+Rates vary by GPU, driver, and pattern. Raising BIP44 slots multiplies **addr/s**, not seeds/s. RTX 4090 is higher; we have not published a current measurement.
 
 ## How it works
 

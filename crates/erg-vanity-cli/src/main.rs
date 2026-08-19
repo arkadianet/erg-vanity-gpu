@@ -1,8 +1,8 @@
 use clap::Parser;
 use erg_vanity_cpu::MatchType;
 use erg_vanity_engine::{
-    estimate_pattern, format_time, list_gpu_devices, run_search, Backend, SearchEvent,
-    SearchRequest, CPU_ASSUMED_RATE, GPU_ASSUMED_RATE,
+    estimate_pattern, format_rate, format_time, guess_rate_for, list_gpu_device_hints,
+    list_gpu_devices, run_search, Backend, SearchEvent, SearchRequest,
 };
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -166,21 +166,34 @@ fn print_hit(hit: &erg_vanity_engine::Hit, originals: &[String], match_num: usiz
     println!("Entropy:  {}", hex::encode(hit.entropy));
 }
 
-fn format_assumed_rate(rate: f64) -> String {
-    let s = format!("{:.0}", rate);
-    let mut out = String::new();
-    for (i, c) in s.chars().rev().enumerate() {
-        if i > 0 && i % 3 == 0 {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out.chars().rev().collect()
-}
-
-fn run_estimate(patterns: &[String], match_type: MatchType, ignore_case: bool) {
+fn run_estimate(
+    patterns: &[String],
+    match_type: MatchType,
+    ignore_case: bool,
+    backend: &Backend,
+    num_indices: u32,
+) {
+    let devices = list_gpu_device_hints().unwrap_or_default();
+    let guess = guess_rate_for(&devices, backend, match_type, num_indices);
     println!("Difficulty Estimation");
     println!("====================");
+    if !matches!(match_type, MatchType::Prefix) {
+        println!("Suffix and contains run on CPU only.");
+    }
+    println!(
+        "Rate guess: {} addr/s ({})",
+        format_rate(guess.addr_per_sec),
+        guess.note()
+    );
+    if guess.is_gpu && num_indices > 1 {
+        println!(
+            "  {} seeds/s × {} BIP44 slots (addr/s, not a timer guarantee)",
+            format_rate(guess.seeds_per_sec),
+            num_indices
+        );
+    } else if guess.is_gpu {
+        println!("  Not a timer guarantee. Live search uses the measured rate.");
+    }
     for p in patterns {
         let est = estimate_pattern(p, match_type, ignore_case);
         println!("\nPattern: \"{p}\"");
@@ -190,16 +203,11 @@ fn run_estimate(patterns: &[String], match_type: MatchType, ignore_case: bool) {
                 est.invalid_chars.iter().collect::<String>()
             );
         } else {
-            println!("Estimated attempts: {:.0}", est.attempts_needed);
             println!(
-                "  At {} addr/s: {}",
-                format_assumed_rate(CPU_ASSUMED_RATE),
-                format_time(est.attempts_needed / CPU_ASSUMED_RATE)
-            );
-            println!(
-                "  At {} addr/s: {}",
-                format_assumed_rate(GPU_ASSUMED_RATE),
-                format_time(est.attempts_needed / GPU_ASSUMED_RATE)
+                "  ~{} attempts · {} ({})",
+                format_rate(est.attempts_needed),
+                format_time(est.attempts_needed / guess.addr_per_sec.max(1.0)),
+                guess.note()
             );
         }
     }
@@ -288,7 +296,20 @@ fn main() {
             eprintln!("Error: --estimate requires -p");
             std::process::exit(2);
         }
-        run_estimate(&patterns, match_type, args.ignore_case);
+        let backend = match parse_backend(&args.devices) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Error: {e}");
+                std::process::exit(2);
+            }
+        };
+        run_estimate(
+            &patterns,
+            match_type,
+            args.ignore_case,
+            &backend,
+            args.num_indices,
+        );
         return;
     }
 
@@ -409,6 +430,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use erg_vanity_engine::{CPU_ASSUMED_RATE, GPU_ASSUMED_RATE};
 
     #[test]
     fn backend_auto() {
@@ -431,8 +453,8 @@ mod tests {
 
     #[test]
     fn estimate_rate_labels_match_constants() {
-        let cpu = format_assumed_rate(CPU_ASSUMED_RATE);
-        let gpu = format_assumed_rate(GPU_ASSUMED_RATE);
+        let cpu = format_rate(CPU_ASSUMED_RATE);
+        let gpu = format_rate(GPU_ASSUMED_RATE);
         assert_eq!(
             cpu.replace(',', "").parse::<f64>().unwrap(),
             CPU_ASSUMED_RATE

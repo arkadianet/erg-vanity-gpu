@@ -37,6 +37,8 @@ pub struct DeviceInfo {
     pub vendor: String,
     /// Max compute units
     pub compute_units: u32,
+    /// Max clock (MHz) when the OpenCL runtime reports it
+    pub max_clock_mhz: Option<u32>,
     /// Max work group size
     pub max_work_group_size: usize,
     /// Global memory size in bytes
@@ -156,6 +158,14 @@ impl GpuContext {
                     })
                     .unwrap_or(0);
 
+                let max_clock_mhz = device
+                    .info(ocl::enums::DeviceInfo::MaxClockFrequency)
+                    .ok()
+                    .and_then(|i| match i {
+                        ocl::enums::DeviceInfoResult::MaxClockFrequency(n) if n > 0 => Some(n),
+                        _ => None,
+                    });
+
                 let max_work_group_size = device
                     .info(ocl::enums::DeviceInfo::MaxWorkGroupSize)
                     .map(|i| match i {
@@ -188,6 +198,7 @@ impl GpuContext {
                     device_name,
                     vendor,
                     compute_units,
+                    max_clock_mhz,
                     max_work_group_size,
                     global_mem_size,
                     local_mem_size,

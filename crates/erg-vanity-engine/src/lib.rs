@@ -7,7 +7,9 @@ pub mod search;
 pub mod verify;
 
 pub use estimate::{
-    estimate_pattern, format_time, PatternEstimate, CPU_ASSUMED_RATE, GPU_ASSUMED_RATE,
+    estimate_pattern, format_rate, format_time, guess_rate_for, list_gpu_device_hints,
+    GpuDeviceHint, PatternEstimate, RateGuess, CPU_ASSUMED_RATE, GPU_ASSUMED_RATE,
+    GPU_BASELINE_SEEDS_PER_SEC,
 };
 pub use search::{
     list_gpu_devices, run_search, validate_pattern, Backend, Hit, SearchEvent, SearchRequest,
