@@ -518,18 +518,9 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
 
 /// List OpenCL GPUs for `--list-devices`.
 pub fn list_gpu_devices() -> Result<Vec<String>, String> {
-    let devices = GpuContext::enumerate_devices().map_err(|e| e.to_string())?;
-    Ok(devices
+    Ok(crate::estimate::list_gpu_device_hints()?
         .into_iter()
-        .map(|info| {
-            format!(
-                "[{}] {} - {} (platform: {})",
-                info.global_idx,
-                info.vendor.trim(),
-                info.device_name.trim(),
-                info.platform_name.trim()
-            )
-        })
+        .map(|d| d.display_line())
         .collect())
 }
 

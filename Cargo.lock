@@ -1506,7 +1506,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "erg-vanity-address"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bs58 0.5.1",
  "erg-vanity-crypto",
@@ -1515,7 +1515,7 @@ dependencies = [
 
 [[package]]
 name = "erg-vanity-bip"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "erg-vanity-core",
  "erg-vanity-crypto",
@@ -1525,7 +1525,7 @@ dependencies = [
 
 [[package]]
 name = "erg-vanity-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "ctrlc",
@@ -1538,14 +1538,14 @@ dependencies = [
 
 [[package]]
 name = "erg-vanity-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "erg-vanity-cpu"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bip39",
  "erg-vanity-address",
@@ -1560,7 +1560,7 @@ dependencies = [
 
 [[package]]
 name = "erg-vanity-crypto"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake2",
  "bs58 0.5.1",
@@ -1573,7 +1573,7 @@ dependencies = [
 
 [[package]]
 name = "erg-vanity-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bip39",
  "erg-vanity-address",
@@ -1585,7 +1585,7 @@ dependencies = [
 
 [[package]]
 name = "erg-vanity-gpu"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "erg-vanity-address",
  "erg-vanity-bip",
@@ -1600,7 +1600,7 @@ dependencies = [
 
 [[package]]
 name = "erg-vanity-gui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "eframe",
  "egui",

@@ -3,8 +3,8 @@
 use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, RichText, Stroke};
 use erg_vanity_cpu::MatchType;
 use erg_vanity_engine::{
-    estimate_pattern, format_time, list_gpu_devices, run_search, Backend, Hit, SearchEvent,
-    SearchRequest, CPU_ASSUMED_RATE, GPU_ASSUMED_RATE,
+    estimate_pattern, format_rate, format_time, guess_rate_for, list_gpu_device_hints, run_search,
+    Backend, GpuDeviceHint, Hit, RateGuess, SearchEvent, SearchRequest,
 };
 use std::collections::VecDeque;
 use std::io::Write;
@@ -69,6 +69,7 @@ struct VanityApp {
     rx: Option<Receiver<SearchEvent>>,
     worker: Option<JoinHandle<()>>,
     devices_hint: String,
+    gpu_devices: Vec<GpuDeviceHint>,
     gpu_present: bool,
     started_at: Option<Instant>,
     elapsed: Duration,
@@ -108,13 +109,21 @@ impl VanityApp {
         style.spacing.button_padding = egui::vec2(12.0, 6.0);
         cc.egui_ctx.set_style(style);
 
-        let (gpu_present, devices_hint) = match list_gpu_devices() {
+        let (gpu_present, devices_hint, gpu_devices) = match list_gpu_device_hints() {
             Ok(list) if list.is_empty() => (
                 false,
                 "No OpenCL GPU — prefix search falls back to CPU.".into(),
+                Vec::new(),
             ),
-            Ok(list) => (true, list.join("  ·  ")),
-            Err(e) => (false, format!("OpenCL: {e}")),
+            Ok(list) => {
+                let hint = list
+                    .iter()
+                    .map(|d| d.display_line())
+                    .collect::<Vec<_>>()
+                    .join("  ·  ");
+                (true, hint, list)
+            }
+            Err(e) => (false, format!("OpenCL: {e}"), Vec::new()),
         };
 
         Self {
@@ -138,6 +147,7 @@ impl VanityApp {
             rx: None,
             worker: None,
             devices_hint,
+            gpu_devices,
             gpu_present,
             started_at: None,
             elapsed: Duration::ZERO,
@@ -196,12 +206,18 @@ impl VanityApp {
         !matches!(self.backend(), Ok(Backend::Cpu))
     }
 
+    fn rate_guess(&self) -> RateGuess {
+        let backend = self.backend().unwrap_or(Backend::Auto);
+        guess_rate_for(
+            &self.gpu_devices,
+            &backend,
+            self.match_type(),
+            self.num_indices.max(1),
+        )
+    }
+
     fn assumed_rate(&self) -> f64 {
-        if self.uses_gpu() {
-            GPU_ASSUMED_RATE
-        } else {
-            CPU_ASSUMED_RATE
-        }
+        self.rate_guess().addr_per_sec
     }
 
     fn display_rate(&self) -> f64 {
@@ -264,10 +280,8 @@ impl VanityApp {
         let rate = self.display_rate();
         let rate_note = if self.running && self.rate >= 1.0 {
             format!("{:.0}/s live", self.rate)
-        } else if self.uses_gpu() {
-            format!("{:.0}k/s assumed GPU", GPU_ASSUMED_RATE / 1000.0)
         } else {
-            format!("{:.0}k/s assumed CPU", CPU_ASSUMED_RATE / 1000.0)
+            self.rate_guess().note()
         };
         let mut lines = Vec::new();
         for p in self.pattern_list() {
@@ -282,8 +296,8 @@ impl VanityApp {
                     est.attempts_needed
                 };
                 lines.push(format!(
-                    "{p}: ~{:.0} attempts · {} ({rate_note})",
-                    est.attempts_needed,
+                    "{p}: ~{} attempts · {} ({rate_note})",
+                    format_rate(est.attempts_needed),
                     format_time(left / rate.max(1.0))
                 ));
             }
