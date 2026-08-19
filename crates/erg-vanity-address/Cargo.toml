@@ -7,9 +7,7 @@ authors.workspace = true
 description = "Ergo P2PK address encoding"
 
 [dependencies]
-erg-vanity-core = { path = "../erg-vanity-core" }
 erg-vanity-crypto = { path = "../erg-vanity-crypto" }
-thiserror = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }

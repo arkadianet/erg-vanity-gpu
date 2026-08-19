@@ -4,7 +4,7 @@ use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, RichTex
 use erg_vanity_cpu::MatchType;
 use erg_vanity_engine::{
     estimate_pattern, format_time, list_gpu_devices, run_search, Backend, Hit, SearchEvent,
-    SearchRequest,
+    SearchRequest, CPU_ASSUMED_RATE, GPU_ASSUMED_RATE,
 };
 use std::collections::VecDeque;
 use std::io::Write;
@@ -24,9 +24,6 @@ const LIVE: Color32 = Color32::from_rgb(72, 196, 120);
 const WARN: Color32 = Color32::from_rgb(196, 140, 64);
 const ERR: Color32 = Color32::from_rgb(208, 88, 64);
 
-/// CLI estimate table uses these two rates; suffix/contains are CPU-only.
-const GPU_ASSUMED_RATE: f64 = 330_000.0;
-const CPU_ASSUMED_RATE: f64 = 10_000.0;
 const COMPILE_HINT: &str = "Compiling OpenCL (first run after a kernel change can take a minute)…";
 
 /// Launch the native window.

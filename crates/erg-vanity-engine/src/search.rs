@@ -13,8 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub const MAX_PATTERN_LEN: usize = 32;
-pub const MAX_PATTERNS: usize = 64;
-pub const MAX_PATTERN_DATA: usize = 1024;
+pub use erg_vanity_gpu::buffers::{MAX_PATTERNS, MAX_PATTERN_DATA};
 
 const BASE58: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const VALID_SECOND: &[char] = &['e', 'f', 'g', 'h', 'i'];

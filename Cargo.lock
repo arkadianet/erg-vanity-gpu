@@ -1509,10 +1509,8 @@ name = "erg-vanity-address"
 version = "0.1.0"
 dependencies = [
  "bs58 0.5.1",
- "erg-vanity-core",
  "erg-vanity-crypto",
  "hex",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1522,7 +1520,6 @@ dependencies = [
  "erg-vanity-core",
  "erg-vanity-crypto",
  "hex",
- "thiserror 1.0.69",
  "unicode-normalization",
 ]
 
@@ -1537,7 +1534,6 @@ dependencies = [
  "erg-vanity-gpu",
  "erg-vanity-gui",
  "hex",
- "rand",
 ]
 
 [[package]]
@@ -1554,14 +1550,12 @@ dependencies = [
  "bip39",
  "erg-vanity-address",
  "erg-vanity-bip",
- "erg-vanity-core",
  "erg-vanity-crypto",
  "ergo-lib",
  "hex",
  "rand",
  "rand_chacha",
  "rayon",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1570,13 +1564,11 @@ version = "0.1.0"
 dependencies = [
  "blake2",
  "bs58 0.5.1",
- "erg-vanity-core",
  "hex",
  "hmac",
  "k256",
  "pbkdf2 0.12.2",
  "sha2 0.10.9",
- "thiserror 1.0.69",
 ]
 
 [[package]]

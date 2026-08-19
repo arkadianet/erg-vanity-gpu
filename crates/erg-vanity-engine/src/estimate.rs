@@ -2,6 +2,10 @@
 
 use erg_vanity_cpu::MatchType;
 
+/// Assumed rates for `--estimate` / GUI time-to-hit (not live measured throughput).
+pub const GPU_ASSUMED_RATE: f64 = 330_000.0;
+pub const CPU_ASSUMED_RATE: f64 = 10_000.0;
+
 /// Estimated effort for a pattern.
 #[derive(Debug, Clone)]
 pub struct PatternEstimate {

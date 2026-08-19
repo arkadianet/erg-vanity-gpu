@@ -6,7 +6,9 @@ pub mod estimate;
 pub mod search;
 pub mod verify;
 
-pub use estimate::{estimate_pattern, format_time, PatternEstimate};
+pub use estimate::{
+    estimate_pattern, format_time, PatternEstimate, CPU_ASSUMED_RATE, GPU_ASSUMED_RATE,
+};
 pub use search::{
     list_gpu_devices, run_search, validate_pattern, Backend, Hit, SearchEvent, SearchRequest,
     MAX_PATTERNS, MAX_PATTERN_DATA, MAX_PATTERN_LEN,

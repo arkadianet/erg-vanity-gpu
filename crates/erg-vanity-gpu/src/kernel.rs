@@ -21,26 +21,25 @@ pub mod sources {
     pub const VANITY: &str = include_str!("../kernels/vanity.cl");
     pub const BENCH: &str = include_str!("../kernels/bench.cl");
 
-    // Test kernels (unit tests OR integration tests with --features test-kernels)
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub(crate) const SHA256_TEST: &str = include_str!("../kernels/sha256_test.cl");
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub(crate) const SHA512_TEST: &str = include_str!("../kernels/sha512_test.cl");
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub(crate) const HMAC_SHA512_TEST: &str = include_str!("../kernels/hmac_sha512_test.cl");
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub(crate) const PBKDF2_TEST: &str = include_str!("../kernels/pbkdf2_test.cl");
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub(crate) const SECP256K1_FE_TEST: &str = include_str!("../kernels/secp256k1_fe_test.cl");
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub(crate) const SECP256K1_SCALAR_TEST: &str =
         include_str!("../kernels/secp256k1_scalar_test.cl");
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub(crate) const SECP256K1_POINT_TEST: &str =
         include_str!("../kernels/secp256k1_point_test.cl");
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub(crate) const BLAKE2B_TEST: &str = include_str!("../kernels/blake2b_test.cl");
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub(crate) const BASE58_TEST: &str = include_str!("../kernels/base58_test.cl");
 }
 
@@ -101,21 +100,21 @@ impl GpuProgram {
     }
 
     /// Compile the SHA-256 test program.
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub fn sha256_test(ctx: &GpuContext) -> Result<Self, GpuError> {
         let combined = format!("{}\n{}", sources::SHA256, sources::SHA256_TEST);
         Self::from_source(ctx, &combined)
     }
 
     /// Compile the SHA-512 test program.
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub fn sha512_test(ctx: &GpuContext) -> Result<Self, GpuError> {
         let combined = format!("{}\n{}", sources::SHA512, sources::SHA512_TEST);
         Self::from_source(ctx, &combined)
     }
 
     /// Compile the HMAC-SHA512 test program.
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub fn hmac_sha512_test(ctx: &GpuContext) -> Result<Self, GpuError> {
         let combined = format!(
             "{}\n{}\n{}",
@@ -127,7 +126,7 @@ impl GpuProgram {
     }
 
     /// Compile the PBKDF2 test program.
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub fn pbkdf2_test(ctx: &GpuContext) -> Result<Self, GpuError> {
         let combined = format!(
             "{}\n{}\n{}\n{}",
@@ -140,14 +139,14 @@ impl GpuProgram {
     }
 
     /// Compile the secp256k1 field test program.
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub fn secp256k1_fe_test(ctx: &GpuContext) -> Result<Self, GpuError> {
         let combined = format!("{}\n{}", sources::SECP256K1_FE, sources::SECP256K1_FE_TEST);
         Self::from_source(ctx, &combined)
     }
 
     /// Compile the secp256k1 scalar test program.
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub fn secp256k1_scalar_test(ctx: &GpuContext) -> Result<Self, GpuError> {
         let combined = format!(
             "{}\n{}",
@@ -158,7 +157,7 @@ impl GpuProgram {
     }
 
     /// Compile the secp256k1 point test program.
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub fn secp256k1_point_test(ctx: &GpuContext) -> Result<Self, GpuError> {
         let combined = format!(
             "{}\n{}\n{}\n{}\n{}",
@@ -172,14 +171,14 @@ impl GpuProgram {
     }
 
     /// Compile the Blake2b-256 test program.
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub fn blake2b_test(ctx: &GpuContext) -> Result<Self, GpuError> {
         let combined = format!("{}\n{}", sources::BLAKE2B, sources::BLAKE2B_TEST);
         Self::from_source(ctx, &combined)
     }
 
     /// Compile the Base58 test program.
-    #[cfg(any(test, feature = "test-kernels"))]
+    #[cfg(test)]
     pub fn base58_test(ctx: &GpuContext) -> Result<Self, GpuError> {
         let combined = format!("{}\n{}", sources::BASE58, sources::BASE58_TEST);
         Self::from_source(ctx, &combined)
@@ -188,7 +187,7 @@ impl GpuProgram {
     /// Compile the full vanity address search program.
     ///
     /// Concatenates all required kernels in dependency order:
-    /// sha256 → sha512 → hmac_sha512 → pbkdf2 → secp256k1 → blake2b → base58 → bip39 → bip32 → vanity
+    /// sha256 → sha512 → hmac_sha512 → pbkdf2 → secp256k1_fe/scalar → g_table → secp256k1_point → blake2b → base58 → bip39 → bip32 → vanity
     pub fn vanity(ctx: &GpuContext) -> Result<Self, GpuError> {
         // Pre-allocate to avoid reallocations on multi-hundred-KB source blob.
         let mut combined = String::with_capacity(
@@ -255,7 +254,7 @@ impl GpuProgram {
     /// Compile the benchmark program with separate kernels for each component.
     ///
     /// Concatenates all required kernels in dependency order:
-    /// sha256 → sha512 → hmac_sha512 → pbkdf2 → secp256k1 → blake2b → base58 → bip39 → bip32 → bench
+    /// sha256 → sha512 → hmac_sha512 → pbkdf2 → secp256k1_fe/scalar → g_table → secp256k1_point → blake2b → base58 → bip39 → bip32 → bench
     pub fn bench(ctx: &GpuContext) -> Result<Self, GpuError> {
         // Pre-allocate to avoid reallocations
         let mut combined = String::with_capacity(
