@@ -166,6 +166,18 @@ fn print_hit(hit: &erg_vanity_engine::Hit, originals: &[String], match_num: usiz
     println!("Entropy:  {}", hex::encode(hit.entropy));
 }
 
+fn format_assumed_rate(rate: f64) -> String {
+    let s = format!("{:.0}", rate);
+    let mut out = String::new();
+    for (i, c) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out.chars().rev().collect()
+}
+
 fn run_estimate(patterns: &[String], match_type: MatchType, ignore_case: bool) {
     println!("Difficulty Estimation");
     println!("====================");
@@ -180,11 +192,13 @@ fn run_estimate(patterns: &[String], match_type: MatchType, ignore_case: bool) {
         } else {
             println!("Estimated attempts: {:.0}", est.attempts_needed);
             println!(
-                "  At 10,000 addr/s: {}",
+                "  At {} addr/s: {}",
+                format_assumed_rate(CPU_ASSUMED_RATE),
                 format_time(est.attempts_needed / CPU_ASSUMED_RATE)
             );
             println!(
-                "  At 330,000 addr/s: {}",
+                "  At {} addr/s: {}",
+                format_assumed_rate(GPU_ASSUMED_RATE),
                 format_time(est.attempts_needed / GPU_ASSUMED_RATE)
             );
         }
@@ -413,5 +427,19 @@ mod tests {
             panic!("expected gpu");
         };
         assert_eq!(devices, vec![0, 2]);
+    }
+
+    #[test]
+    fn estimate_rate_labels_match_constants() {
+        let cpu = format_assumed_rate(CPU_ASSUMED_RATE);
+        let gpu = format_assumed_rate(GPU_ASSUMED_RATE);
+        assert_eq!(
+            cpu.replace(',', "").parse::<f64>().unwrap(),
+            CPU_ASSUMED_RATE
+        );
+        assert_eq!(
+            gpu.replace(',', "").parse::<f64>().unwrap(),
+            GPU_ASSUMED_RATE
+        );
     }
 }
