@@ -2,6 +2,7 @@
 
 pub mod bench;
 pub mod buffers;
+pub mod comb;
 pub mod context;
 pub mod kernel;
 pub mod pipeline;

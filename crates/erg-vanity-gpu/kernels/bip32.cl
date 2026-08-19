@@ -160,6 +160,23 @@ inline int bip32_derive_normal_table(
     );
 }
 
+inline int bip32_derive_normal_comb(
+    __private const uchar* parent_key,
+    __private const uchar* parent_chain_code,
+    uint index,
+    __private uchar* child_key,
+    __private uchar* child_chain_code,
+    __global const uint* comb
+) {
+    uchar pubkey[33];
+    if (priv_to_compressed_pubkey_comb(parent_key, pubkey, comb) != 0) {
+        return 1;
+    }
+    return bip32_derive_normal_from_pub(
+        parent_key, parent_chain_code, pubkey, index, child_key, child_chain_code
+    );
+}
+
 // Normal CKD when the parent compressed pubkey is already known.
 // Avoids recomputing parent*G for every address index under the same parent.
 inline int bip32_derive_normal_from_pub(
@@ -215,6 +232,49 @@ inline int bip32_derive_normal_from_pub(
     return 0;
 }
 
+// Shared prefix of the three external-chain variants: master + m/44'/429'/0'.
+// Error codes 1-4 stay in sync with bip32_derive_ergo_external_chain{,_table,_comb}.
+inline int bip32_derive_ergo_account(
+    __private const uchar* seed,
+    __private uchar* key,
+    __private uchar* chain_code
+) {
+    uchar child_key[32], child_chain_code[32];
+
+    if (bip32_master_key(seed, key, chain_code) != 0) {
+        return 1;
+    }
+
+    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 44u,
+                               child_key, child_chain_code) != 0) {
+        return 2;
+    }
+    for (int i = 0; i < 32; i++) {
+        key[i] = child_key[i];
+        chain_code[i] = child_chain_code[i];
+    }
+
+    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 429u,
+                               child_key, child_chain_code) != 0) {
+        return 3;
+    }
+    for (int i = 0; i < 32; i++) {
+        key[i] = child_key[i];
+        chain_code[i] = child_chain_code[i];
+    }
+
+    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 0u,
+                               child_key, child_chain_code) != 0) {
+        return 4;
+    }
+    for (int i = 0; i < 32; i++) {
+        key[i] = child_key[i];
+        chain_code[i] = child_chain_code[i];
+    }
+
+    return 0;
+}
+
 // Ergo derivation to external chain: m/44'/429'/0'/0
 // Derives key and chain code at the external chain level (before final address index).
 // Use this to amortize PBKDF2 cost when checking multiple address indices.
@@ -227,48 +287,16 @@ inline int bip32_derive_ergo_external_chain(
     uchar key[32], chain_code[32];
     uchar child_key[32], child_chain_code[32];
 
-    // Master key
-    if (bip32_master_key(seed, key, chain_code) != 0) {
-        return 1;
+    int err = bip32_derive_ergo_account(seed, key, chain_code);
+    if (err != 0) {
+        return err;
     }
 
-    // m/44' (hardened)
-    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 44u,
-                               child_key, child_chain_code) != 0) {
-        return 2;
-    }
-    for (int i = 0; i < 32; i++) {
-        key[i] = child_key[i];
-        chain_code[i] = child_chain_code[i];
-    }
-
-    // m/44'/429' (hardened)
-    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 429u,
-                               child_key, child_chain_code) != 0) {
-        return 3;
-    }
-    for (int i = 0; i < 32; i++) {
-        key[i] = child_key[i];
-        chain_code[i] = child_chain_code[i];
-    }
-
-    // m/44'/429'/0' (hardened)
-    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 0u,
-                               child_key, child_chain_code) != 0) {
-        return 4;
-    }
-    for (int i = 0; i < 32; i++) {
-        key[i] = child_key[i];
-        chain_code[i] = child_chain_code[i];
-    }
-
-    // m/44'/429'/0'/0 (normal) - external chain
     if (bip32_derive_normal(key, chain_code, 0u,
                              child_key, child_chain_code) != 0) {
         return 5;
     }
 
-    // Output key and chain code at external chain level
     for (int i = 0; i < 32; i++) {
         key_out[i] = child_key[i];
         chain_code_out[i] = child_chain_code[i];
@@ -286,39 +314,40 @@ inline int bip32_derive_ergo_external_chain_table(
     uchar key[32], chain_code[32];
     uchar child_key[32], child_chain_code[32];
 
-    if (bip32_master_key(seed, key, chain_code) != 0) {
-        return 1;
-    }
-
-    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 44u,
-                               child_key, child_chain_code) != 0) {
-        return 2;
-    }
-    for (int i = 0; i < 32; i++) {
-        key[i] = child_key[i];
-        chain_code[i] = child_chain_code[i];
-    }
-
-    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 429u,
-                               child_key, child_chain_code) != 0) {
-        return 3;
-    }
-    for (int i = 0; i < 32; i++) {
-        key[i] = child_key[i];
-        chain_code[i] = child_chain_code[i];
-    }
-
-    if (bip32_derive_hardened(key, chain_code, BIP32_HARDENED | 0u,
-                               child_key, child_chain_code) != 0) {
-        return 4;
-    }
-    for (int i = 0; i < 32; i++) {
-        key[i] = child_key[i];
-        chain_code[i] = child_chain_code[i];
+    int err = bip32_derive_ergo_account(seed, key, chain_code);
+    if (err != 0) {
+        return err;
     }
 
     if (bip32_derive_normal_table(key, chain_code, 0u,
                                   child_key, child_chain_code, g_table) != 0) {
+        return 5;
+    }
+
+    for (int i = 0; i < 32; i++) {
+        key_out[i] = child_key[i];
+        chain_code_out[i] = child_chain_code[i];
+    }
+
+    return 0;
+}
+
+inline int bip32_derive_ergo_external_chain_comb(
+    __private const uchar* seed,
+    __private uchar* key_out,
+    __private uchar* chain_code_out,
+    __global const uint* comb
+) {
+    uchar key[32], chain_code[32];
+    uchar child_key[32], child_chain_code[32];
+
+    int err = bip32_derive_ergo_account(seed, key, chain_code);
+    if (err != 0) {
+        return err;
+    }
+
+    if (bip32_derive_normal_comb(key, chain_code, 0u,
+                                 child_key, child_chain_code, comb) != 0) {
         return 5;
     }
 
@@ -342,6 +371,24 @@ inline int bip32_derive_address_index(
     uchar child_key[32], child_chain_code[32];
     if (bip32_derive_normal(external_key, external_chain_code, address_index,
                              child_key, child_chain_code) != 0) {
+        return 1;
+    }
+    for (int i = 0; i < 32; i++) {
+        final_key[i] = child_key[i];
+    }
+    return 0;
+}
+
+inline int bip32_derive_address_index_comb(
+    __private const uchar* external_key,
+    __private const uchar* external_chain_code,
+    uint address_index,
+    __private uchar* final_key,
+    __global const uint* comb
+) {
+    uchar child_key[32], child_chain_code[32];
+    if (bip32_derive_normal_comb(external_key, external_chain_code, address_index,
+                                 child_key, child_chain_code, comb) != 0) {
         return 1;
     }
     for (int i = 0; i < 32; i++) {

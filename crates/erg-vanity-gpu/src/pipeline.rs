@@ -1,6 +1,7 @@
 //! GPU pipeline orchestration for vanity address search.
 
 use crate::buffers::{GpuBuffers, GpuHit, MAX_HITS};
+use crate::comb::CombTableBuffer;
 use crate::context::{GpuContext, GpuError};
 use crate::kernel::GpuProgram;
 use crate::wordlist::WordlistBuffers;
@@ -9,9 +10,6 @@ use ocl::enums::{KernelWorkGroupInfo, KernelWorkGroupInfoResult};
 use ocl::Kernel;
 use rand::RngCore;
 use std::fmt;
-
-/// `__local uint g_local[6144]` in vanity_search (24 KiB).
-const G_TABLE_LOCAL_BYTES: u64 = 6144 * 4;
 
 /// Configuration for vanity search.
 #[derive(Debug, Clone)]
@@ -137,6 +135,8 @@ pub struct VanityPipeline {
     buffers: GpuBuffers,
     #[allow(dead_code)]
     wordlist: WordlistBuffers,
+    #[allow(dead_code)]
+    comb: CombTableBuffer,
     seed_kernel: Kernel,
     kernel: Kernel,
     patterns: Vec<String>,
@@ -175,14 +175,9 @@ impl VanityPipeline {
         }
 
         let ctx = GpuContext::with_device(device_index)?;
-        if ctx.info().local_mem_size < G_TABLE_LOCAL_BYTES {
-            return Err(GpuError::Other(format!(
-                "device local memory {} bytes is below the {G_TABLE_LOCAL_BYTES}-byte G_TABLE requirement",
-                ctx.info().local_mem_size
-            )));
-        }
         let program = GpuProgram::vanity(&ctx)?;
         let queue = ctx.queue();
+        let comb = CombTableBuffer::upload(queue)?;
 
         // Allocate buffers
         let buffers = GpuBuffers::new(&ctx, cfg.batch_size)?;
@@ -232,6 +227,7 @@ impl VanityPipeline {
             .arg(&buffers.hits)
             .arg(&buffers.hit_count)
             .arg(MAX_HITS as u32)
+            .arg(&comb.table)
             .build()?;
 
         let device = ctx.device();
@@ -247,6 +243,7 @@ impl VanityPipeline {
             program,
             buffers,
             wordlist,
+            comb,
             seed_kernel,
             kernel,
             patterns: patterns.to_vec(),
