@@ -53,7 +53,80 @@ inline void bench_generate_seed(
 }
 
 //=============================================================================
-// Kernel 1: PBKDF2 (BIP39 seed derivation) - dominant cost
+// Analysis: PBKDF2 loop-only variant (fixed constant password).
+//=============================================================================
+__kernel void bench_pbkdf2_loop(
+    __global const uchar* salt,           // 32 bytes entropy generation salt
+    ulong counter_start,
+    __global const uchar* words8,         // BIP39 wordlist (2048 * 8 bytes)
+    __global const uchar* word_lens,      // Word lengths (2048 bytes)
+    uint num_indices,                     // Unused for PBKDF2, but kept for uniformity
+    __global uint* checksums
+) {
+    uint gid = get_global_id(0);
+
+    const uchar fixed_pw[128] = {
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+        (uchar)0xab, (uchar)0xcd, (uchar)0xef, (uchar)0x01, (uchar)0x23, (uchar)0x45, (uchar)0x67, (uchar)0x89,
+    };
+
+    uchar seed[64];
+    pbkdf2_sha512_mnemonic(fixed_pw, 128u, seed);
+
+    uint checksum = 0;
+    for (int i = 0; i < 64; i++) {
+        checksum ^= ((uint)seed[i]) << ((i & 3) * 8);
+    }
+    checksums[gid] = checksum;
+}
+
+//=============================================================================
+// Analysis: calibration kernel - N independent 64-bit op-units per work item.
+// Measures sustained instruction throughput for hash-shaped work.
+//=============================================================================
+#define CALROT(x, n) rotate((x), (ulong)(64ul - (n)))
+__kernel void bench_calib(
+    __global const uchar* salt,
+    ulong counter_start,
+    __global const uchar* words8,
+    __global const uchar* word_lens,
+    uint num_indices,
+    __global uint* checksums
+) {
+    uint gid = get_global_id(0);
+    ulong x = counter_start + (ulong)gid;
+    ulong a = x, b = x * 3ul, c = x >> 3, d = x + 0x1020304050607080ul;
+    for (uint i = 0; i < 4094; i++) {
+        a ^= CALROT(b, 14) ^ CALROT(c, 18) ^ (d >> 7);
+        b += CALROT(c, 41) ^ CALROT(d, 19) ^ (a >> 6);
+        c ^= CALROT(d, 28) ^ CALROT(a, 34) ^ (b >> 39);
+        d += CALROT(a, 61) ^ CALROT(b, 8) ^ (c >> 1);
+        a = CALROT(a, 13); b = CALROT(b, 3); c = CALROT(c, 27); d = CALROT(d, 59);
+        a ^= b; b ^= c; c ^= d; d ^= a;
+        a += 0x428a2f98d728ae22ul; b += 0x7137449123ef65cdul;
+        c += 0xb5c0fbcfec4d3b2ful; d += 0xe9b5dba58189dbbcul;
+        a = CALROT(a, 1) ^ (b & 0x5555555555555555ul);
+        b = CALROT(b, 8) ^ (c & 0x3333333333333333ul);
+        c = CALROT(c, 7) ^ (d & 0x0f0f0f0f0f0f0f0ful);
+        d = d ^ 0x1010101010101010ul;
+    }
+    checksums[gid] = (uint)(a ^ b ^ c ^ d);
+}
+#undef CALROT
 //
 // Uses EXACT production codepath: bip39_entropy_to_seed which calls:
 //   - mnemonic_to_password (SHA-256 checksum, word lookup, streaming)
