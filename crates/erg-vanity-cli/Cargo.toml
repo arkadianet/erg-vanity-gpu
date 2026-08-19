@@ -18,4 +18,3 @@ erg-vanity-gui = { path = "../erg-vanity-gui" }
 clap = { workspace = true }
 hex = { workspace = true }
 ctrlc = { workspace = true }
-rand = { workspace = true }

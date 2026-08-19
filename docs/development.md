@@ -64,7 +64,7 @@ Limits that matter when changing kernels: 1024 hits/batch, 64 patterns, 1024 byt
 
 `--bench` times isolated PBKDF2, BIP32, secp256k1, and Base58 kernels (event timestamps). PBKDF2 is per seed; the others scale with `--index`.
 
-`--bench` is not live search. On RTX 3080 Ti (18 Aug 2026, `--index 1`) isolated PBKDF2 is ~1600 ns/seed (~56–64% of isolated time), BIP32 ~628 ns, secp ~285 ns. Live search is ~368k seeds/s after 8-bit *k*·G (earlier live baseline ~330k).
+`--bench` is not live search. On RTX 3080 Ti (18 Aug 2026, `--index 1`) isolated PBKDF2 is ~1600 ns/seed (~56–64% of isolated time), BIP32 ~628 ns, secp ~285 ns. Live search is ~455k seeds/s (earlier baselines ~330k then ~368k).
 
 ## Environment
 

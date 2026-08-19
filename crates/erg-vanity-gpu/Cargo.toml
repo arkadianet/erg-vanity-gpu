@@ -6,11 +6,6 @@ license.workspace = true
 authors.workspace = true
 description = "GPU-accelerated vanity address generation via OpenCL"
 
-[features]
-default = []
-# Include test kernels for integration tests / external test harnesses
-test-kernels = []
-
 [dependencies]
 erg-vanity-core = { path = "../erg-vanity-core" }
 erg-vanity-crypto = { path = "../erg-vanity-crypto" }

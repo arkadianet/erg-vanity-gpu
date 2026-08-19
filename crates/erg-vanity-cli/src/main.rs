@@ -2,7 +2,7 @@ use clap::Parser;
 use erg_vanity_cpu::MatchType;
 use erg_vanity_engine::{
     estimate_pattern, format_time, list_gpu_devices, run_search, Backend, SearchEvent,
-    SearchRequest,
+    SearchRequest, CPU_ASSUMED_RATE, GPU_ASSUMED_RATE,
 };
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -181,11 +181,11 @@ fn run_estimate(patterns: &[String], match_type: MatchType, ignore_case: bool) {
             println!("Estimated attempts: {:.0}", est.attempts_needed);
             println!(
                 "  At 10,000 addr/s: {}",
-                format_time(est.attempts_needed / 10_000.0)
+                format_time(est.attempts_needed / CPU_ASSUMED_RATE)
             );
             println!(
                 "  At 330,000 addr/s: {}",
-                format_time(est.attempts_needed / 330_000.0)
+                format_time(est.attempts_needed / GPU_ASSUMED_RATE)
             );
         }
     }
