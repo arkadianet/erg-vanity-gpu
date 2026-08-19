@@ -110,6 +110,13 @@ pub(crate) fn sort_patterns_longest_first(patterns: &[String]) -> (Vec<String>, 
 }
 
 fn local_size_for(batch: usize, recommended: usize) -> usize {
+    if let Ok(v) = std::env::var("ERG_LOCAL_SIZE") {
+        if let Ok(ls) = v.parse::<usize>() {
+            if ls >= 1 && batch.is_multiple_of(ls) {
+                return ls;
+            }
+        }
+    }
     let mut ls = recommended.min(batch).max(1);
     while !batch.is_multiple_of(ls) {
         ls /= 2;
@@ -125,6 +132,10 @@ fn kernel_work_group_limit(kernel: &Kernel, device: ocl::Device, fallback: usize
         Ok(KernelWorkGroupInfoResult::WorkGroupSize(n)) if n > 0 => n,
         _ => fallback,
     }
+}
+
+fn search_disabled() -> bool {
+    std::env::var("ERG_NO_SEARCH").map_or(false, |v| v == "1")
 }
 
 /// GPU-accelerated vanity address search pipeline.
@@ -287,7 +298,9 @@ impl VanityPipeline {
 
         unsafe {
             self.seed_kernel.enq()?;
-            self.kernel.enq()?;
+            if !search_disabled() {
+                self.kernel.enq()?;
+            }
         }
 
         // Update counter for next batch
@@ -313,7 +326,9 @@ impl VanityPipeline {
 
         unsafe {
             self.seed_kernel.enq()?;
-            self.kernel.enq()?;
+            if !search_disabled() {
+                self.kernel.enq()?;
+            }
         }
 
         self.addresses_checked += (self.cfg.batch_size as u64) * (self.num_indices as u64);

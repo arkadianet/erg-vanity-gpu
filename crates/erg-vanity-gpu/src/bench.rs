@@ -3,12 +3,14 @@
 //! Measures per-component GPU kernel time for PBKDF2, BIP32, secp256k1, and Base58
 //! stages using OpenCL event profiling timestamps.
 
+use crate::buffers::{GpuHit, MAX_HITS};
 use crate::comb::CombTableBuffer;
 use crate::context::{DeviceInfo, GpuContext, GpuError};
 use crate::kernel::GpuProgram;
 use crate::wordlist::WordlistBuffers;
 use ocl::enums::ProfilingInfo;
-use ocl::{Buffer, Event, Kernel, MemFlags};
+use ocl::{Buffer, Event, Kernel, MemFlags, Queue};
+use std::time::Instant;
 
 /// Benchmark configuration.
 #[derive(Debug, Clone)]
@@ -475,4 +477,227 @@ fn print_combined_table(results: &[DeviceBenchStats], cfg: &BenchConfig) {
     }
 
     println!("{:<12} {:>8.1} ms", "TOTAL:", total as f64 / 1_000_000.0);
+}
+
+/// Co-residency probe: does the NVIDIA OpenCL driver run vanity_seed and
+/// vanity_search concurrently when placed on two in-order queues?
+///
+/// EXPERIMENTAL. Measures wall time per batch (ns/seed) for:
+///   - serial:     both kernels enqueued back-to-back on one queue
+///   - concurrent: seed on queue0, search on queue1 waiting on seed's event
+///   - seed_only:  just the seed kernel
+///
+/// If `concurrent` ≈ `seed_only`, the search tail can be fully hidden behind
+/// the next seed batch (target for a pipelined pipeline); if `concurrent` ≈
+/// `serial`, the driver serializes co-resident kernels and overlap is pointless.
+pub struct OverlapProbeStats {
+    pub serial_ns_per_seed: u64,
+    pub concurrent_ns_per_seed: u64,
+    pub seed_only_ns_per_seed: u64,
+}
+
+pub fn run_overlap_probe(
+    device_index: usize,
+    batch_size: usize,
+    iters: u32,
+    warmup: u32,
+) -> Result<OverlapProbeStats, GpuError> {
+    let ctx = GpuContext::with_device(device_index)?;
+    let queue0 = ctx.queue().clone();
+    let queue1 = Queue::new(ctx.context(), ctx.device(), None)?;
+    let program = GpuProgram::vanity(&ctx)?;
+
+    let salt = [0x42u8; 32];
+    let salt_buf = Buffer::<u8>::builder()
+        .queue(queue0.clone())
+        .flags(MemFlags::new().read_only())
+        .len(32)
+        .build()?;
+    salt_buf.write(&salt[..]).enq()?;
+    let wordlist = WordlistBuffers::upload(&queue0)?;
+    let comb = CombTableBuffer::upload(&queue0)?;
+
+    let seed_flags = MemFlags::new().read_write();
+    let seeds_a = Buffer::<u8>::builder()
+        .queue(queue0.clone())
+        .flags(seed_flags)
+        .len(batch_size * 64)
+        .build()?;
+    let seeds_b = Buffer::<u8>::builder()
+        .queue(queue0.clone())
+        .flags(seed_flags)
+        .len(batch_size * 64)
+        .build()?;
+
+    let patterns = Buffer::<u8>::builder()
+        .queue(queue0.clone())
+        .flags(MemFlags::new().read_only())
+        .len(4)
+        .build()?;
+    patterns.write(&b"ERGO"[..]).enq()?;
+    let pat_offsets = Buffer::<u32>::builder()
+        .queue(queue0.clone())
+        .flags(MemFlags::new().read_only())
+        .len(1)
+        .build()?;
+    pat_offsets.write(&[0u32][..]).enq()?;
+    let pat_lens = Buffer::<u32>::builder()
+        .queue(queue0.clone())
+        .flags(MemFlags::new().read_only())
+        .len(1)
+        .build()?;
+    pat_lens.write(&[4u32][..]).enq()?;
+
+    let hits = Buffer::<GpuHit>::builder()
+        .queue(queue0.clone())
+        .flags(MemFlags::new().write_only())
+        .len(MAX_HITS)
+        .build()?;
+    let hit_count = Buffer::<i32>::builder()
+        .queue(queue0.clone())
+        .flags(MemFlags::new().read_write())
+        .len(1)
+        .build()?;
+    hit_count.write(&[0i32][..]).enq()?;
+    queue0.finish()?;
+
+    let mut seed = Kernel::builder()
+        .program(program.program())
+        .name("vanity_seed")
+        .queue(queue0.clone())
+        .global_work_size(batch_size)
+        .arg(&salt_buf)
+        .arg(0u64)
+        .arg(&wordlist.words8)
+        .arg(&wordlist.lens)
+        .arg(&seeds_a)
+        .build()?;
+
+    let mut search = Kernel::builder()
+        .program(program.program())
+        .name("vanity_search")
+        .queue(queue1.clone())
+        .global_work_size(batch_size)
+        .arg(&salt_buf)
+        .arg(0u64)
+        .arg(&seeds_a)
+        .arg(&patterns)
+        .arg(&pat_offsets)
+        .arg(&pat_lens)
+        .arg(1u32)
+        .arg(0u32)
+        .arg(1u32)
+        .arg(&hits)
+        .arg(&hit_count)
+        .arg(MAX_HITS as u32)
+        .arg(&comb.table)
+        .build()?;
+
+    let mut serial: Vec<u64> = Vec::with_capacity(iters as usize);
+    let mut concurrent: Vec<u64> = Vec::with_capacity(iters as usize);
+    let mut seed_only: Vec<u64> = Vec::with_capacity(iters as usize);
+    let mut counter = 0u64;
+
+    let run_serial = |seed_k: &mut Kernel, search_k: &mut Kernel, sa: &Buffer<u8>, c: u64| -> Result<u64, GpuError> {
+        seed_k.set_arg(1, c)?;
+        seed_k.set_arg(4, sa)?;
+        search_k.set_arg(1, c)?;
+        search_k.set_arg(2, sa)?;
+        let t = Instant::now();
+        unsafe {
+            seed_k.enq()?;
+            search_k.enq()?;
+        }
+        queue0.finish()?;
+        Ok(t.elapsed().as_nanos() as u64)
+    };
+
+    let run_concurrent = |seed_k: &mut Kernel, search_k: &mut Kernel, sa: &Buffer<u8>, c: u64| -> Result<u64, GpuError> {
+        seed_k.set_arg(1, c)?;
+        seed_k.set_arg(4, sa)?;
+        search_k.set_arg(1, c)?;
+        search_k.set_arg(2, sa)?;
+        let t = Instant::now();
+        let mut ev = Event::empty();
+        unsafe {
+            seed_k.cmd().enew(&mut ev).enq()?;
+            search_k.cmd().ewait(&ev).enq()?;
+        }
+        queue0.finish()?;
+        queue1.finish()?;
+        Ok(t.elapsed().as_nanos() as u64)
+    };
+
+    let run_seed_only = |seed_k: &mut Kernel, sa: &Buffer<u8>, c: u64| -> Result<u64, GpuError> {
+        seed_k.set_arg(1, c)?;
+        seed_k.set_arg(4, sa)?;
+        let t = Instant::now();
+        unsafe {
+            seed_k.enq()?;
+        }
+        queue0.finish()?;
+        Ok(t.elapsed().as_nanos() as u64)
+    };
+
+    for _ in 0..warmup {
+        run_seed_only(&mut seed, &seeds_a, counter)?;
+        counter += 1;
+    }
+
+    for i in 0..iters {
+        let (sa, sb) = if i % 2 == 0 {
+            (&seeds_a, &seeds_b)
+        } else {
+            (&seeds_b, &seeds_a)
+        };
+        serial.push(run_serial(&mut seed, &mut search, sa, counter)?);
+        counter += 1;
+        concurrent.push(run_concurrent(&mut seed, &mut search, sb, counter)?);
+        counter += 1;
+        seed_only.push(run_seed_only(&mut seed, sa, counter)?);
+        counter += 1;
+    }
+
+    let avg = |v: &Vec<u64>| -> u64 {
+        let s: u64 = v.iter().sum();
+        (s as f64 / v.len() as f64) as u64
+    };
+
+    Ok(OverlapProbeStats {
+        serial_ns_per_seed: avg(&serial),
+        concurrent_ns_per_seed: avg(&concurrent),
+        seed_only_ns_per_seed: avg(&seed_only),
+    })
+}
+
+/// Print co-residency probe results.
+pub fn print_overlap_probe_results(stats: &OverlapProbeStats, batch_size: usize) {
+    let serial = stats.serial_ns_per_seed;
+    let concurrent = stats.concurrent_ns_per_seed;
+    let seed_only = stats.seed_only_ns_per_seed;
+
+    println!("Overlap probe (batch_size={batch_size}):");
+    let fmt = |ns_batch: u64| {
+        let per_seed = ns_batch as f64 / batch_size as f64;
+        format!(
+            "{:>7.1} ms/batch  {:>6.0} ns/seed  ({:.0} kseed/s)",
+            ns_batch as f64 / 1e6,
+            per_seed,
+            1e9 / per_seed / 1e3
+        )
+    };
+    println!("  serial:              {}", fmt(serial));
+    println!("  concurrent:          {}", fmt(concurrent));
+    println!("  seed_only:           {}", fmt(seed_only));
+    let serial_gain = if serial > concurrent {
+        (serial as f64 - concurrent as f64) / serial as f64 * 100.0
+    } else {
+        0.0
+    };
+    println!("  concurrent vs serial: {:.1}% faster", serial_gain);
+    if concurrent <= (seed_only as f64 * 1.05) as u64 {
+        println!("  => search tail fully hidden by seed: overlap is viable");
+    } else {
+        println!("  => search tail NOT hidden: driver serializes co-resident kernels");
+    }
 }

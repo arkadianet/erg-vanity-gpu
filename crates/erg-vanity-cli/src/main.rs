@@ -88,6 +88,10 @@ struct Args {
     #[arg(long = "bench-validate", default_value_t = false)]
     bench_validate: bool,
 
+    /// Run seed+search co-residency (overlap) probe and exit
+    #[arg(long = "bench-overlap-probe", default_value_t = false)]
+    bench_overlap_probe: bool,
+
     /// Legacy: single pattern as positional argument
     #[arg()]
     pattern: Option<String>,
@@ -278,6 +282,35 @@ fn main() {
             }
         }
         erg_vanity_gpu::bench::print_bench_results(&results, &cfg);
+        return;
+    }
+
+    if args.bench_overlap_probe {
+        let device_indices = match erg_vanity_gpu::context::GpuContext::enumerate_devices() {
+            Ok(d) => d.iter().map(|i| i.global_idx).collect::<Vec<_>>(),
+            Err(e) => {
+                eprintln!("Error: {e}");
+                std::process::exit(2);
+            }
+        };
+        let batch_size = args.bench_batch_size.unwrap_or(1 << 18);
+        for device_index in &device_indices {
+            match erg_vanity_gpu::bench::run_overlap_probe(
+                *device_index,
+                batch_size,
+                args.bench_iters,
+                args.bench_warmup,
+            ) {
+                Ok(stats) => {
+                    println!("device {device_index}:");
+                    erg_vanity_gpu::bench::print_overlap_probe_results(&stats, batch_size);
+                }
+                Err(e) => {
+                    eprintln!("Error running overlap probe on device {device_index}: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
         return;
     }
 
