@@ -233,10 +233,10 @@ def arx_chmaj_map(nwords: int, bits: int, rounds: int, seed: int = 5) -> Model:
         # use last 4 words as a,e,f,g-like if nwords>=8 we use SHA layout
         for r in range(rounds):
             a, e = s[0], s[nwords // 2]
-            f = s[nwords // 2 + 1] if nwords > 2 else s[0]
-            g = s[nwords // 2 + 2] if nwords > 3 else s[1]
-            b = s[1]
-            c = s[2] if nwords > 2 else s[0]
+            f = s[(nwords // 2 + 1) % nwords]
+            g = s[(nwords // 2 + 2) % nwords]
+            b = s[1 % nwords]
+            c = s[2 % nwords]
             s1 = ops.xor(ops.xor(ops.rotr(e, r14), ops.rotr(e, r18)), ops.rotr(e, r41))
             ch = ops.xor(ops.and_(e, f), ops.and_(ops.not_(e), g))
             t1 = ops.add(ops.add(s1, ch), ks[r])

@@ -15,7 +15,7 @@ and does not touch GPU kernels.
 - `models.py` — function hierarchy from linear maps up to mini-HMAC
 - `analyze.py` — Koopman, ANF/degree, conjugacy, closed forms
 - `run_experiments.py` — equivalence tests and cost/growth measurements
-- `REPORT.md` — findings (written after the experiment run)
+- `REPORT.md` — findings: only affine F beat n×F; SHA-like models did not
 
 ```bash
 python3 run_experiments.py

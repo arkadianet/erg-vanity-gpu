@@ -131,13 +131,24 @@ def is_tfunction_table(table: np.ndarray, w: int) -> bool:
     return True
 
 
+def rand_state(rng: np.random.Generator, w: int) -> int:
+    """Uniform w-bit integer (w may be 64)."""
+    x = 0
+    bits = 0
+    while bits < w:
+        take = min(32, w - bits)
+        x |= int(rng.integers(0, 1 << take)) << bits
+        bits += take
+    return x
+
+
 def tfunction_violations(model: Model, samples: int = 200, seed: int = 0) -> int:
     """How often bit i of F(x) differs from bit i of F(x with high bits cleared)."""
     rng = np.random.default_rng(seed)
     bad = 0
     w = model.w
     for _ in range(samples):
-        x = int(rng.integers(0, 1 << w))
+        x = rand_state(rng, w)
         bit = int(rng.integers(0, w))
         mask = (1 << (bit + 1)) - 1
         a = (model.f(x) >> bit) & 1
@@ -321,7 +332,7 @@ def jacobian_constant(model: Model, samples: int = 40, seed: int = 0) -> bool:
     rng = np.random.default_rng(seed)
     base = None
     for _ in range(samples):
-        x = int(rng.integers(0, 1 << model.w))
+        x = rand_state(rng, model.w)
         J = tuple(jacobian_gf2(model, x))
         if base is None:
             base = J
@@ -516,7 +527,7 @@ def check_equiv(model: Model, n: int, other_fn, samples: int = 20, seed: int = 0
     rng = np.random.default_rng(seed)
     out = []
     for _ in range(samples):
-        x = int(rng.integers(0, 1 << model.w))
+        x = rand_state(rng, model.w)
         a = xor_iterates(model, x, n)
         b = other_fn(x, n)
         out.append(EquivResult(ok=(a == b), n=n, x=x, naive=a, other=b))
