@@ -99,6 +99,14 @@ const K: [u64; 80] = [
     0x6c44198c4a475817,
 ];
 
+pub(crate) const H_INIT: [u64; 8] = H;
+
+/// Compress one 1024-bit block into an arbitrary midstate (research / HMAC-64).
+#[cfg(test)]
+pub(crate) fn compress_block(state: &mut [u64; 8], block: &[u8]) {
+    compress(state, block);
+}
+
 /// Compute SHA-512 digest of input data.
 pub fn digest(data: &[u8]) -> [u8; 64] {
     let mut state = H;
