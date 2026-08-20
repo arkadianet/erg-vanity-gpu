@@ -100,6 +100,7 @@ but they cannot be moved into `K[t]` without corrupting later schedule uses:
 | H18 | `T = ⊕_j (E_j(O) + O)` or the U-chain has a closed form. | **Rejected.** `(X+C) ⊕ (Y+C) ≠ X ⊕ Y`. HMAC-64 is not a homomorphism over `+` or `⊕` (tested). `f¹⊕f²⊕f³` does not collapse to a function of `x` cheaper than the three images. |
 | H19 | The pad64 schedule has hidden identities after the first expand. | **Rejected.** Const-folded schedule DAG: first expand is exactly 22 σ (44 ror + 22 shr); three dense expands add exactly 192 ror + 96 shr (no extra CSE). For 80 random messages, no `W[t]` (`t≥32`) equals `W[s]`, `W[s]+C`, `σ0(W[s])`, or `σ1(W[s])`. σ0 and σ1 of the same word share no rotate distances. |
 | H20 | Published SHA-2 / PBKDF2 / ARX work contains an exact 10%+ evaluation shortcut. | **Rejected after reading.** See literature section. Every claimed large speedup is midstates (already in the 4094 count), ZB/IS (our ~3%), register packing, SIMD of independent blocks, or critical-path/area — not fewer fundamental ops. |
+| H21 | Automated search can find a 2-rotate equivalent for Σ or for `Σ+Ch` (the ~10% SHF path). | **Rejected in the searched class.** Exhaustive 2-term+shift vs Σ0/Σ1 on all basis vectors: empty. 15 structured fusions: 0/400. Superopt 12k steps: no rotate dropped. Mendel form = same circuit. Related-mnemonic I/O Hamming >180. |
 
 ## What is not a lower bound
 
@@ -138,6 +139,10 @@ than 80 rounds. ASIC/GPU miners do not skip rounds.
 6. **`sha512_algebra`** — research-only: fused 2-round formula, CSA T1,
    midstate PE compressor, word-level CSE DAG, Ch/Maj one-var identities.
    Not on the production path.
+7. **`sha512_search`** — research-only automated discovery: exhaustive
+   2-term Σ search, structured Σ+Ch fusions, 8-bit ADD+ROTR correction,
+   STOKE-style superopt of `Σ1+Ch`, Mendel form, related-mnemonic midstate
+   Hamming. Not on the production path.
 
 ## Correctness
 
@@ -399,6 +404,84 @@ No paper we found gives a bit-identical SHA-512 compression with
 materially fewer than 80 ARX rounds, or a closed form for
 `⊕ HMAC-SHA512^j`.
 
+Mendel–Nikolić–Biryukov’s alternative description
+`A_{t+1} = F(A_t,…,A_{t−6}) + A_{t−7} + W_t` is a **dependency-graph
+rewrite**, not a cheaper circuit: `F` still contains both Σ, Ch, Maj, and
+the same adds. `mendel_a_next` = `standard_a_next` on 200 random states.
+
+## Automated discovery
+
+The conventional rewrite space is exhausted. This pass searched for a
+*different circuit* that computes the same map, including reduced-width
+models and a superoptimizer. Production kernels were not changed.
+
+The only local change that would hit ~10% SHF is **dropping one rotate
+from each of Σ0 and Σ1**, 80 rounds × 2 Σ × 2 SHF = 320 SHF, 320/1550 ≈
+21% if both lose a rotate, or 160/1550 ≈ 10% if each Σ loses one rotate
+by fusing with Ch/Maj.
+
+### What was searched
+
+| Search | Domain | Result |
+|--------|--------|--------|
+| All 2-rotate maps, and 2-rotate + shift, vs Σ0/Σ1 | 64-bit, all 64 basis vectors | **no hit** (`two_term_sigma_search`) |
+| `add(Σ,Ch)=add(Σ',Ch)` ⇒ Σ=Σ' | 8-bit, all `e` | identity, so adding Ch cannot drop a rotate |
+| 15 structured fusions (rotate-through-add, xor-into-Σ, …) | 400 random 64-bit triples | **0 matches** |
+| STOKE-style mutate of the `Σ1+Ch` SSA program | 12k steps, 8-bit samples | cost never went below 3 ror + 6 other |
+| `ROTR_k(x+y)−(ROTR_k(x)+ROTR_k(y))` | 8-bit exhaustive, k=1..7 | equality on a minority of pairs; **every** input bit influences the correction |
+| MiniSHA-8 two-round composition | 400 random | equals two one-rounds; no cancelled ops |
+| Related 12-word mnemonics (last word differs) | real ipad/opad compress | I/O Hamming **>180 / 512** (avalanche) |
+
+### Barriers (what would have to break)
+
+**B1 — Iterate-XOR.** `f = HMAC_K` is not a homomorphism of `(F₂⁵¹²,⊕)`
+or `(ℤ/2⁶⁴ℤ)⁸`. A closed form for `⊕_j f^j` is a structural break of
+HMAC-SHA512.
+
+**B2 — Compression count.** HMAC-64 is two Merkle–Damgård blocks.
+One-compression HMAC on a 64-byte string is a different function.
+
+**B3 — Σ as an F₂-linear map.** A weight-3 circulant is not in the
+span of two rotates, or two rotates and a shift. Any equivalent that
+uses ADD is no longer F₂-linear, so it cannot equal Σ.
+
+**B4 — The 10% fused path.** Because `+ Ch` is injective in the Σ
+argument, a cheaper `Σ'` plus the same Ch is not equivalent unless
+`Σ'=Σ`. Non-linear mixes (feed Ch into a rotate, replace XOR with ADD
+in Σ, …) failed the structured search and the superopt. A breakthrough
+would be a 2-rotate circuit for `Σ1(e)+Ch(e,f,g)` that is *not* of the
+form `Σ'(e)+Ch`. Exact synthesis of that 3-input 64-bit function is
+open and currently out of reach; the 8-bit superopt did not find one.
+
+**B5 — Joint ADD+ROTR.** The correction term depends on every operand
+bit (8-bit exhaustive). A redundant encoding makes ADD cheap only if
+you skip canonicalization; Σ requires the canonical integer, so you
+pay a CPA every round.
+
+**B6 — Multi-instance / BIP39 prefix.** Shared first-11-words only
+shares a prefix of the *two setup* compressions. After 80 rounds the
+midstates are uncorrelated. A breakthrough would be a related-chaining
+value algorithm that evaluates `Compress(I,m)` and `Compress(I′,m′)`
+in sub-2× work after a full avalanche — no such algorithm is known.
+
+**B7 — Round-group / Mendel.** Rewriting the shift register as an
+A-chain does not shrink `F`. A cheaper `F` *is* B4 at larger scale.
+
+**B8 — Boolean / arithmetic minimization.** Ch/Maj are already one
+LOP3. The nonlinear bulk is the 64-bit adders. An adder-free SHA-512
+is a different function.
+
+### What a GPU re-test would need
+
+None of the search hits produced a new exact circuit. There is nothing
+here for the RTX agent to time except the already-shipped HMAC-64 +
+SHF path.
+
+A future automated lead worth handing over: a program that computes
+`Σ1(e)+Ch(e,f,g)` with two 64-bit rotates, passing `fused_spec_64` on
+random triples **and** an SMT proof. That would be the 10% SHF
+candidate.
+
 ### Failed approaches (do not reopen without new math)
 
 - Closed form / homomorphism / addition-chain for `f^n` or `⊕ f^j`
@@ -412,13 +495,19 @@ materially fewer than 80 ARX rounds, or a closed form for
 - Nearby-mnemonic loop sharing; biclique on the U-chain
 - Bitslice / warp-split bitslice
 - Weight-2 Σ/σ; “trim W[8..15] saves 50%”
-- Treating Choi BO or FPGA mega-rounds as op-count reductions
+- Treating Choi BO, FPGA mega-rounds, or Mendel’s A-chain as op-count reductions
 - Skipping HMAC iterations or changing `c` / the hash
+- 2-rotate Σ (with or without a shift)
+- Fusing Σ with Ch/Maj to drop a rotate (structured catalog + superopt)
+- Sparse ADD+ROTR correction / joint ARX basis
+- Cross-seed sharing of the 4094-loop after related BIP39 prefixes
 
 A result that would reopen this: an equivalent circuit for
 `Compress(H, pad64(m))` whose Σ/add/Ch/Maj count is ≥10% below the
 specialized 80-round form, with a differential test against
-`compress_hmac64`. We do not have one.
+`compress_hmac64`. We do not have one. See the next section for the
+automated search that targeted that 10% path, and the barriers that
+stopped it.
 
 ## SHA-512 execution and RTX SHF
 

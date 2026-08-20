@@ -16,4 +16,5 @@ pub mod sha256;
 pub mod sha512;
 pub mod sha512_algebra;
 pub mod sha512_hmac64;
+pub mod sha512_search;
 pub mod sha512_u32;
