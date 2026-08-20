@@ -455,10 +455,10 @@ pub fn gpu_hmac64_cost(shfl_weight: f64) -> MachineCost {
     let rots = f64::from(SHA512_HMAC64_ROTR);
     let word = adds * 2.0 + rots * 2.0;
     let ks = kogge_stone_issues(64);
-    let add_ks = f64::from(ks.shfl) * shfl_weight
-        + f64::from(ks.xor + ks.and + ks.or);
+    let add_ks = f64::from(ks.shfl) * shfl_weight + f64::from(ks.xor + ks.and + ks.or);
     let bitslice_ks = adds * add_ks + rots * 2.0 * shfl_weight;
-    let bitslice_ripple = adds * (64.0 * (2.0 + 2.0 + 1.0) + 63.0 * shfl_weight) + rots * 2.0 * shfl_weight;
+    let bitslice_ripple =
+        adds * (64.0 * (2.0 + 2.0 + 1.0) + 63.0 * shfl_weight) + rots * 2.0 * shfl_weight;
     // Hybrid: stay word-major for add; each Σ/σ is transpose-rotate-untranspose.
     // 32×32 transpose ≈ 5 stages × 2 SHFL (two halves of a 64-bit word).
     let xpose = 10.0 * shfl_weight;
@@ -512,12 +512,7 @@ mod tests {
         let mut ms = [[0u8; MSG]; HASHES];
         for i in 0..HASHES {
             let s = seed.wrapping_add(i as u8).wrapping_mul(17);
-            hs[i] = [
-                s,
-                s.wrapping_add(3),
-                s.wrapping_add(11),
-                s.wrapping_add(29),
-            ];
+            hs[i] = [s, s.wrapping_add(3), s.wrapping_add(11), s.wrapping_add(29)];
             ms[i] = [
                 s.wrapping_mul(3),
                 s.wrapping_mul(5).wrapping_add(1),

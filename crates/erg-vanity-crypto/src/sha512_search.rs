@@ -2,7 +2,11 @@
 //!
 //! Does not change the production compressor. Deterministic seeds.
 
-use crate::sha512::{self, H_INIT};
+#![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::collapsible_if)]
+
+use crate::sha512::H_INIT;
 use crate::sha512_hmac64::compress16;
 
 const COST_ROR: u32 = 2;
@@ -467,6 +471,7 @@ pub fn minisha8_two(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sha512;
 
     #[test]
     fn sigma_has_no_two_term_form() {

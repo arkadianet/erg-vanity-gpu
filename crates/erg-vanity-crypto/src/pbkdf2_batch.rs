@@ -3,8 +3,13 @@
 //! Question: is Work(N) < N · Work(1) by a material amount?
 //! Research only. Does not change the production derive path.
 
+#![allow(clippy::assertions_on_constants)]
+#![allow(clippy::manual_range_contains)]
+
 use crate::pbkdf2_fast::Hmac64Key;
-use crate::sha512_hmac64::{compress16, hmac64, pack_be16};
+#[cfg(test)]
+use crate::sha512_hmac64::compress16;
+use crate::sha512_hmac64::{hmac64, pack_be16};
 
 /// HMAC-64 compressions in the BIP39 loop after U1 (2047 × 2).
 pub const LOOP_COMPRESSIONS: u32 = 4094;

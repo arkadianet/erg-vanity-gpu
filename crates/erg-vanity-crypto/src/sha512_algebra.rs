@@ -3,9 +3,16 @@
 //! Not a production path. Each prototype is either bit-identical to the
 //! conventional compressor or a deliberate counter-example.
 
+#![allow(dead_code)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::assertions_on_constants)]
+
 use std::collections::HashMap;
 
-use crate::sha512_hmac64::{compress_hmac64, BIT_LEN, K, PAD};
+#[cfg(test)]
+use crate::sha512_hmac64::compress_hmac64;
+use crate::sha512_hmac64::{BIT_LEN, K, PAD};
 
 const K0: u64 = K[0];
 const K1: u64 = K[1];
