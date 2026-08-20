@@ -102,7 +102,7 @@ but they cannot be moved into `K[t]` without corrupting later schedule uses:
 | H20 | Published SHA-2 / PBKDF2 / ARX work contains an exact 10%+ evaluation shortcut. | **Rejected after reading.** See literature section. Every claimed large speedup is midstates (already in the 4094 count), ZB/IS (our ~3%), register packing, SIMD of independent blocks, or critical-path/area — not fewer fundamental ops. |
 | H21 | Automated search can find a 2-rotate equivalent for Σ or for `Σ+Ch` (the ~10% SHF path). | **Rejected in the searched class.** Exhaustive 2-term+shift vs Σ0/Σ1 on all basis vectors: empty. 15 structured fusions: 0/400. Superopt 12k steps: no rotate dropped. Mendel form = same circuit. Related-mnemonic I/O Hamming >180. |
 | H22 | N independent BIP39 PBKDF2 instances cost materially less than N× one instance (shared salt, bitslice, prefix add, last-word family, warp-as-one-circuit). | **Rejected as a conventional-DAG claim.** Shared nodes are O(1). That does **not** bound every algorithm for `C_N` — only the product of N scalar SHA DAGs. See H23. |
-| H23 | A change of computational basis (FFT/Walsh, packing, polynomial/multipoint, mixed-instance SLP, batch-inversion analog, warp-as-one-object) evaluates `C_N` at ≤ 0.9 N · Work(C) without sharing scalar intermediates. | **Rejected for every hook known to beat N×.** Independent ANDs have multiplicative complexity N (exhaustive N=2). Walsh/FFT across instances computes the wrong function and costs extra. Fast multipoint needs a dense high-degree univariate SHA does not provide. SWAR packing costs more word-ops than two native adds. MiniARX-4 mixed superopt: 0/8000 programs cheaper than 2×. Polarization fails for MiniSHA-8 and HMAC-64. See basis section. |
+| H23 | A change of computational basis (FFT/Walsh, packing, polynomial/multipoint, mixed-instance SLP, batch-inversion analog, warp-as-one-object) evaluates `C_N` at ≤ 0.9 N · Work(C) without sharing scalar intermediates. | **Rejected for every hook known to beat N×.** Independent ANDs have multiplicative complexity N (exhaustive N=2). Walsh/FFT across instances computes the wrong function and costs extra. Fast multipoint needs a dense high-degree univariate SHA does not provide. SWAR packing costs more word-ops than two native adds. MiniARX-4 mixed superopt: 0/8000 programs cheaper than 2×. Polarization fails for MiniSHA-8 and HMAC-64. Bit-major MiniARX (`arx_basis`) loses on the GPU cost model. See basis section. |
 
 ## What is not a lower bound
 
@@ -150,7 +150,11 @@ than 80 rounds. ASIC/GPU miners do not skip rounds.
 8. **`pbkdf2_batch`** — conventional-DAG batch accounting and tests.
    Production `derive` is unchanged.
 9. **`pbkdf2_basis`** — change-of-basis / collective-evaluation attacks
-   on `C_N`. Production `derive` is unchanged.
+   on `C_N` (FFT/Walsh, multipoint, batch inversion analog, mixed MiniARX,
+   independent ANDs). Production `derive` is unchanged.
+10. **`arx_basis`** — bit-major MiniARX vs word-major (Kogge–Stone /
+    ripple / hybrid-Σ). Loses on a GPU/AVX-512 cost model. Production
+    `derive` is unchanged.
 
 ## Correctness
 
@@ -631,6 +635,10 @@ in the *representation*.
 
 The question is whether some other encoding of the N states makes the
 *same* function cheaper. Tests live in `pbkdf2_basis` (9 new).
+Bit-major / prefix-add (the one representation that is *not* a
+rename of word-ARX) is measured in `arx_basis` and loses on RTX —
+see “Blank-sheet basis” below. This section is the remaining space:
+FFT, polynomials, packing, mixed SLPs, inversion analogs.
 Production `derive` is unchanged.
 
 ### The phenomenon is real — on the wrong operation

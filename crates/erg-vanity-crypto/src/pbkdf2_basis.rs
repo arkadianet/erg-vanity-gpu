@@ -141,6 +141,7 @@ fn eval_affine(mask: u8, abcd: u8) -> u8 {
 }
 
 /// GF(2) Gaussian: is `target[x]` in the affine span of {1, a, b, c, d, m(x)}?
+#[allow(clippy::needless_range_loop)]
 fn in_affine_span(m_of: &[u8; 16], target: impl Fn(u8) -> u8) -> bool {
     // Columns: 1, a, b, c, d, m. 16 rows.
     let mut a = [[0u8; 7]; 16];
@@ -727,7 +728,7 @@ mod tests {
     fn mixed_miniarx_superopt_finds_no_sub_2x_program() {
         // 8k random mixed programs of length 8–9. A hit would be a toy
         // collective ARX win and would be pursued.
-        let hits = miniarx_mixed_superopt(8_000, 0xb451_5u64);
+        let hits = miniarx_mixed_superopt(8_000, 0x000b_4515_u64);
         assert_eq!(hits, 0);
         assert_eq!(MINIARX4_PAIR_OPS, 10);
     }
