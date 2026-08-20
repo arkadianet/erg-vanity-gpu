@@ -217,6 +217,79 @@ def arx_map(nwords: int, bits: int, rounds: int, seed: int = 4) -> Model:
     )
 
 
+def _arx_forward(s: list[int], ks: list[int], bits: int, r1: int, r2: int, cost: Cost | None) -> list[int]:
+    ops = Ops(bits, cost)
+    nwords = len(s)
+    ki = 0
+    for _ in range(len(ks) // nwords):
+        for i in range(nwords):
+            j = (i + 1) % nwords
+            s[i] = ops.add(s[i], s[j])
+            s[i] = ops.xor(s[i], ops.rotr(s[j], r1))
+            s[i] = ops.add(s[i], ks[ki])
+            s[j] = ops.xor(s[j], ops.rotr(s[i], r2))
+            ki += 1
+    return s
+
+
+def _arx_inverse(s: list[int], ks: list[int], bits: int, r1: int, r2: int, cost: Cost | None) -> list[int]:
+    ops = Ops(bits, cost)
+    nwords = len(s)
+    rounds = len(ks) // nwords
+    for r in range(rounds - 1, -1, -1):
+        for i in range(nwords - 1, -1, -1):
+            j = (i + 1) % nwords
+            ki = r * nwords + i
+            s[j] = ops.xor(s[j], ops.rotr(s[i], r2))
+            s[i] = (s[i] - ks[ki]) & ops.mask
+            if cost is not None:
+                cost.add += 1
+            s[i] = ops.xor(s[i], ops.rotr(s[j], r1))
+            s[i] = (s[i] - s[j]) & ops.mask
+            if cost is not None:
+                cost.add += 1
+    return s
+
+
+def arx_hmac(nwords: int, bits: int, rounds: int, seed: int = 21) -> dict:
+    """Two-key invertible ARX stand-in for HMAC: F = ARX_O ∘ ARX_I.
+
+    Unlike reduced SHA+Ch/Maj, each half is a permutation, as HMAC-SHA512
+    of a single 64-byte block is (SHACAL-2 is a permutation in the message).
+    """
+    w = nwords * bits
+    rng = _lcg(seed)
+    ks_i = [_randbits(rng, bits) for _ in range(rounds * nwords)]
+    ks_o = [_randbits(rng, bits) for _ in range(rounds * nwords)]
+    r1 = 1 if bits == 1 else (bits // 3 or 1)
+    r2 = 1 if bits == 1 else (2 * bits // 3 or 1)
+
+    def H_I(x: int, cost: Cost | None = None) -> int:
+        s = unpack_words(x, nwords, bits)
+        return pack_words(_arx_forward(s, ks_i, bits, r1, r2, cost), bits)
+
+    def H_O(x: int, cost: Cost | None = None) -> int:
+        s = unpack_words(x, nwords, bits)
+        return pack_words(_arx_forward(s, ks_o, bits, r1, r2, cost), bits)
+
+    def F(x: int, cost: Cost | None = None) -> int:
+        return H_O(H_I(x, cost), cost)
+
+    def F_inv(x: int, cost: Cost | None = None) -> int:
+        s = unpack_words(x, nwords, bits)
+        s = _arx_inverse(s, ks_o, bits, r1, r2, cost)
+        s = _arx_inverse(s, ks_i, bits, r1, r2, cost)
+        return pack_words(s, bits)
+
+    return {
+        "w": w,
+        "H_I": Model(f"arxHI_n{nwords}b{bits}r{rounds}", w, lambda x, c: H_I(x, c)),
+        "H_O": Model(f"arxHO_n{nwords}b{bits}r{rounds}", w, lambda x, c: H_O(x, c)),
+        "F": Model(f"arxhmac_n{nwords}b{bits}r{rounds}", w, lambda x, c: F(x, c)),
+        "F_inv": Model(f"arxhmacInv_n{nwords}b{bits}r{rounds}", w, lambda x, c: F_inv(x, c)),
+    }
+
+
 def arx_chmaj_map(nwords: int, bits: int, rounds: int, seed: int = 5) -> Model:
     """ARX plus Ch/Maj, still a single map (not two-compress HMAC)."""
     w = nwords * bits
@@ -368,6 +441,37 @@ def mini_sha(nwords: int, bits: int, rounds: int, seed: int = 6) -> Model:
         eval=ev,
         note="reduced SHA-512 compression, fixed IV, HMAC-like padding",
     )
+
+
+def mini_hmac_parts(nwords: int, bits: int, rounds: int, seed: int = 7) -> dict:
+    """Inner/outer compressions of mini-HMAC, as separate maps."""
+    rng = _lcg(seed)
+    I = [_randbits(rng, bits) for _ in range(nwords)]
+    O = [_randbits(rng, bits) for _ in range(nwords)]
+    pad = _default_pad(nwords, bits)
+    w = nwords * bits
+
+    def H_I(x: int, cost: Cost | None = None) -> int:
+        ops = Ops(bits, cost)
+        inner = mini_compress(I, unpack_words(x, nwords, bits), bits, rounds, ops, pad)
+        return pack_words(inner, bits)
+
+    def H_O(x: int, cost: Cost | None = None) -> int:
+        ops = Ops(bits, cost)
+        outer = mini_compress(O, unpack_words(x, nwords, bits), bits, rounds, ops, pad)
+        return pack_words(outer, bits)
+
+    def F(x: int, cost: Cost | None = None) -> int:
+        return H_O(H_I(x, cost), cost)
+
+    return {
+        "w": w,
+        "H_I": Model(f"HI_n{nwords}b{bits}r{rounds}", w, lambda x, c: H_I(x, c)),
+        "H_O": Model(f"HO_n{nwords}b{bits}r{rounds}", w, lambda x, c: H_O(x, c)),
+        "F": Model(f"minihmac_n{nwords}b{bits}r{rounds}", w, lambda x, c: F(x, c)),
+        "I": I,
+        "O": O,
+    }
 
 
 def mini_hmac(nwords: int, bits: int, rounds: int, seed: int = 7) -> Model:

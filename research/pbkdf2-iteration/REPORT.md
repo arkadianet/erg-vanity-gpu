@@ -568,11 +568,140 @@ like a simplified combination of two F’s.
 
 ## Verdict
 
-Tried to disprove “2048 sequential HMACs are necessary.” The only exact
-algorithm that beat `n × F` was the one that applies when F is affine.
+Tried to disprove “2048 sequential HMACs are necessary.” Two exact
+algorithms beat `n × F`, and both require structure HMAC-like F does
+not have:
 
-On the first HMAC-like F that has full degree and no linear invariants,
-exact synthesis of `G2` vs `2F` found no sharing and no identity.
-`G2 = H∘F` is tautological and does not recurse.
+- F affine over GF(2) (or Q = F ⊕ F^{-1} affine) — `O(w^3 log n)`.
+- Orbit shorter than n — `min(n, L)` evals; for a permutation,
+  probability `n / 2^w`.
+
+A third identity, new here, holds for every permutation including
+real HMAC-SHA512: the orbit is exactly order-2 via `Q = F ⊕ F^{-1}`.
+On every invertible SHA-like model Q is as hard as F, so the
+recurrence does not reduce work.
 
 I do not recommend changing the production PBKDF2 iteration loop.
+
+---
+
+## 10. New representations (not Koopman / Walsh / G2-SAT / ANF)
+
+Scripts: `run_novel.py`, `run_quotients.py`, `run_invertible.py`,
+`run_linstruct.py`, `run_algorithms.py`.
+Log: `RESEARCH_LOG.md`. Raw: `results/{novel,quotients,invertible,linstruct,algorithms}.json`.
+
+These are different objects from “unroll F and CSE.”
+
+### 10.1 Order-2 recurrence of a permutation
+
+HMAC-SHA512 of a 64-byte block is a permutation: each half is
+Davies–Meyer around SHACAL-2, a permutation of the block. Reduced
+Ch/Maj models lose that (hmac r4 has `|im F|=110`); two-key ARX
+does not.
+
+**Theorem.** If F is bijective and `Q = F ⊕ F^{-1}`, then
+
+```text
+F^{k+1}(x) ⊕ F^{k-1}(x) = Q(F^k(x))     for all x, k≥1.
+```
+
+So the orbit is an exact order-2 recurrence. `algorithms.gn_order2`
+matches the naive XOR on linear F (`n≤2048`) and on arx-hmac r4
+(`n≤256`).
+
+This is cheaper than `n×F` if and only if one of the following holds.
+
+1. `Cost(Q) < Cost(F)` as circuits.
+2. Q is affine. Then `(u_k, u_{k-1})` is an affine map on `2w` bits
+   and `G_n` is `O(w^3 log n)` — the same class as §1.1.
+
+Measurements:
+
+| model | deg F | deg Q | Q affine | interpolant nz F / Q | Cost(Q) as F⊕F^{-1} |
+|---|---|---|---|---|---|
+| linear (control) | 1 | 1 | **yes** | 9 / 9 | — |
+| arx, 2–8 rounds | 7 | 7 | no | 253–255 / 251–254 | `2×F` |
+| arx-hmac, 2–8 rounds | 7 | 7 | no | 251–253 / 253–254 | `2×F` |
+
+Q is not a simpler map than F. The inverse ARX circuit has the same
+primitive count as F. The identity is real and lives at SHA-512
+width; it does not skip iterates and it does not shrink the circuit
+unless someone finds a cheaper expression for `F ⊕ F^{-1}` than F
+itself. On the 8-bit tables Q is information-theoretically dense
+(≥251 of 256 monomials), so no such expression exists at this width.
+
+### 10.2 Linear semiconjugacy tower
+
+F is linearly conjugate to a T-function iff there is a flag of
+linear forms such that the first `k+1` forms of `F(x)` are functions
+of the first `k+1` forms of `x`. A single 1-bit linear quotient is
+necessary.
+
+The affine control has flag height 8 (full). Mini-HMAC r2 has height
+3 (incomplete 2-bit diffusion). From **3 rounds** on, and on
+invertible ARX-HMAC, the height is **0**. The same at 12-bit
+(exhaustive) and 16-bit (4k random forms + structured masks).
+This closes linear conjugacy to a T-function; bit-permutation
+conjugacy was already closed in §4.
+
+### 10.3 GF(256) interpolants, exceptional maps, sandwich
+
+- Affine F: interpolant supported on Frobenius powers only.
+  Mixed F: 245–256 nonzero terms. `G_n` is *denser*, not sparser.
+- No deg-≤6 Abel function, no non-constant deg-≤4 Schröder function,
+  no GF(256)-affine conjugacy onto `x²` / `x⊕c` / `x+c` / `μx` /
+  `x^{2^k}` / rotation. Integer Abel of degree ≤2 over `Z/256`: none.
+- `F^n = H_O ∘ Q^{n-1} ∘ H_I` holds. Q is not cheaper than F
+  (same sparsity, degree, image, semiconjugacy height).
+- MPO / unfolding ranks of F and `G_8` are full at the 16×16 cut.
+- No commuting map in a library of XOR / add / odd-mul / rot /
+  word-add except the identity.
+
+### 10.4 Cycle prefix-XOR
+
+`algorithms.gn_cycle_xor` is exact for every map (tested n=2048).
+Cost is `min(n, p+L)` F-evals. For a **permutation** the cycle
+through a random x is uniform in `1..2^w`, so
+
+```text
+P(orbit closes before n) = n / 2^w.
+```
+
+At `w=8` every orbit closes (`L≤256`); 5/5 starts used 21–68 evals
+instead of 2048. At `w=16` and `w=32`, 0/5 starts closed before
+2048. For BIP39, `2048 / 2^{512}`. The algorithm is the naive walk
+plus an equality check that does not fire.
+
+(Random *functions* have expected rho `Θ(2^{w/2})`. HMAC of a
+64-byte block is a permutation, so the birthday figure does not
+apply.)
+
+### 10.5 Linear structures of `G_n`
+
+A direction Δ with `H(x⊕Δ)⊕H(x)` constant. hmac r2 has 12
+(under-mixed). From r=4, **F and `G_2, G_4, G_8, G_16, G_2048`
+all have zero** linear structures, on both collapsed mini-HMAC and
+bijective ARX-HMAC. XOR-of-iterates does not create a linear
+structure that F lacked.
+
+### 10.6 What is new, and what it is worth
+
+The new exact object is §10.1: every permutation orbit satisfies a
+canonical order-2 recurrence, and that recurrence is an `O(log n)`
+algorithm **exactly when Q is affine**, which is when F is affine.
+On every invertible SHA-like model, Q has the same degree and the
+same interpolant density as F.
+
+That is a classification, not a 10% circuit. Combined with the
+complete linear-T-function test (§10.2) and the interpolant
+measurement that `G_n` is denser than F (§10.3), the remaining
+openings that are *not* “make one SHA-512 cheaper” are:
+
+- a cheaper-than-F circuit for `Q = F ⊕ F^{-1}` at 512 bits
+  (equivalent to a simplification of HMAC plus HMAC-inverse);
+- a small-circuit Abel function that is not low-degree univariate
+  and not GF(2)-linear (the cheap classes are closed);
+- a SAT upper bound `MC(G2) < 92` from §9, still unclosed.
+
+None of those is justified enough to touch production PBKDF2.
