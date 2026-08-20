@@ -1,0 +1,173 @@
+{
+  "cone_F": [
+    {
+      "and": 36,
+      "xor": 101,
+      "not": 7,
+      "gates": 144
+    },
+    {
+      "and": 45,
+      "xor": 116,
+      "not": 8,
+      "gates": 169
+    },
+    {
+      "and": 26,
+      "xor": 77,
+      "not": 5,
+      "gates": 108
+    },
+    {
+      "and": 33,
+      "xor": 93,
+      "not": 6,
+      "gates": 132
+    },
+    {
+      "and": 22,
+      "xor": 62,
+      "not": 4,
+      "gates": 88
+    },
+    {
+      "and": 24,
+      "xor": 69,
+      "not": 4,
+      "gates": 97
+    },
+    {
+      "and": 27,
+      "xor": 84,
+      "not": 6,
+      "gates": 117
+    },
+    {
+      "and": 40,
+      "xor": 111,
+      "not": 8,
+      "gates": 159
+    }
+  ],
+  "cone_F2": [
+    {
+      "and": 82,
+      "xor": 227,
+      "not": 15,
+      "gates": 324
+    },
+    {
+      "and": 91,
+      "xor": 242,
+      "not": 16,
+      "gates": 349
+    },
+    {
+      "and": 72,
+      "xor": 203,
+      "not": 13,
+      "gates": 288
+    },
+    {
+      "and": 79,
+      "xor": 219,
+      "not": 14,
+      "gates": 312
+    },
+    {
+      "and": 68,
+      "xor": 188,
+      "not": 12,
+      "gates": 268
+    },
+    {
+      "and": 70,
+      "xor": 195,
+      "not": 12,
+      "gates": 277
+    },
+    {
+      "and": 73,
+      "xor": 210,
+      "not": 14,
+      "gates": 297
+    },
+    {
+      "and": 86,
+      "xor": 237,
+      "not": 16,
+      "gates": 339
+    }
+  ],
+  "cone_G2": [
+    {
+      "and": 82,
+      "xor": 228,
+      "not": 15,
+      "gates": 325
+    },
+    {
+      "and": 91,
+      "xor": 243,
+      "not": 16,
+      "gates": 350
+    },
+    {
+      "and": 72,
+      "xor": 204,
+      "not": 13,
+      "gates": 289
+    },
+    {
+      "and": 79,
+      "xor": 220,
+      "not": 14,
+      "gates": 313
+    },
+    {
+      "and": 68,
+      "xor": 189,
+      "not": 12,
+      "gates": 269
+    },
+    {
+      "and": 70,
+      "xor": 196,
+      "not": 12,
+      "gates": 278
+    },
+    {
+      "and": 73,
+      "xor": 211,
+      "not": 14,
+      "gates": 298
+    },
+    {
+      "and": 86,
+      "xor": 238,
+      "not": 16,
+      "gates": 340
+    }
+  ],
+  "counts_F": {
+    "and": 46,
+    "xor": 126,
+    "not": 8,
+    "add": 64,
+    "rot": 48,
+    "shr": 0,
+    "gates": 180,
+    "weighted_arx": 466
+  },
+  "counts_G2": {
+    "and": 92,
+    "xor": 260,
+    "not": 16,
+    "add": 128,
+    "rot": 96,
+    "shr": 0,
+    "gates": 368,
+    "weighted_arx": 940
+  },
+  "ratio": 1.0
+}

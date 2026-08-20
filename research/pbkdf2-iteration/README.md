@@ -18,5 +18,8 @@ and does not touch GPU kernels.
 - `REPORT.md` — findings: only affine F beat n×F; SHA-like models did not
 
 ```bash
+pip install -r requirements.txt
 python3 run_experiments.py
+python3 run_synthesis.py   # G2 vs 2F SAT + constructive circuits
+python3 run_slices.py      # exact 4-var restriction MC
 ```

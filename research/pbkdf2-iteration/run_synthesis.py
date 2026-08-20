@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 
 from analyze import algebraic_degree, anf_term_count, build_table, mobius
-from circuit import Circuit, build_hmac_family, two_copy_upper_bound, Counts
+from circuit import Circuit, build_hmac_family, cone_and_count, cone_gate_count, two_copy_upper_bound, Counts
 from models import mini_hmac
 from sat_mc import search_mc, verify_mc, solve_mc
 
@@ -151,8 +151,13 @@ def validate_sat() -> dict:
     """MC(x0∧x1∧x2∧x3) = 3; MC(x0⊕x1) = 0."""
     n = 4
     N = 16
-    and4 = [[((x >> 0) & (x >> 1) & (x >> 2) & (x >> 3)) & 1 for x in range(N)]]
-    xor2 = [[((x >> 0) ^ (x >> 1)) & 1 for x in range(N)]]
+    and4 = [
+        [
+            ((x >> 0) & 1) & ((x >> 1) & 1) & ((x >> 2) & 1) & ((x >> 3) & 1)
+            for x in range(N)
+        ]
+    ]
+    xor2 = [[((x >> 0) & 1) ^ ((x >> 1) & 1) for x in range(N)]]
     r0 = solve_mc(xor2, n, 0, 5.0)
     r2 = solve_mc(and4, n, 2, 8.0)
     r3 = solve_mc(and4, n, 3, 8.0)
@@ -203,6 +208,9 @@ def constructive(nwords: int, bits: int, rounds: int, seed: int, model) -> dict:
         "hashcons_weighted_vs_two_copy": cG.weighted_arx / max(1, two.weighted_arx),
         "extra_ands_for_F2": cG.and_ - cF.and_,
         "sharing_saved_ands": two.and_ - cG.and_,
+        "cone_F": [cone_gate_count(ckt, b) for b in fam["f_bits"]],
+        "cone_G2": [cone_gate_count(ckt, b) for b in fam["g2_bits"]],
+        "cone_F2": [cone_gate_count(ckt, b) for b in fam["f2_bits"]],
     }
 
 
@@ -257,6 +265,76 @@ def mc_block(name: str, table: np.ndarray, w: int, kmin: int, kmax: int, timeout
     }
 
 
+def walsh_max(bit_fn: list[int]) -> int:
+    v = [1 - 2 * b for b in bit_fn]
+    n = len(v)
+    h = 1
+    while h < n:
+        for i in range(0, n, h * 2):
+            for j in range(h):
+                a, b = v[i + j], v[i + j + h]
+                v[i + j] = a + b
+                v[i + j + h] = a - b
+        h *= 2
+    return max(abs(x) for x in v)
+
+
+def bit_complexity_stats(table: np.ndarray, w: int) -> list[dict]:
+    """Exact per-bit invariants that constrain circuit cost."""
+    N = 1 << w
+    degs = bit_degrees(table, w)
+    tabs = tables_of(table, w)
+    anf = mobius(table)
+    out = []
+    for b in range(w):
+        fn = tabs[b]
+        wt = sum(fn)
+        # min distance to affine = (2^w - max|Walsh|)/2
+        wmax = walsh_max(fn)
+        dist_aff = (N - wmax) // 2
+        monomials = sum(1 for i in range(N) if (int(anf[i]) >> b) & 1)
+        # product-of-affines ⊕ affine  ⇒  some affine a with wt(f⊕a)=1
+        # Check all 2^{w+1} affine functions via Walsh: only if dist_aff==1
+        # and the function is a point function after affine XOR.
+        # Broader: wt(f⊕a) in {1, 2^w-1} means f is a product of w affines ⊕ affine.
+        product_plus_affine = dist_aff in (1, N - 1) or wt in (1, N - 1)
+        out.append(
+            {
+                "bit": b,
+                "deg": degs[b],
+                "mc_deg_lb": max(0, degs[b] - 1),
+                "weight": wt,
+                "anf_terms": monomials,
+                "walsh_max": wmax,
+                "dist_to_affine": dist_aff,
+                "product_plus_affine": product_plus_affine,
+            }
+        )
+    return out
+
+
+def per_bit_mc_lb(table: np.ndarray, w: int, timeout: float) -> dict:
+    """SAT only at k = deg-1. SAT proves the degree bound is tight."""
+    degs = bit_degrees(table, w)
+    tabs = tables_of(table, w)
+    out = {}
+    for b in range(w):
+        k = max(0, degs[b] - 1)
+        log(f"    bit {b} deg={degs[b]} k={k}")
+        r = solve_mc([tabs[b]], w, k, timeout)
+        rec = {
+            "deg": degs[b],
+            "k": k,
+            "status": r.status,
+            "seconds": r.seconds,
+            "verified": verify_mc([tabs[b]], w, r) if r.status == "sat" else None,
+            "xor_est": r.xor_est,
+        }
+        out[str(b)] = rec
+        log(f"      {r.status} {r.seconds}s")
+    return out
+
+
 def per_bit_mc(table: np.ndarray, w: int, bits: list[int], kmax: int, timeout: float) -> dict:
     degs = bit_degrees(table, w)
     out = {}
@@ -309,8 +387,19 @@ def main() -> int:
     f = build_table(model)
     f2 = f[f]
     g2 = f ^ f2
-    log(f"  deg F/F2/G2={algebraic_degree(f)}/{algebraic_degree(f2)}/{algebraic_degree(g2)}")
-    log(f"  bitdeg F={bit_degrees(f, w)} F2={bit_degrees(f2, w)} G2={bit_degrees(g2, w)}")
+    hx = np.arange(1 << w, dtype=np.uint32) ^ f
+    log(
+        f"  deg F/H/F2/G2="
+        f"{algebraic_degree(f)}/{algebraic_degree(hx)}/"
+        f"{algebraic_degree(f2)}/{algebraic_degree(g2)}"
+    )
+    log(f"  bitdeg F={bit_degrees(f, w)}")
+    log(f"  bitdeg H={bit_degrees(hx, w)}")
+    log(f"  bitdeg F2={bit_degrees(f2, w)}")
+    log(f"  bitdeg G2={bit_degrees(g2, w)}")
+    # tautology G2 = H ∘ F
+    hof = hx[f]
+    log(f"  G2==H∘F (tautology check) {bool(np.array_equal(g2, hof))}")
 
     log("algebraic identities")
     ident = identities(f, f2, g2, w)
@@ -318,16 +407,29 @@ def main() -> int:
 
     # Vectorial MC: start at the degree lower bound.
     # Timeouts are "not found". UNSAT is a lower bound.
-    timeout = 40.0
-    log("vectorial MC")
-    mc_f = mc_block("F", f, w, kmin=5, kmax=14, timeout=timeout)
-    mc_f2 = mc_block("F2", f2, w, kmin=7, kmax=14, timeout=timeout)
-    mc_g2 = mc_block("G2", g2, w, kmin=7, kmax=14, timeout=timeout)
+    log("Walsh / product-plus-affine (exact, not SAT)")
+    bitstats = {
+        "F": bit_complexity_stats(f, w),
+        "H": bit_complexity_stats(hx, w),
+        "F2": bit_complexity_stats(f2, w),
+        "G2": bit_complexity_stats(g2, w),
+    }
+    for name, st in bitstats.items():
+        log(f"  {name} {st}")
 
-    log("per-bit MC (bits 0,1,4,7)")
-    pb_f = per_bit_mc(f, w, [0, 1, 4, 7], kmax=12, timeout=25.0)
-    pb_f2 = per_bit_mc(f2, w, [0, 1, 4, 7], kmax=12, timeout=25.0)
-    pb_g2 = per_bit_mc(g2, w, [0, 1, 4, 7], kmax=12, timeout=25.0)
+    # SAT at the degree lower bound only. SAT => MC = deg-1 (tight).
+    # UNSAT => MC > deg-1. Timeout => no circuit found at that k.
+    log("vectorial MC at degree lower bound")
+    mc_f = mc_block("F", f, w, kmin=5, kmax=5, timeout=20.0)
+    mc_h = mc_block("H", hx, w, kmin=5, kmax=5, timeout=20.0)
+    mc_f2 = mc_block("F2", f2, w, kmin=7, kmax=7, timeout=20.0)
+    mc_g2 = mc_block("G2", g2, w, kmin=7, kmax=7, timeout=20.0)
+
+    log("per-bit MC at degree lower bound")
+    pb_f = per_bit_mc_lb(f, w, timeout=15.0)
+    pb_h = per_bit_mc_lb(hx, w, timeout=15.0)
+    pb_f2 = per_bit_mc_lb(f2, w, timeout=15.0)
+    pb_g2 = per_bit_mc_lb(g2, w, timeout=15.0)
 
     out = {
         "target": model.name,
@@ -336,17 +438,43 @@ def main() -> int:
         "constructive": cons,
         "degrees": {
             "F": algebraic_degree(f),
+            "H": algebraic_degree(hx),
             "F2": algebraic_degree(f2),
             "G2": algebraic_degree(g2),
             "F_bits": bit_degrees(f, w),
+            "H_bits": bit_degrees(hx, w),
             "F2_bits": bit_degrees(f2, w),
             "G2_bits": bit_degrees(g2, w),
+            "G2_is_H_of_F": bool(np.array_equal(g2, hof)),
         },
         "identities": ident,
-        "mc_vectorial": {"F": mc_f, "F2": mc_f2, "G2": mc_g2},
-        "mc_per_bit": {"F": pb_f, "F2": pb_f2, "G2": pb_g2},
+        "bit_stats": bitstats,
+        "mc_vectorial": {"F": mc_f, "H": mc_h, "F2": mc_f2, "G2": mc_g2},
+        "mc_per_bit": {"F": pb_f, "H": pb_h, "F2": pb_f2, "G2": pb_g2},
         "seconds": round(time.time() - t0, 3),
     }
+    log("constructive ratio across keys/rounds (upper bound only)")
+    robustness = []
+    for rds in (2, 3, 4, 8):
+        for sd in (21, 22, 99):
+            m2 = mini_hmac(4, 2, rds, seed=sd)
+            c2 = constructive(4, 2, rds, sd, m2)
+            robustness.append(
+                {
+                    "rounds": rds,
+                    "seed": sd,
+                    "and_F": c2["counts_F"]["and"],
+                    "and_G2": c2["counts_G2_hashcons"]["and"],
+                    "ratio": c2["hashcons_and_vs_two_copy"],
+                    "equiv": c2["equiv_G2"],
+                }
+            )
+            log(
+                f"  r={rds} seed={sd} andF={c2['counts_F']['and']} "
+                f"andG2={c2['counts_G2_hashcons']['and']} ratio={c2['hashcons_and_vs_two_copy']:.3f}"
+            )
+    out["robustness_constructive"] = robustness
+
     path = OUT / "synthesis.json"
     path.write_text(json.dumps(out, indent=2))
     log(f"wrote {path} in {out['seconds']}s")
@@ -363,7 +491,7 @@ def _verdict(out: dict) -> None:
         f"2F+xor={c['counts_two_copy']['and']}  "
         f"ratio={c['hashcons_and_vs_two_copy']:.3f}"
     )
-    for name in ("F", "F2", "G2"):
+    for name in ("F", "H", "F2", "G2"):
         b = out["mc_vectorial"][name]
         log(
             f"  {name}: deg={b['vec_degree']} SAT-MC last={b['last_status']} "

@@ -268,6 +268,39 @@ def build_hmac_family(nwords: int, bits: int, rounds: int, seed: int) -> dict:
     }
 
 
+def cone_and_count(ckt: Circuit, out: int) -> int:
+    """AND gates that reach `out` (exact DCE upper bound for one bit)."""
+    need = {out}
+    for i in range(out, -1, -1):
+        if i not in need:
+            continue
+        n = ckt.nodes[i]
+        if n.a is not None:
+            need.add(n.a)
+        if n.b is not None:
+            need.add(n.b)
+    return sum(1 for i in need if ckt.nodes[i].op == "and")
+
+
+def cone_gate_count(ckt: Circuit, out: int) -> dict:
+    need = {out}
+    for i in range(out, -1, -1):
+        if i not in need:
+            continue
+        n = ckt.nodes[i]
+        if n.a is not None:
+            need.add(n.a)
+        if n.b is not None:
+            need.add(n.b)
+    c = {"and": 0, "xor": 0, "not": 0}
+    for i in need:
+        op = ckt.nodes[i].op
+        if op in c:
+            c[op] += 1
+    c["gates"] = c["and"] + c["xor"] + c["not"]
+    return c
+
+
 def two_copy_upper_bound(counts_F: Counts) -> Counts:
     """Naive G2 = F ⊕ F∘F with no cross-iteration sharing except F's outputs."""
     c = Counts(

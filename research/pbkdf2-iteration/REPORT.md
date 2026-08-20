@@ -369,20 +369,31 @@ table-sized model and not found.
 
 None of these is a proof that no other `R(F)` exists.
 
-### Theoretically plausible, not tested here
+### Experimentally unsuccessful (exact G2 synthesis, §9)
 
-- SAT / exact Boolean synthesis of the **minimum** circuit for `G_2`
-  versus `2F` on the smallest **full-degree** mini-HMAC
-  (`minihmac_n4b2r4`, w=8, deg 8, Koopman 75). Existence of a smaller
-  circuit is not ruled out by ANF size or by “we did not find CSE.”
-- Search for a **small non-linear** conjugacy `ψ` (not a bit permutation)
-  of mini-HMAC to an affine map or a monomial. Existence of some `ψ` is
-  guaranteed on each cycle of a permutation; existence of a **cheap** `ψ`
-  is the open statement.
-- A lower bound that reduced-Koopman dimension is
-  `Ω(min(n w, 2^{c·(# nonlinear gates affecting the carried state)}))`
-  for this specific circuit family.
-- Full 512-bit SHA-512. Not justified by anything that survived.
+- Hash-cons of the definition circuit: `Cost(G2) = 2 Cost(F)` on every
+  cost model, every tested key, and 2/3/4/8 rounds. Zero cross-iteration
+  sharing.
+- Per-output dead-code cones: each G2 bit uses essentially the F cone
+  plus the F² cone (same AND count as the corresponding F² bit).
+- Affine / EA identities relating G2 to F, F², or x: all false.
+- `G2 = F ∘ g` for some g: impossible (`im(G2) ⊈ im(F)`).
+- `H(x)=x⊕F(x)` is not cheaper than F (same degrees, same 4-var MC
+  histogram, Walsh distances identical). `G2 = H∘F` is a tautology and
+  does **not** recurse to a sublinear `G_{2048}`.
+- 4-variable restrictions: G2 slices match F², not F. The apparent
+  `MC(G2) < 2 MC(F)` on those slices is the 4-var cap `MC ≤ 3`, not a
+  real saving.
+
+### Theoretically plausible, not closed
+
+- A SAT *lower* bound `MC(G2) ≥ 2 MC(F)` was **not** obtained. Degree
+  gives `MC(G2) ≥ 7` and `MC(F) ≥ 5`. Constructive upper bounds are 92
+  and 46 ANDs. The gap 7…92 is unclosed. 8-bit SAT at the degree
+  bound timed out (neither SAT nor UNSAT).
+- A cheap nonlinear conjugacy `ψ` of mini-HMAC to an affine map.
+- Full 512-bit SHA-512. Nothing that survived on the reduced family
+  justifies it.
 
 ### Not claimed
 
@@ -395,38 +406,163 @@ either proven or measured on the reduced family.
 
 ## 8. Recommendation for the next experiment
 
-Do **not** go to full SHA-512. Do **not** re-expand `G_n` as a DAG.
+Do **not** go to full SHA-512.
 
-Run exact circuit synthesis on the smallest HMAC-like F that has already
-lost every cheap invariant:
+The G2 synthesis (§9) found no identity and no sharing. The only
+remaining *exact* opening on this model is closing the SAT gap
+`7 ≤ MC(G2) ≤ 92` with a better encoding (native XOR clauses, SAT
+*upper* bounds at k=20–40 rather than at the degree minimum). If that
+search produces a circuit with ≤ 80 ANDs, *then* extract the identity
+and test recursion. Until a circuit strictly below `2 Cost(F)` is in
+hand, further operator search on HMAC-like F is repeating a negative.
+
+If someone still wants a dynamical-systems attempt: itinerary entropy
+of the piecewise-affine (carry / Ch / Maj) decomposition along a
+2048-step 64-bit orbit. Jacobian uniqueness already makes this unlikely.
+
+---
+
+## 9. Exact synthesis of G2 vs 2F (`minihmac_n4b2r4`)
+
+Target: `w=8`, 4 words × 2 bits, 4 rounds, two compressions, seed 21.
+`deg(F)=6`, `deg(F²)=deg(G2)=8`, Koopman 75, 0 linear invariants.
+
+G2 was allowed arbitrary sharing. It was **not** forced to be two
+copies of F. Cadical searched the complete AND-XOR model (each AND
+takes two affine forms of earlier wires; outputs are affine forms of
+all wires). The SAT harness was checked on `x0⊕x1` (MC=0) and
+`x0x1x2x3` (MC=3, UNSAT at 2).
+
+### 9.1 Constructive circuits (exact upper bounds)
+
+Bit-level DAG of the definition, constant-folded I/O/pad, global
+hash-cons, exhaustively equal to the integer F / F² / G2 on all 256
+inputs.
+
+| cost model | F | G2 (hash-cons) | two copies + 8 XOR | G2 / 2F |
+|---|---|---|---|---|
+| AND | 46 | 92 | 92 | **1.000** |
+| XOR | 126 | 260 | 260 | 1.000 |
+| NOT | 8 | 16 | 16 | 1.000 |
+| ADD (2-bit) | 64 | 128 | 128 | 1.000 |
+| ROT | 48 | 96 | 96 | 1.000 |
+| all gates | 180 | 368 | 368 | 1.000 |
+| weighted ARX (3A+2∧+⊕+…) | 466 | 940 | 940 | 1.000 |
+
+Hash-cons saved **0** AND gates. The second F shares nothing with the
+first except the 8 wires `F(x)`.
+
+Dead-code cones (one output bit):
+
+| bit | AND in F | AND in F² | AND in G2 |
+|---|---|---|---|
+| 0 | 36 | 82 | 82 |
+| 1 | 45 | 91 | 91 |
+| 2 | 26 | 72 | 72 |
+| 4 | 22 | 68 | 68 |
+
+Every G2 bit’s cone is the corresponding F² cone (F plus a full second
+F, plus one XOR). DCE does not expose a cheaper G2.
+
+Same 2× ratio for seeds `{21,22,99}` and rounds `{2,3,4,8}`:
 
 ```text
-minihmac_n4b2r4     # 4 words × 2 bits, 4 rounds, two compressions
-w = 8
-deg(F) = 6, deg(F²) = 8
-Koopman rank 75 (saturated)
-0 linear invariants
-Walsh already filling
+r=2  andF=4..8    andG2=8..16     ratio=1.000
+r=3  andF=22..26  andG2=44..52    ratio=1.000
+r=4  andF=46..50  andG2=92..100   ratio=1.000
+r=8  andF=134..138 andG2=268..276 ratio=1.000
 ```
 
-Question: is `size*(G_2) < 2 size*(F)` for a minimum (or SAT-bounded)
-AND/XOR circuit, by even 5–10%?
+2-round F is under-mixed (few ANDs) and *still* has no G2 sharing.
 
-- If **no** (min circuit of `G_2` is essentially two copies of F plus 8
-  XORs): that is evidence, at the first full-degree HMAC-like map, that
-  the XOR-of-two-iterates problem has no extra algebraic identity. Stop
-  the operator search.
-- If **yes**: that identity is the object `R(F)`. Scale immediately to
-  `n=4,8` and to `b=3`, `nwords=8`, and see whether the gap is a
-  2-bit accident or a real composition law.
+### 9.2 Algebraic identities (exhaustive on the 256-point table)
 
-A secondary, cheaper experiment: treat one SHACAL-like round as a
-piecewise-affine map (carries + Ch/Maj choice bits) and count the
-itinerary entropy along a 2048-step 64-bit mini-HMAC orbit. If the
-symbolic itinerary is compressible, variation-of-constants on the linear
-pieces might beat `n F`. The Jacobian uniqueness in §4.3 already makes
-this unlikely; it is the last standard “nonlinear = piecewise linear”
-attack that was not fully costed.
+| candidate | holds? |
+|---|---|
+| G2 = F, F², 0, id, F⊕id | no |
+| G2 = M F ⊕ b (affine of F) | no |
+| G2 = M F² ⊕ b | no |
+| G2 = M F² ⊕ N x ⊕ b (EA of F²) | no |
+| G2 = M F ⊕ N x ⊕ b | no |
+| exists g with F∘g = G2 | no (`\|im F\|=110`, `\|im G2\|=89`, not a subset) |
+| exists g with g∘F = G2 | **yes**, always: `g = H` on `im(F)` |
+
+`G2(x) = H(F(x))` with `H(y)=y⊕F(y)` is an identity for every F, not a
+discovery about HMAC. It gives `Cost(G2) ≤ Cost(F)+Cost(H)`. H has the
+same algebraic degree as F (6), the same per-bit degree vector, the
+same 4-var MC histogram, and Walsh distances within 0–8 of F. The
+constructive circuit for H is F plus 8 XORs. So this rewrite is
+`Cost(G2) ≤ 2 Cost(F) + 8`, i.e. the naive bound.
+
+It does **not** compose to a sublinear `G_{2048}`:
+
+```text
+G4(x) = G2(x) ⊕ G2(F²(x)) = H(F(x)) ⊕ H(F³(x))
+```
+
+That is two H-evals at *different* odd iterates, which still requires
+the even iterates of F. Memoized, it is 4 applications of F.
+
+### 9.3 SAT multiplicative complexity
+
+Model: k AND gates with affine inputs; 8 shared outputs. Complete for
+Boolean maps. UNSAT at k would be a **proof** that every AND-XOR
+circuit needs ≥ k+1 ANDs. Timeout is not a proof.
+
+| map | deg | deg-lb on MC | SAT at k = deg−1 (20–30s) |
+|---|---|---|---|
+| F | 6 | 5 | timeout (vectorial and all 8 bits) |
+| H | 6 | 5 | timeout |
+| F² | 8 | 7 | timeout |
+| G2 | 8 | 7 | timeout |
+
+No circuit was found, and no k-UNSAT lower bound above `deg−1` was
+obtained. Classification:
+
+- **Not found:** an AND-XOR circuit for G2 with fewer than 92 ANDs.
+- **Not proven:** that none exists. The proven AND lower bound is 7
+  (degree). The proven upper bound is 92 (definition circuit).
+
+Walsh / ANF (exact) already show G2 bits are not the cheap degree-8
+functions (product of 8 affines ⊕ affine). Distance to the nearest
+affine is 91–107 out of 256 (random-like). So MC = 7 is unlikely; the
+solver timing out at k=7 is consistent with that, but is not UNSAT.
+
+### 9.4 Exact synthesis on 4-variable restrictions
+
+Every 4-var Boolean function has MC ≤ 3, so SAT **finishes**. 70
+four-dimensional subspaces × 8 output bits = 560 restrictions per map.
+A circuit for the 8-bit map restricts to a circuit for each slice, so
+this is exact — but the 4-var cap makes `MC(G2) < 2 MC(F)` automatic
+whenever `MC(F) ≥ 2`, and must not be read as a 8-bit win.
+
+Histograms (560 restrictions):
+
+| map | MC=0 | 1 | 2 | 3 | max over bits |
+|---|---|---|---|---|---|
+| F | 1 | 42 | 322 | 195 | 3,3,3,3,3,3,3,3 |
+| H | 1 | 42 | 322 | 195 | same as F |
+| F² | 0 | 6 | 293 | 261 | 3 everywhere |
+| G2 | 0 | 15 | 287 | 258 | 3 everywhere |
+
+G2’s histogram is F²’s, not F’s. Paired triples `(MC F, MC G2, MC F²)`:
+the mode is `(2,2,2)` (179/560). G2 is cheaper than F² in 105/560
+slices and *more expensive* in others (`(3,3,2)` occurs 93 times). No
+systematic slice identity.
+
+### 9.5 Synthesis verdict
+
+On every cost model we could **evaluate** (AND, XOR, ADD, ROT, gates,
+weighted ARX, per-bit cones, 4-var exact MC):
+
+`Cost(G2) = 2 Cost(F)` (plus 8 XORs), with no surviving algebraic
+rewrite that would cut that.
+
+A 5–10% exact saving on this full-degree HMAC-like F was **not found**.
+That is not a proof that a 80-AND circuit for G2 is impossible. It is
+a proof that the definition circuit has no sharing, that the obvious
+operator rewrites fail exhaustively, and that G2 behaves like F², not
+like a simplified combination of two F’s.
 
 ---
 
@@ -434,9 +570,9 @@ attack that was not fully costed.
 
 Tried to disprove “2048 sequential HMACs are necessary.” The only exact
 algorithm that beat `n × F` was the one that applies when F is affine.
-Every HMAC-like model that mixed like SHA-512 lost that structure, and
-the reasons it lost it are operator-level, not “the circuit was not
-optimized hard enough.”
 
-I do not recommend changing the production PBKDF2 iteration count or
-replacing the loop with a different exact recurrence.
+On the first HMAC-like F that has full degree and no linear invariants,
+exact synthesis of `G2` vs `2F` found no sharing and no identity.
+`G2 = H∘F` is tautological and does not recurse.
+
+I do not recommend changing the production PBKDF2 iteration loop.

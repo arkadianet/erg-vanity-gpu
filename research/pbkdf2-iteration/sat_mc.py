@@ -11,7 +11,7 @@ Timeout is 'not found', not a lower bound.
 
 from __future__ import annotations
 
-import threading
+import multiprocessing as mp
 from dataclasses import dataclass
 
 from pysat.solvers import Cadical195
@@ -30,23 +30,26 @@ class MCResult:
     out_const: list | None = None
 
 
-def _timeout_solve(solver: Cadical195, limit_s: float) -> str:
-    box: list[str] = ["timeout"]
+def _solve_worker(tables: list, n_vars: int, k: int, q: mp.Queue) -> None:
+    try:
+        r = _solve_mc_inner(tables, n_vars, k)
+        q.put(r)
+    except Exception as exc:  # noqa: BLE001
+        q.put(MCResult(k=k, status=f"error:{exc}", seconds=0.0))
 
-    def run() -> None:
-        box[0] = "sat" if solver.solve() else "unsat"
 
-    t = threading.Thread(target=run, daemon=True)
-    t.start()
-    t.join(limit_s)
-    if t.is_alive():
-        try:
-            solver.interrupt()
-        except Exception:
-            pass
-        t.join(5)
-        return "timeout"
-    return box[0]
+def _timeout_solve_process(tables: list, n_vars: int, k: int, limit_s: float) -> MCResult:
+    q: mp.Queue = mp.Queue()
+    p = mp.Process(target=_solve_worker, args=(tables, n_vars, k, q))
+    p.start()
+    p.join(limit_s)
+    if p.is_alive():
+        p.terminate()
+        p.join(2)
+        return MCResult(k=k, status="timeout", seconds=limit_s)
+    if q.empty():
+        return MCResult(k=k, status="timeout", seconds=limit_s)
+    return q.get()
 
 
 class _Enc:
@@ -174,7 +177,7 @@ def encode_mc(tables: list[list[int]], n_vars: int, k: int) -> tuple[_Enc, dict]
     return e, meta
 
 
-def solve_mc(tables: list[list[int]], n_vars: int, k: int, timeout_s: float) -> MCResult:
+def _solve_mc_inner(tables: list[list[int]], n_vars: int, k: int) -> MCResult:
     import time
 
     t0 = time.time()
@@ -182,10 +185,10 @@ def solve_mc(tables: list[list[int]], n_vars: int, k: int, timeout_s: float) -> 
     solver = Cadical195()
     for cl in e.clauses:
         solver.add_clause(cl)
-    status = _timeout_solve(solver, timeout_s)
+    sat = solver.solve()
     dt = time.time() - t0
-    res = MCResult(k=k, status=status, seconds=round(dt, 3))
-    if status == "sat":
+    res = MCResult(k=k, status="sat" if sat else "unsat", seconds=round(dt, 3))
+    if sat:
         model = solver.get_model()
         assign = {abs(l): (1 if l > 0 else 0) for l in model}
 
@@ -212,7 +215,6 @@ def solve_mc(tables: list[list[int]], n_vars: int, k: int, timeout_s: float) -> 
         res.ands = ands
         res.outs = outs
         res.out_const = oc
-        # XOR estimate: popcount of all linear forms
         xors = 0
         for um, vm, _, _ in ands:
             xors += max(0, um.bit_count() - 1) + max(0, vm.bit_count() - 1)
@@ -221,6 +223,13 @@ def solve_mc(tables: list[list[int]], n_vars: int, k: int, timeout_s: float) -> 
         res.xor_est = xors
     solver.delete()
     return res
+
+
+def solve_mc(tables: list[list[int]], n_vars: int, k: int, timeout_s: float) -> MCResult:
+    # n≤4 encodes in milliseconds; avoid process overhead.
+    if n_vars <= 4 and timeout_s >= 2:
+        return _solve_mc_inner(tables, n_vars, k)
+    return _timeout_solve_process(tables, n_vars, k, timeout_s)
 
 
 def eval_mc_circuit(x: int, n: int, ands: list, outs: list, out_const: list) -> int:
