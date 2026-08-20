@@ -101,6 +101,7 @@ but they cannot be moved into `K[t]` without corrupting later schedule uses:
 | H19 | The pad64 schedule has hidden identities after the first expand. | **Rejected.** Const-folded schedule DAG: first expand is exactly 22 σ (44 ror + 22 shr); three dense expands add exactly 192 ror + 96 shr (no extra CSE). For 80 random messages, no `W[t]` (`t≥32`) equals `W[s]`, `W[s]+C`, `σ0(W[s])`, or `σ1(W[s])`. σ0 and σ1 of the same word share no rotate distances. |
 | H20 | Published SHA-2 / PBKDF2 / ARX work contains an exact 10%+ evaluation shortcut. | **Rejected after reading.** See literature section. Every claimed large speedup is midstates (already in the 4094 count), ZB/IS (our ~3%), register packing, SIMD of independent blocks, or critical-path/area — not fewer fundamental ops. |
 | H21 | Automated search can find a 2-rotate equivalent for Σ or for `Σ+Ch` (the ~10% SHF path). | **Rejected in the searched class.** Exhaustive 2-term+shift vs Σ0/Σ1 on all basis vectors: empty. 15 structured fusions: 0/400. Superopt 12k steps: no rotate dropped. Mendel form = same circuit. Related-mnemonic I/O Hamming >180. |
+| H22 | N independent BIP39 PBKDF2 instances cost materially less than N× one instance (shared salt, bitslice, prefix add, last-word family, warp-as-one-circuit). | **Rejected.** Shared DAG nodes are O(1) (U1-inner W, constants) plus O(prefix rounds) of setup. Loop intermediates of related last-words do not collide (8 HMAC steps, 0 word hits). Bitslice/CLA/hybrid-transpose **increase** work vs hardware IADD. See batch section. |
 
 ## What is not a lower bound
 
@@ -143,6 +144,8 @@ than 80 rounds. ASIC/GPU miners do not skip rounds.
    2-term Σ search, structured Σ+Ch fusions, 8-bit ADD+ROTR correction,
    STOKE-style superopt of `Σ1+Ch`, Mendel form, related-mnemonic midstate
    Hamming. Not on the production path.
+8. **`pbkdf2_batch`** — batch-complexity accounting and tests. Production
+   `derive` is unchanged.
 
 ## Correctness
 
@@ -163,6 +166,13 @@ Rust tests (see `sha512_hmac64`, `pbkdf2_fast`, `pbkdf2`):
   400 tuples; fused 2-round = two steps; HMAC not a homomorphism; schedule
   DAG σ-count; no `W[t]` identities after the first expand; DAG 1/2/4/8-round
   scaling; ROTR/ADD/CSA-rotate non-identities
+- `sha512_search`: no 2-term Σ; structured fusions 0/400; superopt keeps
+  3 rotates; 8-bit ADD+ROTR correction dense; Mendel = standard `a'`;
+  related-mnemonic midstates avalanche; MiniSHA-8 2-round = composed
+- `pbkdf2_batch`: U1-inner W is salt-only and matches production U1;
+  last-word prefix 8–11 rounds; family/unrelated shared ratios ≪ 0.1%;
+  0 colliding HMAC-64 words over 8 steps for related and unrelated pairs;
+  bitslice/KS/hybrid-transpose work > hardware IADD
 
 GPU kernel tests are the existing OpenCL suite (`ERG_RUN_GPU_TESTS=1`); this
 environment has no GPU, so those stay skipped here.
@@ -501,13 +511,115 @@ candidate.
 - Fusing Σ with Ch/Maj to drop a rotate (structured catalog + superopt)
 - Sparse ADD+ROTR correction / joint ARX basis
 - Cross-seed sharing of the 4094-loop after related BIP39 prefixes
+- Work(N) < N·Work(1) by ≥10% via salt/bitslice/CLA/family/warp-circuit
 
-A result that would reopen this: an equivalent circuit for
-`Compress(H, pad64(m))` whose Σ/add/Ch/Maj count is ≥10% below the
-specialized 80-round form, with a differential test against
-`compress_hmac64`. We do not have one. See the next section for the
-automated search that targeted that 10% path, and the barriers that
-stopped it.
+## Batch complexity: is Work(N) < N · Work(1)?
+
+Single-compression optimality is set aside. The question is whether a
+**batch** of BIP39 candidates has a different dependency graph.
+
+Every instance is a circuit `C(P_i, S)` with shared salt `S` and private
+password `P_i`. A combinational circuit for `(C(P_1,S),…,C(P_N,S))` can
+share a gate only if that gate’s inputs are in the shared cone
+(functions of `S`, `K[t]`, IV, padding) **or** two private cones
+accidentally compute the same value.
+
+### Shared cone (proven, tiny)
+
+| Shared node | Once per batch | Per-instance leftover |
+|-------------|----------------|------------------------|
+| SHA-512 `K[t]`, IV | yes | — |
+| `pad(S \|\| 1)` and its 80-word `W` | yes (`u1_inner_block`; matches production U1) | 80 rounds on **different** `I_i` |
+| `K[t]+W[t]` for that U1-inner block | yes | Σ/Ch/Maj/add on `I_i` |
+| `"mnemonic"\|\|passphrase` PE | same as the U1-inner row | loop messages are `U_j`, not salt |
+
+That is ≈ ¼ of **one** compression. Ratio `0.25 / (N·4098)`: **< 10⁻⁴**
+for N=1, **< 10⁻⁷** for N=10⁴ (`shared_fraction_unrelated`).
+
+U1 inner is the *only* loop-adjacent compression with a fixed message.
+U1 outer’s message is the inner digest (private). Iterations 2..2048 have
+private midstates **and** private messages.
+
+### Related passwords do not merge the private cones
+
+12-word mnemonics differing in the last word: first differing key word
+is 8..11, so ipad and opad share that many rounds. Family of 128 valid
+last words:
+
+```
+shared ≈ 0.25 + 2·prefix/80 compressions   (~0.5)
+total  = 128 · 4098
+ratio  < 10⁻⁵
+```
+
+Measured on `abandon…about` vs `abandon…legal`: I/O Hamming >180/512;
+U1 Hamming >180; **0** equal words across 8 subsequent HMAC-64 steps
+(`loop_word_collisions`). Unrelated passwords: same. 32 sequential
+`seed-i` keys: I Hamming >160 between neighbors.
+
+24-word passwords exceed 128 bytes, so `K'=SHA-512(P)`. A shared first
+128-byte block saves one password-hash compression, still setup-only.
+
+Avalanche after the first differing `W[t]` is why incremental HMAC of
+the **loop** does not exist: `I` is a full 80-round mix of the whole
+key.
+
+### Bitslice / SIMD / prefix add / hybrid — work, not latency
+
+Let `N=32` (one warp), one HMAC-64 compression.
+
+| Organization | Add cost (batch of 32) | Rotate | Per-instance add vs 1120 IADD |
+|--------------|------------------------|--------|-------------------------------|
+| Word-parallel (current) | 32 × 80 × 7 × 2 IADD | 32 × 1550 SHF | **1120 IADD** (silicon CLA) |
+| Bitslice, 32 instance-bits/reg | 80×7×64×3 = 107520 bitops | wire/SHFL | **3360 bitops** |
+| Kogge-Stone software prefix | 80×7×(128+768) = 501760 | wire/SHFL | more than ripple |
+| Transpose → bitslice Σ → transpose → IADD | 2×80×96 SHFL = 15360 | cheap Σ | **10× the SHF floor** |
+
+Hardware `IADD` already *is* a carry-lookahead adder. Rebuilding it
+across a batch, even with prefix techniques, **increases** total
+operations. Prefix adders trade work for depth; throughput of N
+independent adds wants minimum work, which is the ALU.
+
+Wider-than-64 SIMD on RTX is the warp: 32 lanes × 32-bit. That is
+already “one hash per lane,” not a single fused 1024-bit hash. Packing
+two instances per thread is the old 2-wide path (same work, worse CPU
+time).
+
+A warp used as 32 bit-positions of **one** hash computes 1 instance per
+32 lanes — 32× less throughput — to buy bitslice rotates and a software
+adder. That is the losing layout.
+
+### Lookup tables / generated Boolean networks
+
+Ch/Maj are 3-bit → already 1 LOP3. A table of `I` for last-word indices
+is 128 × 128 B of setup, then 128 independent 4094-loops. Four-Russians
+helps a **fixed** linear map times many vectors; Σ is already 3 SHF and
+is applied to different `e_i`. No amortization of the nonlinear 80-round
+map: the domain is 512 bits.
+
+### Circuit lower bound
+
+`C_N(P_1,…,P_N; S) = (C(P_1,S), …, C(P_N,S))`.
+
+If the `P_i` are disjoint inputs, any circuit is a disjoint union of N
+copies of the private cone of `C`, plus the shared cone of `S`. Size
+`≥ N · |private(C)| + |shared(S)|`. We have `|shared| / |private| ≈
+0.25/4098`. Material batch savings require either
+
+1. identifying private nodes that are actually functions of `S` alone
+   (they are not: the 4094-loop depends on `I(P)` and `U_{j-1}(P)`), or
+2. an identity `C(P_i,S) = F(C(P_j,S), P_i, P_j)` cheaper than
+   evaluating `C(P_i,S)` (a related-key shortcut through full HMAC-SHA512
+   after avalanche — not observed, and 0 colliding loop words).
+
+SIMD/warp occupancy changes **latency hiding**, not that size bound.
+
+### What would reopen batch savings
+
+A related-chaining-value algorithm that evaluates
+`Compress(I_i, pad64(U_i))` for many `(I_i,U_i)` in `o(N)` compressions
+**after** the 80-round mix. Or a bitslice adder cheaper than `IADD`
+(contradicts the ALU). Neither is supported by the measurements.
 
 ## SHA-512 execution and RTX SHF
 
