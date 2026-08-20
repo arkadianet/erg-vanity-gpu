@@ -406,6 +406,39 @@ pad64 after `W[31]`, 2-round algebraic cancellation.
 
 ---
 
+## ISA candidates (bit-exact on CPU)
+
+`sha512_isa` proves three implementations match production
+`hmac_sha512` / `pbkdf2::derive` (iters 1, 2, 8, 64):
+
+| Candidate | Change | Exact vs production HMAC |
+|-----------|--------|--------------------------|
+| `compress_pad64_prod` | textbook rotate + generic expand | yes |
+| `compress_pad64_shf` | 32-bit funnel-shift ROTR64 | yes (`ror64_shf` == `rotate_right` for n=1..63) |
+| `compress_pad64_hmac64` | known first-expand 32→22 σ | yes |
+
+Modeled pad64 integer cost (floor lowering): generic **2976**, specialized
+**2886**, predicted expand cut **~3.0%**. Still below 10%.
+
+Every prior cloud agent on this repo also had **no GPU and no SASS**.
+The ≥10% question is still the NVIDIA lowering of `rotate(ulong)`.
+
+## GPU A/B harness (not wired into vanity)
+
+Research-only, production kernels unchanged:
+
+```bash
+cargo test --locked -p erg-vanity-crypto sha512_isa
+cargo run --release -p erg-vanity-gpu --bin sha512_circuit_bench
+```
+
+The binary compiles three OpenCL variants of the 2048-iter HMAC-64 loop
+(`RESEARCH_VARIANT` 0/1/2), checks work-item 0 against the CPU
+reference, and prints ns/seed plus the NVIDIA build log. This VM
+exits with `no GPU bench`.
+
+---
+
 ## Final recommendation
 
 ```
@@ -417,20 +450,13 @@ not a new round or schedule. The representation search in this pass
 is empty: the conventional Σ/Ch/Maj/add/σ form, plus the known ~3%
 HMAC-64 first expand, is the exact work.
 
-On an RTX machine, the next measurement is:
+On an RTX machine, run `sha512_circuit_bench` (above). Decision rule:
 
-1. `ERG_CL_VERBOSE=1` register/spill log for `bench_pbkdf2`.
-2. PTX/SASS of `sha512_final_from_mid_u8` (production `rotate`) vs
-   the unmerged `ror64_shf` + `SHA512_EXPAND16_HMAC64` path.
-3. Isolated `--bench` with enough repeats to beat noise, against the
-   ~1600 ns/seed README baseline.
-
-If that dump already shows 2×`SHF` per `ROTR64` and `IADD3` for T1/`a'`,
-the answer becomes **STOP** — the implementation is at the practical
-integer-ALU floor for this dependency chain. If it shows `shr.b64` /
-`shl.b64` / `or.b64` or a 2-input add chain, implement the unmerged
-SHF + HMAC-64 expand source and re-bench. That would be an
-implementation fix, not a new hash.
+- best variant ≥10% faster than `prod_rotate_generic` and exact →
+  **IMPLEMENT** that source shape into `sha512.cl`.
+- all three within noise and the build log already shows SHF+IADD3 →
+  **STOP**.
+- `shf_*` wins by a few percent only → partial result; do not claim 10%.
 
 ---
 
@@ -438,6 +464,8 @@ implementation fix, not a new hash.
 
 ```bash
 cargo test --locked -p erg-vanity-crypto sha512_circuit
+cargo test --locked -p erg-vanity-crypto sha512_isa
+cargo run --release -p erg-vanity-gpu --bin sha512_circuit_bench
 ```
 
 Production PBKDF2 / SHA-512 vectors in the same crate still pass
