@@ -1,0 +1,819 @@
+{
+  "linear": {
+    "bijective": true,
+    "interp_F": {
+      "nonzero": 9,
+      "max_deg": 128,
+      "linearized_terms": 9,
+      "non_linearized": 0,
+      "support_sample": [
+        0,
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128
+      ],
+      "verified": true
+    },
+    "deg_F": 1,
+    "semiconj": {
+      "n_1bit_quotients": 1,
+      "max_flag_height": 8,
+      "full_T_conjugacy": true,
+      "best_flag": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128
+      ],
+      "onebit_sample": [
+        1
+      ]
+    },
+    "abel_gf": {
+      "deg": 6,
+      "particular": false,
+      "nullspace_dim": 1,
+      "exists_nonconst": false,
+      "coeff": null
+    },
+    "abel_z256": {
+      "deg": 2,
+      "exists": false
+    },
+    "schroeder": {
+      "deg": 4,
+      "n_alpha_tried": 4,
+      "hits": [
+        {
+          "alpha": 1,
+          "dim": 1,
+          "sample": [
+            1,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "dickson": {
+      "affine_conj_to_square": false,
+      "equals_square": false
+    },
+    "cheap_conj": {
+      "hits": [],
+      "stopped_early": false
+    },
+    "abel_gf_nonconst": false,
+    "schroeder_nonconst": [],
+    "Q": {
+      "interp": {
+        "nonzero": 9,
+        "max_deg": 128,
+        "linearized_terms": 9,
+        "non_linearized": 0,
+        "support_sample": [
+          0,
+          1,
+          2,
+          4,
+          8,
+          16,
+          32,
+          64,
+          128
+        ],
+        "verified": true
+      },
+      "deg": 1,
+      "affine": true,
+      "chebyshev_identity": true,
+      "Q_eq_F": false,
+      "Q_eq_0": false,
+      "G4_ok": true,
+      "G64_ok": true
+    },
+    "cycle_xor_2048_ok": true
+  },
+  "arx_r2": {
+    "bijective": true,
+    "interp_F": {
+      "nonzero": 253,
+      "max_deg": 254,
+      "linearized_terms": 9,
+      "non_linearized": 244,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "verified": true
+    },
+    "deg_F": 7,
+    "semiconj": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": []
+    },
+    "abel_gf": {
+      "deg": 6,
+      "particular": false,
+      "nullspace_dim": 1,
+      "exists_nonconst": false,
+      "coeff": null
+    },
+    "abel_z256": {
+      "deg": 2,
+      "exists": false
+    },
+    "schroeder": {
+      "deg": 4,
+      "n_alpha_tried": 4,
+      "hits": [
+        {
+          "alpha": 1,
+          "dim": 1,
+          "sample": [
+            1,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "dickson": {
+      "affine_conj_to_square": false,
+      "equals_square": false
+    },
+    "cheap_conj": {
+      "hits": [],
+      "stopped_early": false
+    },
+    "abel_gf_nonconst": false,
+    "schroeder_nonconst": [],
+    "Q": {
+      "interp": {
+        "nonzero": 254,
+        "max_deg": 253,
+        "linearized_terms": 9,
+        "non_linearized": 245,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "deg": 7,
+      "affine": false,
+      "chebyshev_identity": true,
+      "Q_eq_F": false,
+      "Q_eq_0": false,
+      "G4_ok": true,
+      "G64_ok": true
+    },
+    "cycle_xor_2048_ok": true,
+    "built_inv_from_table": true
+  },
+  "arx_r4": {
+    "bijective": true,
+    "interp_F": {
+      "nonzero": 255,
+      "max_deg": 254,
+      "linearized_terms": 9,
+      "non_linearized": 246,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "verified": true
+    },
+    "deg_F": 7,
+    "semiconj": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": []
+    },
+    "abel_gf": {
+      "deg": 6,
+      "particular": false,
+      "nullspace_dim": 1,
+      "exists_nonconst": false,
+      "coeff": null
+    },
+    "abel_z256": {
+      "deg": 2,
+      "exists": false
+    },
+    "schroeder": {
+      "deg": 4,
+      "n_alpha_tried": 4,
+      "hits": [
+        {
+          "alpha": 1,
+          "dim": 1,
+          "sample": [
+            1,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "dickson": {
+      "affine_conj_to_square": false,
+      "equals_square": false
+    },
+    "cheap_conj": {
+      "hits": [],
+      "stopped_early": false
+    },
+    "abel_gf_nonconst": false,
+    "schroeder_nonconst": [],
+    "Q": {
+      "interp": {
+        "nonzero": 254,
+        "max_deg": 253,
+        "linearized_terms": 9,
+        "non_linearized": 245,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "deg": 7,
+      "affine": false,
+      "chebyshev_identity": true,
+      "Q_eq_F": false,
+      "Q_eq_0": false,
+      "G4_ok": true,
+      "G64_ok": true
+    },
+    "cycle_xor_2048_ok": true,
+    "built_inv_from_table": true
+  },
+  "arx_r8": {
+    "bijective": true,
+    "interp_F": {
+      "nonzero": 254,
+      "max_deg": 254,
+      "linearized_terms": 9,
+      "non_linearized": 245,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "verified": true
+    },
+    "deg_F": 7,
+    "semiconj": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": []
+    },
+    "abel_gf": {
+      "deg": 6,
+      "particular": false,
+      "nullspace_dim": 1,
+      "exists_nonconst": false,
+      "coeff": null
+    },
+    "abel_z256": {
+      "deg": 2,
+      "exists": false
+    },
+    "schroeder": {
+      "deg": 4,
+      "n_alpha_tried": 4,
+      "hits": [
+        {
+          "alpha": 1,
+          "dim": 1,
+          "sample": [
+            1,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "dickson": {
+      "affine_conj_to_square": false,
+      "equals_square": false
+    },
+    "cheap_conj": {
+      "hits": [],
+      "stopped_early": false
+    },
+    "abel_gf_nonconst": false,
+    "schroeder_nonconst": [],
+    "Q": {
+      "interp": {
+        "nonzero": 251,
+        "max_deg": 253,
+        "linearized_terms": 9,
+        "non_linearized": 242,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "deg": 7,
+      "affine": false,
+      "chebyshev_identity": true,
+      "Q_eq_F": false,
+      "Q_eq_0": false,
+      "G4_ok": true,
+      "G64_ok": true
+    },
+    "cycle_xor_2048_ok": true,
+    "built_inv_from_table": true
+  },
+  "arxhmac_r2": {
+    "bijective": true,
+    "interp_F": {
+      "nonzero": 251,
+      "max_deg": 254,
+      "linearized_terms": 9,
+      "non_linearized": 242,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        11,
+        12,
+        14,
+        15,
+        16,
+        17
+      ],
+      "verified": true
+    },
+    "deg_F": 7,
+    "semiconj": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": []
+    },
+    "abel_gf": {
+      "deg": 6,
+      "particular": false,
+      "nullspace_dim": 1,
+      "exists_nonconst": false,
+      "coeff": null
+    },
+    "abel_z256": {
+      "deg": 2,
+      "exists": false
+    },
+    "schroeder": {
+      "deg": 4,
+      "n_alpha_tried": 4,
+      "hits": [
+        {
+          "alpha": 1,
+          "dim": 1,
+          "sample": [
+            1,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "dickson": {
+      "affine_conj_to_square": false,
+      "equals_square": false
+    },
+    "cheap_conj": {
+      "hits": [],
+      "stopped_early": false
+    },
+    "abel_gf_nonconst": false,
+    "schroeder_nonconst": [],
+    "Q": {
+      "interp": {
+        "nonzero": 254,
+        "max_deg": 253,
+        "linearized_terms": 9,
+        "non_linearized": 245,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "deg": 7,
+      "affine": false,
+      "chebyshev_identity": true,
+      "Q_eq_F": false,
+      "Q_eq_0": false,
+      "G4_ok": true,
+      "G64_ok": true
+    },
+    "cycle_xor_2048_ok": true,
+    "circuit_inv_ok": true,
+    "cost_F": {
+      "add": 32,
+      "xor": 32,
+      "and_": 0,
+      "not_": 0,
+      "rot": 32,
+      "shr": 0
+    },
+    "cost_Finv": {
+      "add": 32,
+      "xor": 32,
+      "and_": 0,
+      "not_": 0,
+      "rot": 32,
+      "shr": 0
+    },
+    "cost_Q_as_F_xor_Finv": 192
+  },
+  "arxhmac_r4": {
+    "bijective": true,
+    "interp_F": {
+      "nonzero": 253,
+      "max_deg": 254,
+      "linearized_terms": 9,
+      "non_linearized": 244,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "verified": true
+    },
+    "deg_F": 7,
+    "semiconj": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": []
+    },
+    "abel_gf": {
+      "deg": 6,
+      "particular": false,
+      "nullspace_dim": 1,
+      "exists_nonconst": false,
+      "coeff": null
+    },
+    "abel_z256": {
+      "deg": 2,
+      "exists": false
+    },
+    "schroeder": {
+      "deg": 4,
+      "n_alpha_tried": 4,
+      "hits": [
+        {
+          "alpha": 1,
+          "dim": 1,
+          "sample": [
+            1,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "dickson": {
+      "affine_conj_to_square": false,
+      "equals_square": false
+    },
+    "cheap_conj": {
+      "hits": [],
+      "stopped_early": false
+    },
+    "abel_gf_nonconst": false,
+    "schroeder_nonconst": [],
+    "Q": {
+      "interp": {
+        "nonzero": 254,
+        "max_deg": 253,
+        "linearized_terms": 9,
+        "non_linearized": 245,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "deg": 7,
+      "affine": false,
+      "chebyshev_identity": true,
+      "Q_eq_F": false,
+      "Q_eq_0": false,
+      "G4_ok": true,
+      "G64_ok": true
+    },
+    "cycle_xor_2048_ok": true,
+    "circuit_inv_ok": true,
+    "cost_F": {
+      "add": 64,
+      "xor": 64,
+      "and_": 0,
+      "not_": 0,
+      "rot": 64,
+      "shr": 0
+    },
+    "cost_Finv": {
+      "add": 64,
+      "xor": 64,
+      "and_": 0,
+      "not_": 0,
+      "rot": 64,
+      "shr": 0
+    },
+    "cost_Q_as_F_xor_Finv": 384
+  },
+  "arxhmac_r8": {
+    "bijective": true,
+    "interp_F": {
+      "nonzero": 253,
+      "max_deg": 254,
+      "linearized_terms": 9,
+      "non_linearized": 244,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "verified": true
+    },
+    "deg_F": 7,
+    "semiconj": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": []
+    },
+    "abel_gf": {
+      "deg": 6,
+      "particular": false,
+      "nullspace_dim": 1,
+      "exists_nonconst": false,
+      "coeff": null
+    },
+    "abel_z256": {
+      "deg": 2,
+      "exists": false
+    },
+    "schroeder": {
+      "deg": 4,
+      "n_alpha_tried": 4,
+      "hits": [
+        {
+          "alpha": 1,
+          "dim": 1,
+          "sample": [
+            1,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "dickson": {
+      "affine_conj_to_square": false,
+      "equals_square": false
+    },
+    "cheap_conj": {
+      "hits": [],
+      "stopped_early": false
+    },
+    "abel_gf_nonconst": false,
+    "schroeder_nonconst": [],
+    "Q": {
+      "interp": {
+        "nonzero": 253,
+        "max_deg": 253,
+        "linearized_terms": 9,
+        "non_linearized": 244,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "deg": 7,
+      "affine": false,
+      "chebyshev_identity": true,
+      "Q_eq_F": false,
+      "Q_eq_0": false,
+      "G4_ok": true,
+      "G64_ok": true
+    },
+    "cycle_xor_2048_ok": true,
+    "circuit_inv_ok": true,
+    "cost_F": {
+      "add": 128,
+      "xor": 128,
+      "and_": 0,
+      "not_": 0,
+      "rot": 128,
+      "shr": 0
+    },
+    "cost_Finv": {
+      "add": 128,
+      "xor": 128,
+      "and_": 0,
+      "not_": 0,
+      "rot": 128,
+      "shr": 0
+    },
+    "cost_Q_as_F_xor_Finv": 768
+  }
+}
