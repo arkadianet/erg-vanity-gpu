@@ -151,6 +151,6 @@ inline void hmac_sha512_oneshot(const __private uchar* key, uint key_len,
 // No arrays, no pointers in hot path - keeps everything in registers.
 // Uses cached midstates to skip ipad/opad compression.
 static inline ulong8 hmac_sha512_msg64_u8(__private HmacSha512Ctx* ctx, ulong8 msg) {
-    ulong8 inner = sha512_final_from_mid_u8(ctx->inner_h, ctx->inner_total_len, msg);
-    return sha512_final_from_mid_u8(ctx->outer_h, ctx->outer_total_len, inner);
+    ulong8 inner = sha512_hmac64(ctx->inner_h, msg);
+    return sha512_hmac64(ctx->outer_h, inner);
 }
