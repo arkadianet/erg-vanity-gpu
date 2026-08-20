@@ -102,6 +102,7 @@ const K: [u64; 80] = [
 pub(crate) const H_INIT: [u64; 8] = H;
 
 /// Compress one 1024-bit block into an arbitrary midstate (research / HMAC-64).
+#[cfg(test)]
 pub(crate) fn compress_block(state: &mut [u64; 8], block: &[u8]) {
     compress(state, block);
 }

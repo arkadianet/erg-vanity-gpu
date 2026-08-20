@@ -308,7 +308,7 @@ mod tests {
         let pw = b"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
         let salt = b"mnemonic";
         let key = Hmac64Key::new(pw);
-        let seeds = 8u32;
+        let seeds = 24u32;
         let iters = 2048u32;
 
         // Warmup
@@ -323,6 +323,18 @@ mod tests {
         let generic = nsec_per_seed(iters, seeds, || {
             std::hint::black_box(derive_block_generic(&key, salt, iters, 1));
         });
+        let table = nsec_per_seed(iters, seeds, || {
+            let mut u = block_u1(&key, salt, 1);
+            let mut acc = u;
+            for _ in 1..iters {
+                u = crate::sha512_hmac64::compress_hmac64_table(
+                    key.outer,
+                    crate::sha512_hmac64::compress_hmac64_table(key.inner, u),
+                );
+                acc = xor8(acc, u);
+            }
+            std::hint::black_box(acc);
+        });
         let layered_ns = nsec_per_seed(iters, 2, || {
             let mut out = [0u8; 64];
             layered::derive_reference(pw, salt, iters, &mut out);
@@ -336,11 +348,22 @@ mod tests {
         }) / 2.0;
 
         eprintln!("PBKDF2-HMAC-SHA512 2048-iter, 64-byte DK (CPU)");
-        eprintln!("  specialized HMAC-64:     {spec:.0} ns/seed");
-        eprintln!("  generic HMAC-64 midstate:{generic:.0} ns/seed");
-        eprintln!("  layered HMAC+alloc:      {layered_ns:.0} ns/seed");
-        eprintln!("  interleaved pair /2:     {pair:.0} ns/seed");
-        eprintln!("  spec vs generic: {:+.2}%", (spec / generic - 1.0) * 100.0);
-        eprintln!("  pair vs spec:    {:+.2}%", (pair / spec - 1.0) * 100.0);
+        eprintln!("  specialized HMAC-64:       {spec:.0} ns/seed");
+        eprintln!("  batched generic (old GPU): {generic:.0} ns/seed");
+        eprintln!("  W[80] table HMAC-64:       {table:.0} ns/seed");
+        eprintln!("  layered HMAC+alloc:        {layered_ns:.0} ns/seed");
+        eprintln!("  interleaved pair /2:       {pair:.0} ns/seed");
+        eprintln!(
+            "  spec vs batched generic: {:+.2}%",
+            (spec / generic - 1.0) * 100.0
+        );
+        eprintln!(
+            "  spec vs W[80] table:     {:+.2}%",
+            (spec / table - 1.0) * 100.0
+        );
+        eprintln!(
+            "  pair vs spec:            {:+.2}%",
+            (pair / spec - 1.0) * 100.0
+        );
     }
 }

@@ -1,4 +1,5 @@
 //! Specialized SHA-512 compression for HMAC of a 64-byte message.
+#![allow(clippy::too_many_arguments)]
 //!
 //! After the ipad/opad block, HMAC-SHA512 of a 64-byte `U` always compresses:
 //!   W[0..7]  = message
@@ -194,9 +195,8 @@ pub fn compress16(mid: [u64; 8], w_in: [u64; 16]) -> [u64; 8] {
     add8(mid, a, b, c, d, e, f, g, h)
 }
 
-/// Generic HMAC-64 block: same math as [`compress_hmac64`], no schedule folding.
-/// Fair baseline for measuring specialization (matches the previous GPU hot path).
-pub fn compress_hmac64_generic(mid: [u64; 8], msg: [u64; 8]) -> [u64; 8] {
+/// HMAC-64 via a full W[80] table. Correct, but not the previous GPU structure.
+pub fn compress_hmac64_table(mid: [u64; 8], msg: [u64; 8]) -> [u64; 8] {
     let mut w = [0u64; 16];
     w[..8].copy_from_slice(&msg);
     w[8] = PAD;
@@ -426,6 +426,67 @@ fn expand16_hmac64(
         .wrapping_add(sig1(*w13))
         .wrapping_add(*w8)
         .wrapping_add(sig0(*w0));
+}
+
+/// Previous production GPU structure: 16-round blocks + generic batched expand.
+pub fn compress_hmac64_generic(mid: [u64; 8], msg: [u64; 8]) -> [u64; 8] {
+    let mut w0 = msg[0];
+    let mut w1 = msg[1];
+    let mut w2 = msg[2];
+    let mut w3 = msg[3];
+    let mut w4 = msg[4];
+    let mut w5 = msg[5];
+    let mut w6 = msg[6];
+    let mut w7 = msg[7];
+    let mut w8 = PAD;
+    let mut w9 = 0u64;
+    let mut w10 = 0u64;
+    let mut w11 = 0u64;
+    let mut w12 = 0u64;
+    let mut w13 = 0u64;
+    let mut w14 = 0u64;
+    let mut w15 = BIT_LEN;
+
+    let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = mid;
+
+    rounds16_from!(
+        0, a, b, c, d, e, f, g, h, w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13, w14,
+        w15
+    );
+    expand16(
+        &mut w0, &mut w1, &mut w2, &mut w3, &mut w4, &mut w5, &mut w6, &mut w7, &mut w8, &mut w9,
+        &mut w10, &mut w11, &mut w12, &mut w13, &mut w14, &mut w15,
+    );
+    rounds16_from!(
+        16, a, b, c, d, e, f, g, h, w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13,
+        w14, w15
+    );
+    expand16(
+        &mut w0, &mut w1, &mut w2, &mut w3, &mut w4, &mut w5, &mut w6, &mut w7, &mut w8, &mut w9,
+        &mut w10, &mut w11, &mut w12, &mut w13, &mut w14, &mut w15,
+    );
+    rounds16_from!(
+        32, a, b, c, d, e, f, g, h, w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13,
+        w14, w15
+    );
+    expand16(
+        &mut w0, &mut w1, &mut w2, &mut w3, &mut w4, &mut w5, &mut w6, &mut w7, &mut w8, &mut w9,
+        &mut w10, &mut w11, &mut w12, &mut w13, &mut w14, &mut w15,
+    );
+    rounds16_from!(
+        48, a, b, c, d, e, f, g, h, w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13,
+        w14, w15
+    );
+    expand16(
+        &mut w0, &mut w1, &mut w2, &mut w3, &mut w4, &mut w5, &mut w6, &mut w7, &mut w8, &mut w9,
+        &mut w10, &mut w11, &mut w12, &mut w13, &mut w14, &mut w15,
+    );
+    rounds16_from!(
+        64, a, b, c, d, e, f, g, h, w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13,
+        w14, w15
+    );
+
+    add8(mid, a, b, c, d, e, f, g, h)
 }
 
 /// SHA-512 compress of the HMAC-64 padded block, schedule-specialized.
@@ -891,7 +952,9 @@ mod tests {
 
             let specialized = compress_hmac64(mid, msg);
             let generic = compress_hmac64_generic(mid, msg);
+            let table = compress_hmac64_table(mid, msg);
             assert_eq!(specialized, generic);
+            assert_eq!(specialized, table);
 
             let mut block = [0u8; 128];
             for (i, word) in msg.iter().enumerate() {

@@ -138,33 +138,59 @@ environment has no GPU, so those stay skipped here.
 
 ## Benchmarks
 
-CPU, release, this environment (fill in from `ERG_PBKDF2_BENCH=1`):
+Command: `ERG_PBKDF2_BENCH=1 cargo test -p erg-vanity-crypto --release bench_candidates -- --nocapture`
 
-| Candidate | ns/seed (2048 iter) | vs generic HMAC-64 |
-|-----------|---------------------|--------------------|
-| layered HMAC+alloc (old CPU) | *pending* | alloc-dominated |
-| generic HMAC-64 midstate | *pending* | baseline work |
-| specialized HMAC-64 | *pending* | |
-| interleaved pair / 2 | *pending* | throughput, not less work |
+Host: cloud agent VM, rustc 1.97.1, 24 seeds × 2048 iterations, two consecutive
+runs (agreed to ~1%). An earlier 8-seed run on a contended VM was discarded
+(~2.1 µs/seed, not repeatable).
 
-GPU isolated PBKDF2 was ~1600 ns/seed on RTX 3080 Ti under the **previous**
-kernel (batched W-expand, no HMAC-64 specialization). Re-measure on hardware
-before treating that number as the new baseline.
+| Candidate | ns/seed (run 1) | ns/seed (run 2) | vs batched generic |
+|-----------|-----------------|-----------------|--------------------|
+| specialized HMAC-64 | 867677 | 864827 | **−3.2% to −3.5%** |
+| batched generic (previous GPU structure) | 899494 | 893442 | baseline work |
+| W[80] table HMAC-64 | 934830 | 934595 | +4% to +5% (worse) |
+| layered HMAC+alloc (old CPU `derive`) | 2399240 | 2409789 | alloc-dominated, not algorithmic |
+| interleaved pair / 2 | 967045 | 967246 | **+11% worse than spec** |
 
-## Conclusions so far
+The measured −3.3% matches the static first-expand accounting (32σ+48add →
+22σ+35add, plus eight padding-round folds). It is **not** the 25–30% claimed
+by some public “trim half the schedule” writeups.
 
-The explored algebraic transforms **do not** reduce the 4094 SHA-512
-compressions. They shave a small, quantifiable amount of work *inside*
-the only compressible part of those compressions (the first schedule
-expansion and eight padding rounds). That is a real equivalence, not a
-2–5% microarch tweak of an unchanged formula — but the **work reduction
-is a few percent**, not a new asymptotic.
+GPU isolated PBKDF2 was ~1600 ns/seed on RTX 3080 Ti under the previous
+kernel. This environment has no GPU. Expect the OpenCL `sha512_hmac64` port
+to move isolated time by about the same few percent if the NVIDIA compiler
+was not already folding `(total_len+64)*8`; re-measure on hardware.
 
-A substantially faster exact implementation, if it exists, has to come from
-**execution organization** (ILP / occupancy / 2-wide seeds) or from a
-compression-function implementation that is faster than the current 80-round
-ARX for the same 80 rounds — not from skipping HMAC iterations.
+## Conclusions
 
-H5 is the remaining candidate that can be *material for throughput* without
-changing the math. CPU pair results are recorded above; GPU 2-wide is left
-as a follow-up (register pressure vs occupancy is hardware-specific).
+Outcome **(3)**: the explored exact transformations cannot materially reduce
+the required computation.
+
+- **Evaluations are a floor.** `c` HMAC calls and 2 compressions per HMAC are
+  required for bit-identical PBKDF2-HMAC-SHA512 (H1, H2). BIP39 is 4094
+  HMAC-64 compressions plus 4 setup/U1 compressions. XOR-of-iterates has no
+  cheaper closed form (H6). Shared mnemonic prefixes do not touch the loop (H7).
+- **The only remaining exact work reduction inside those compressions** is
+  specializing `pad64` (H3). We derived it, implemented it from scratch,
+  differential-tested it, and measured **~3.3%** vs the previous batched
+  W-expand compressor. That is the size of the algebraic leftover, not an
+  implementation accident.
+- **H4** (midstate-compiled round 0) is ≤1.2% and was not shipped.
+- **H5** (2-wide lockstep) increased CPU time by ~11%. It does not reduce
+  work. A GPU 2-wide kernel is still a hardware-specific occupancy bet, not
+  an algorithmic one.
+
+The production path now *is* the HMAC-64 formulation (Rust `derive` + OpenCL
+hot path). That is the right structure. It is not a new asymptotic, and it
+does not justify treating ~1.6 µs/seed as a cryptographic lower bound — only
+as “4094 specialized pad64 compressions,” which is what the math requires
+unless SHA-512 compression itself is implemented with fewer than 80 rounds
+of ARX (no known equivalent circuit).
+
+### Not revisited without new evidence
+
+- Skipping or pairing HMAC iterations
+- Fusing inner+outer into <160 rounds
+- Folding post-σ constant additives into `K[t]`
+- Sharing loop work across nearby mnemonics
+- “Trim W[8..15] saves 50% of the schedule”
