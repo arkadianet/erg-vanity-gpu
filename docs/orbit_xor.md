@@ -136,16 +136,94 @@ The 1-round algorithm does not lift by “using bigger words.” It lifts
 only if someone writes HMAC-SHA512 as a sparse low-degree polynomial
 in a basis we do not have.
 
-## Next experiment, if any
+## Factored circuits, not expanded ANF
 
-Keep a *round-by-round* polynomial (80 sparse maps, not one 512-bit
-ANF) and apply doubling to the *outer* `F` while reducing after each
-composition through the 80-factor factorization. That is a different
-encoding of the same question: do the 80-factor compositions stay
-sparse when you XOR 2^k of them? The 2-round 16-bit measurement says
-sparsity dies as soon as two nonlinear layers compose. Eighty layers
-will not be kinder.
+Dense ANF does not imply a large circuit. `G_n` is built here as a
+hash-consed bit DAG (XOR/AND with algebraic rewrite: `a⊕a=0`,
+`a∧a=a`, const-fold, commuted keys) plus **semantic CSE**: two nodes
+that compute the same Boolean function of `x` collapse, even if they
+were built by different syntax.
 
-No production change. The 1-round collapse is real and is the thing
-to remember: orbit-XOR *can* be cheaper than the walk, and we know
-the property that makes it so.
+The pair is constructed both sequentially and by doubling
+
+```
+F^{2n} = F^n ∘ F^n
+G_{2n}(x) = G_n(x) ⊕ G_n(F^n(x))
+```
+
+I,O midstates and `K[t]` are constants and fold. Rotates are rewires
+(free). What remains is Ch/Maj/carry AND and the XORs of adders.
+
+`orbit_circuit` is the implementation. Circuits are checked against
+the scalar `hmac_f` / `hmac_f16`.
+
+### Measured growth (best CSE of the unrolling)
+
+**Affine `F(x)=rot(x,1)⊕0x1d`.** Zero ANDs. Semantic nodes stay < 100
+out to `G_16`. The compact representation exists.
+
+**1-round 8-bit HMAC, key `0x41`.** `G_32` is the zero *function*
+(BDD size 2). The unrolled cone is still 2759 syntactic / 332
+semantic nodes — the walk is still in the DAG, the output map is
+not. Best representation of `T` is “emit 0.”
+
+**2-round 8-bit HMAC** (max cycle 2 — wrap artifact):
+
+| n | syn / F | sem / F | AND / F | BDD(G) |
+|---|---------|---------|---------|--------|
+| 1 | 1.00 | 1.00 | 1.00 | 266 |
+| 2 | 1.99 | 1.97 | 1.98 | 307 |
+| 4 | 3.98 | 3.83 | 3.83 | 301 |
+| 8 | 7.95 | 5.73 | 5.87 | 297 |
+| 16 | 15.89 | 5.86 | 6.18 | 298 |
+
+Syntactic size is `n |F|`. Semantic size flattens only after the
+2-cycle. BDD(`G_n`) is ~300 for every `n` because every 8-bit map
+has a small BDD. That does not lift to 512 bits.
+
+**16-bit HMAC, 2 rounds** (image 5066, max cycle 9):
+
+| n | syn / F | sem / F | AND / F |
+|---|---------|---------|---------|
+| 1 | 1.00 | 1.00 | 1.00 |
+| 2 | 2.00 | 1.99 | 1.99 |
+| 4 | 3.99 | 3.96 | 3.96 |
+| 8 | 7.97 | 7.57 | 7.70 |
+
+`F` is 1024 syntactic nodes, 370 ANDs. Through `n = 4` (below the
+cycle length) every factored metric is `n × |F|` to two percent.
+`G_8` dips only because 8 ≈ cycle 9.
+
+**16-bit HMAC, 3 rounds** (image 17343, max cycle 14):
+`sem(G_2)/sem(F) = 2.00`, `sem(G_4)/sem(F) = 3.99`.
+
+**4×4-bit “SHA” toy** looked like `sem(G_8)/sem(F) = 2.86`. Its
+image is 11 and max cycle is 1. Flattening was wrapping, not
+sharing. Discarded as a mixing model.
+
+Doubling and sequential hash-cons to the **same** DAG size. The two
+copies `G_n(x)` and `G_n(F^n(x))` share constants only:
+`sem_AND(G_2) ≈ 2 · sem_AND(F)` (176 vs 89 on 8-bit 2-round).
+
+### What the curve says
+
+While `n` is below the functional-graph cycle length, the best
+factored circuit we can extract from the unrolling — syntactic CSE,
+semantic CSE, AND-count, doubling tree — has size `Θ(n |F|)`.
+
+A compact representation of the *output map* (BDD, or “`G_32 = 0`”)
+exists when the map is actually simple or the domain is tiny. HMAC
+with two or more ARX layers, on a width whose cycles are longer
+than `n`, is not that map.
+
+SHA-512’s 512-bit state has expected cycle length `~ 2^{256}`.
+`n = 2048` is far below wrap. The measured regime is the linear
+one: `size(G_2048) ≈ 2048 size(F)` in this representation family.
+
+Repeated rounds, fixed rotates, Ch/Maj, pad64, and baked midstates
+are already in the DAG. They do not create cross-iterate sharing
+beyond `O(1)` constants.
+
+No production change. The 1-round polynomial collapse remains the
+only case where `T` is cheaper than the walk, and only because `T`
+is a simple function, not because a dense `T` hid a small circuit.
