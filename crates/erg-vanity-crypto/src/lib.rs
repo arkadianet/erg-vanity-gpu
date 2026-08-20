@@ -14,5 +14,6 @@ pub mod pbkdf2_fast;
 pub mod secp256k1;
 pub mod sha256;
 pub mod sha512;
+pub mod sha512_algebra;
 pub mod sha512_hmac64;
 pub mod sha512_u32;

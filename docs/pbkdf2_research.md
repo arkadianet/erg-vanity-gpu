@@ -92,6 +92,14 @@ but they cannot be moved into `K[t]` without corrupting later schedule uses:
 | H10 | Bitsliced SHA-512 eliminates SHF (rotates become wire permutes / SHFL) and is fundamentally better on RTX. | **Rejected.** SHA-512 is ARX. Bitsliced 64-bit add is a 64-step carry chain (or Θ(log 64) prefix plus more ops). 80×7×64 ripple steps ≫ 1550 SHF. Warp-split bitslice trades SHF for SHFL **and** a serial adder across lanes. Hashcat/John do not bitslice SHA-512. |
 | H11 | Σ/σ can be computed with fewer than three 64-bit rotates via a different circulant basis. | **Rejected.** Weight-3 circulants `{28,34,39}` and `{14,18,41}` have no 0-offset and no 2-rotate form. Chaining `ROTR(ROTR(x,a),b)` uses the same 2 SHF per rotate. |
 | H12 | Writing rotates as explicit 32-bit SHF (plus `bitselect` Ch/Maj) is the RTX-native execution of the same 80 rounds. | **Implemented.** Rust `sha512_u32` + OpenCL `ror64_shf`/`shr64_shf`. Floor **1550 SHF** per specialized HMAC-64 compression. `rotate(ulong)` is left to the compiler and may emit `shr.b64/shl.b64/or` (more than 2 SHF). |
+| H13 | Two SHA-512 rounds fuse to a cheaper equivalent circuit. | **Rejected.** `fused_two_rounds` is bit-identical to two steps and contains the same 4 Σ, 2 Ch, 2 Maj, and 14 adds. Word-level hash-cons DAG: 2/4/8 rounds are exact multiples of one round (no shared Σ/Ch/Maj/add nodes). |
+| H14 | A different 64-bit basis makes both ADD and ROTR cheap. | **Rejected.** ROTR is F₂-linear and not ℤ/2⁶⁴ℤ-linear (fails on a majority of random words). ADD is not F₂-linear. 3:2 CSA then ROTR both halves is not ROTR of the sum (64/79 random triples). No joint representation that is exact and cheaper; conversion before every Σ reintroduces a CPA. |
+| H15 | Carry-save T1 reduces work. | **Equivalent, cost-shifting.** `t1_csa` matches four adds on 400 random 5-tuples. Each of 3 CSA needs a 64-bit `<<1` = 2 SHF → **+480 SHF / compression** on RTX. Delay win in FPGA papers; more SHF here. |
+| H16 | Digit-slice / mixed radix is a viable middle ground between word-parallel and bitslice. | **Rejected as a new machine.** All 12 Σ/σ distances are distinct. Radix 4 frees 2/12 rotates and costs 8960 nibble-adds; radix 8 frees 1/12 and costs 4480 byte-adds. RTX already is radix 32 (2× IADD, 0 free rotates) — that is H12, not a new formulation. |
+| H17 | Inner/outer midstates allow more than round-0 PE. | **Implemented (`compress_hmac64_pe`).** Round 0 is affine in `W[0]`. Round 1 Ch/Maj collapse to one AND + XOR with constants (`ch_fixed_yz` / `maj_fixed_yz`). After that every working variable is message-dependent. Save 2 Σ + Ch + Maj per compression ≈ **1.2%**. Differential-tested vs `compress_hmac64` on 200 blocks. Not shipped. |
+| H18 | `T = ⊕_j (E_j(O) + O)` or the U-chain has a closed form. | **Rejected.** `(X+C) ⊕ (Y+C) ≠ X ⊕ Y`. HMAC-64 is not a homomorphism over `+` or `⊕` (tested). `f¹⊕f²⊕f³` does not collapse to a function of `x` cheaper than the three images. |
+| H19 | The pad64 schedule has hidden identities after the first expand. | **Rejected.** Const-folded schedule DAG: first expand is exactly 22 σ (44 ror + 22 shr); three dense expands add exactly 192 ror + 96 shr (no extra CSE). For 80 random messages, no `W[t]` (`t≥32`) equals `W[s]`, `W[s]+C`, `σ0(W[s])`, or `σ1(W[s])`. σ0 and σ1 of the same word share no rotate distances. |
+| H20 | Published SHA-2 / PBKDF2 / ARX work contains an exact 10%+ evaluation shortcut. | **Rejected after reading.** See literature section. Every claimed large speedup is midstates (already in the 4094 count), ZB/IS (our ~3%), register packing, SIMD of independent blocks, or critical-path/area — not fewer fundamental ops. |
 
 ## What is not a lower bound
 
@@ -99,7 +107,11 @@ but they cannot be moved into `K[t]` without corrupting later schedule uses:
 distinctions used here:
 
 - **Cryptographic lower bound:** you need all `c` HMAC evaluations and both
-  nested hashes (H1, H2). That bounds *evaluations*, not *cost per evaluation*.
+  nested hashes (H1, H2, H18). That bounds *evaluations*, not *cost per
+  evaluation*.
+- **Circuit lower bound:** we do not have one. H13–H17, H19 are attacks on
+  the conventional 80-round circuit, not a proof that no cheaper circuit
+  exists.
 - **Known best implementations:** hashcat / John specialize ipad/opad midstates
   and the 64-byte HMAC block. They still run 80 rounds × 2 × 2047.
 - **Conventional:** the previous tree already had midstates, ulong8 registers,
@@ -123,6 +135,9 @@ than 80 rounds. ASIC/GPU miners do not skip rounds.
    the SHF-native machine: `shf_r(lo,hi,n) = (lo>>n)|(hi<<(32-n))`.
 5. **OpenCL `ror64_shf` / `shr64_shf`** — all SHA-512 Σ/σ on the GPU use this
    instead of `rotate(ulong)`. Ch/Maj use `bitselect` (LOP3 on NVIDIA).
+6. **`sha512_algebra`** — research-only: fused 2-round formula, CSA T1,
+   midstate PE compressor, word-level CSE DAG, Ch/Maj one-var identities.
+   Not on the production path.
 
 ## Correctness
 
@@ -139,6 +154,10 @@ Rust tests (see `sha512_hmac64`, `pbkdf2_fast`, `pbkdf2`):
 - Official BIP39 vectors and a second 2048-iter mnemonic against the crate
 - `derive_pair` = two singles
 - generic-loop block = specialized block
+- `sha512_algebra`: PE = production on 200 blocks; CSA T1 = four adds on
+  400 tuples; fused 2-round = two steps; HMAC not a homomorphism; schedule
+  DAG σ-count; no `W[t]` identities after the first expand; DAG 1/2/4/8-round
+  scaling; ROTR/ADD/CSA-rotate non-identities
 
 GPU kernel tests are the existing OpenCL suite (`ERG_RUN_GPU_TESTS=1`); this
 environment has no GPU, so those stay skipped here.
@@ -170,29 +189,236 @@ was not already folding `(total_len+64)*8`; re-measure on hardware.
 
 ## Conclusions
 
-Outcome **(3)**: the explored exact transformations cannot materially reduce
-the required computation.
+Outcome **(3)**, now against a wider attack surface: no exact formulation we
+could write down, prove equivalent, and measure cuts the work by 10% or more.
 
-- **Evaluations are a floor.** `c` HMAC calls and 2 compressions per HMAC are
-  required for bit-identical PBKDF2-HMAC-SHA512 (H1, H2). BIP39 is 4094
-  HMAC-64 compressions plus 4 setup/U1 compressions. XOR-of-iterates has no
-  cheaper closed form (H6). Shared mnemonic prefixes do not touch the loop (H7).
-- **The only remaining exact work reduction inside those compressions** is
-  specializing `pad64` (H3). We derived it, implemented it from scratch,
-  differential-tested it, and measured **~3.3%** vs the previous batched
-  W-expand compressor. That is the size of the algebraic leftover, not an
-  implementation accident.
-- **H4** (midstate-compiled round 0) is ≤1.2% and was not shipped.
-- **H5** (2-wide lockstep) increased CPU time by ~11%. It does not reduce
-  work. A GPU 2-wide kernel is still a hardware-specific occupancy bet, not
-  an algorithmic one.
+This is not “SHA-512 is designed to be expensive.” It is a claim about
+specific doors.
 
-The production path now *is* the HMAC-64 formulation (Rust `derive` + OpenCL
-hot path). That is the right structure. It is not a new asymptotic, and it
-does not justify treating ~1.6 µs/seed as a cryptographic lower bound — only
-as “4094 specialized pad64 compressions,” which is what the math requires
-unless SHA-512 compression itself is implemented with fewer than 80 rounds
-of ARX (no known equivalent circuit).
+**Is ~4094 compressions fundamental, or only conventional packaging?**
+
+After ipad/opad precomputation, HMAC-SHA512 of a 64-byte string *is* two
+Merkle–Damgård compressions of `pad64` blocks. That is the definition of
+SHA-512 on `(128-byte prefix already consumed) || 64-byte U || 64-byte
+padding`, not an implementation choice. PBKDF2 then needs
+`T = ⊕_{j=1}^{c} f^{j}(U₁)` with `f = HMAC_K`. The 2047 remaining `f`
+evaluations are 4094 compressions.
+
+Reducing that *count* requires either
+
+1. a closed form for the HMAC iterate-XOR, or
+2. a bit-identical SHA-512 compression that is materially cheaper than 80
+   ARX rounds (including the already-specialized first expand).
+
+(1) fails: `f` is not a homomorphism; Davies–Meyer `+ O` does not cancel
+under XOR; there is no cheap expression for `⊕_j f^j` (H1, H6, H18).
+(2) fails under every equivalent circuit we constructed (H3 leftover is
+~3%; H4/H17 is ~1.2%; H13–H16, H19 find no further cancellation).
+
+So 4094 is fundamental **relative to those two absences**. It is not a
+complexity-theoretic lower bound — nobody has one for SHA-512 evaluation —
+but it is also not an artifact of writing the recurrence the usual way.
+
+**What actually reduces work, in order:**
+
+| Transform | Exact? | Size |
+|-----------|--------|------|
+| ipad/opad midstates (BR) | yes | 4c → 2c+2 compressions; this *is* the 4094 |
+| `pad64` first-expand / ZB / IS (H3) | yes | **~3.3%** measured |
+| Compiled round 0 + round-1 Ch/Maj (H4/H17) | yes | **~1.2%** accounting; not shipped |
+| CSA / unroll / retiming / n-SMS / 2-wide | yes or N/A | same ops, sometimes worse throughput |
+
+Nothing in that table is 10%, 25%, or 50%.
+
+The production path remains specialized HMAC-64. Isolated RTX ~1.6 µs/seed
+is still “4094 specialized pad64 compressions on the 1550-SHF machine,”
+not a cryptographic minimum. A new equivalent circuit for SHA-512
+compression would reopen (2). We did not find one.
+
+## Deeper exact-evaluation attacks
+
+Prototypes live in `crates/erg-vanity-crypto/src/sha512_algebra.rs`.
+Every identity below was written as a map, checked for bit-identity or
+refuted on random inputs, and costed.
+
+### Algebra of one compression
+
+SHA-512 is Davies–Meyer over SHACAL-2:
+
+```
+Compress(H, M) = E_M(H) + H     (eight words, + is mod 2^64)
+```
+
+The round is an 8-word shift register:
+
+```
+T1 = h + Σ1(e) + Ch(e,f,g) + K[t] + W[t]
+T2 = Σ0(a) + Maj(a,b,c)
+(a,e) ← (T1+T2, d+T1)
+(b,c,d,f,g,h) ← (a,b,c,e,f,g)
+```
+
+Σ/σ are F₂-linear circulants. `+` is not. `Σ(x+y) ≠ Σ(x)+Σ(y)`, so a
+round cannot be pushed through the previous round’s adds. Expanding two
+rounds (`fused_two_rounds`) just writes `Σ1(d+T1)` and `Σ0(T1+T2)` — new
+full Σ of new words. Same operation count. Equivalence tested on 200
+random states.
+
+A word-level hash-cons DAG (interned Ror/Shr/Xor/And/Add, commutative
+XOR/AND/ADD, const-fold) counts unique nodes after *n* rounds. Counts
+scale as exactly `n ×` one round for `n = 1,2,4,8`. Connecting the
+`pad64` schedule does not share rotates with Σ: the twelve distances
+`{28,34,39,14,18,41,1,8,7,19,61,6}` are pairwise distinct, so
+`{Σ0,Σ1,σ0,σ1}(X)` never share a rotate of the same `X`.
+
+Choi/Seo “BO” (IEEE Access 2021) packs four rounds of *stores* into one
+register window. That is allocation, not algebra. Our `rnd` already does
+it. FPGA “mega-rounds” (Athanasiou et al., IET 2013) unroll two rounds
+and retime; they still perform 80 rounds of ARX and advertise *delay*
+and area, including CSA on the critical path.
+
+### Partial evaluation of the inner/outer maps
+
+Per seed, `I` and `O` are constant for 2047 iterations. Inner compression
+is SHACAL-2 with **fixed plaintext `I` and variable key `pad64(U)`**.
+
+Round 0:
+
+```
+T1 = C0 + W[0]     (C0 = I_h + Σ1(I_e) + Ch(I_e,I_f,I_g) + K[0])
+T2 = C1            (depends only on I_a,I_b,I_c)
+a1 = C0+C1 + W[0]
+e1 = I_d+C0 + W[0]
+```
+
+Round 1 sees `Ch(e1, I_e, I_f)` and `Maj(a1, I_a, I_b)`. With two
+constants this is one AND and one XOR (`ch_fixed_yz`, `maj_fixed_yz`;
+200-vector check). On RTX that is still one LOP3. Round 2’s Ch already
+has two variable inputs. After that the state is fully mixed.
+
+`compress_hmac64_pe` implements this and matches `compress_hmac64` on
+200 random `(mid, msg)`. Work saved: 2 Σ + Ch + Maj out of 160 such
+ops, plus a handful of adds ≈ 1.2% of a compression. Not 10%.
+
+White-box / “compile the whole E_(·)(I)” for a 512-bit key is a 2⁵¹²
+table. Useless.
+
+### Schedule, again, from the DAG
+
+Generic first expand: 32 σ. Const-folding `W[8]=PAD`, `W[9..14]=0`,
+`W[15]=1536` leaves **22 σ** (44 ror + 22 shr). That is exactly
+`expand16_hmac64`. The next 48 words add 192 ror + 96 shr with no
+further sharing. Expanding the recurrence into a DAG from `W[0..7]`
+does not beat computing each `W[t]` once: each word is used as `W[t]`,
+`σ1` into `W[t+2]`, add into `W[t+7]`, `σ0` into `W[t+15]`, add into
+`W[t+16]`.
+
+If `+` were `⊕`, the schedule would be an F₂-linear map
+`{0,1}⁵¹² → ({0,1}⁶⁴)⁶⁴` and a 64×512 matrix-vector product. That is
+*more* work than the recurrence, and it is not SHA-512 because of
+carries.
+
+SHA-512 HMAC-64 is the *worst* SHA-2 for zero-based leftover: the inner
+digest is 64 bytes in a 128-byte block, so only `W[9..14]` vanish.
+SHA-256 HMAC has a 32-byte digest in a 64-byte block and therefore more
+padding zeros (Choi ZB: 19 of 45 first-expand ops). Public “25–30% from
+trimming W[8..15]” (ipsbruno3 / John #3525) counts words, not σ/add.
+
+### HMAC, XOR accumulate, U-chain
+
+```
+f(m) = Compress(O, pad64(Compress(I, pad64(m))))
+T    = ⊕_{j=1}^{2048} f^j(U₁)
+```
+
+`f` is not linear over `+` or `⊕` (`hmac64_not_a_homomorphism`).
+If the feed-forward were XOR and `c` even, `⊕_j (E_j(O) ⊕ O)` would
+drop `O` and still require every `E_j(O)`. The feed-forward is ADD, so
+even that cancellation is false: `(X+O) ⊕ (Y+O) ≠ X ⊕ Y` (H18).
+
+Iterating `f` is function composition, not a group operation. Addition
+chains / matrix powering do not apply. A functional-graph lookup is
+2⁵¹². Meet-in-the-middle still does ~c evaluations (and needs an
+inverse of `f`, which is the expensive direction).
+
+Inner then outer is 160 sequential rounds with an 8-word add in the
+middle. The outer’s `W[0..7]` *are* the inner digest; they do not exist
+until inner round 79 + feed-forward. No cancelled ops across the
+boundary. Outer round 0 is the same PE as H17.
+
+### Representations
+
+| Representation | ADD | ROTR | Exact SHA-512? |
+|----------------|-----|------|----------------|
+| Standard words | native IADD | 2 SHF | yes (baseline) |
+| Bitslice | 64-step ripple | wire permute | yes; ≫ 1550 SHF |
+| nibble / byte slice | 16 / 8 digit-adds | most distances still bit-level | yes; worse than words, rotates not free |
+| 32-bit halves | 2× IADD | 2× SHF.R | yes; this *is* RTX |
+| Carry-save | cheap 3:2 | ROTR(s)+ROTR(c) ≠ ROTR(s+c) | only after CPA; +480 SHF if you CSA T1 |
+| RNS | component ADD | not local | conversion each Σ destroys the gain |
+| GF(2⁶⁴) | XOR, not integer add | not field mul | wrong algebra |
+
+CLA / prefix adders increase gate count for parallelism. They do not
+remove the 80×7 adds.
+
+Boolean minimization: Ch/Maj are already one LOP3 (`bitselect`). NIST’s
+best SHA-256 circuit is still ~22k AND gates; the adders dominate. A
+flattened 80-round SHA-512 circuit does not CSE across distant rounds
+(avalanche; our word DAG is the same fact at word granularity).
+
+ARX cryptanalysis (rotational pairs, S-functions, ARXtools, truncated
+addition, SHACAL-2 related-key rectangles out to 44/64 rounds) is about
+*distinguishing or inverting*, not evaluating the forward function with
+fewer ops. Bicliques reuse work across nearby *keys*; our U-chain
+inputs are hash outputs, not a ball of related keys. Adjacent
+mnemonics share only the 2 setup compressions (H7).
+
+### Parallelism that reduces total work
+
+Gueron/Krasnov n-SMS (eprint 2012/067): SIMD of several *independent*
+schedules. Same arithmetic. Their SHA-512 2-SMS was ~3% or a loss.
+Our 2-wide CPU path was **+11%**. Parallel `T_i` blocks do not exist
+for BIP39 (`l = 1`). TMTO amortizes over many instances with one `f`;
+each mnemonic has a different `(I,O)`.
+
+### Literature (exact evaluation only)
+
+| Source | What it actually saves |
+|--------|------------------------|
+| Choi/Seo IEEE Access 2021 (BR, IS, ZB, BO) | midstates; skip length checks; first-expand zeros; register packing. 39% vs OpenSSL is vs a layered HMAC, not vs specialized HMAC-64. |
+| Visconti HMAC-SHA1 / WOOT16 hashcat | midstates + more padding zeros (20-byte digest). SHA-512 has fewer zeros. |
+| ipsbruno3 / John #3525 “25–30%” | same ZB as H3; Magnum: immediates already beat a constant trim array. We measured **~3.3%**. |
+| Gueron n-SMS | SIMD, not fewer ops. Last-block schedule precompute = our pad64. |
+| Athanasiou FPGA SHA-512 | unroll + retiming + CSA: throughput/area, same 80 rounds. |
+| Bitcoin SHA-256d ASICs | process + pipeline + midstate. Still 64×2 rounds. |
+| Intel / ARM SHA-512 ISA | hardware 80-round compressor. |
+| NIST circuit complexity (SHA-256) | ~22k AND after minimization. |
+| SHACAL-2 attacks (44 of 64) | key recovery, not forward eval of 80-round SHA-512. |
+
+No paper we found gives a bit-identical SHA-512 compression with
+materially fewer than 80 ARX rounds, or a closed form for
+`⊕ HMAC-SHA512^j`.
+
+### Failed approaches (do not reopen without new math)
+
+- Closed form / homomorphism / addition-chain for `f^n` or `⊕ f^j`
+- Fusing inner+outer into <160 rounds
+- 2-round (or 4/8-round) algebraic cancellation
+- Cross-round CSE of Σ/σ/Ch/Maj
+- CSA or redundant / RNS / GF(2⁶⁴) state that stays exact *and* cheap
+- Digit-slice as a better RTX machine than 32-bit SHF
+- Deeper pad64 identities after `W[31]`
+- Folding post-σ constants into `K[t]` (`σ` is not ℤ-linear)
+- Nearby-mnemonic loop sharing; biclique on the U-chain
+- Bitslice / warp-split bitslice
+- Weight-2 Σ/σ; “trim W[8..15] saves 50%”
+- Treating Choi BO or FPGA mega-rounds as op-count reductions
+- Skipping HMAC iterations or changing `c` / the hash
+
+A result that would reopen this: an equivalent circuit for
+`Compress(H, pad64(m))` whose Σ/add/Ch/Maj count is ≥10% below the
+specialized 80-round form, with a differential test against
+`compress_hmac64`. We do not have one.
 
 ## SHA-512 execution and RTX SHF
 
@@ -246,10 +472,6 @@ real isolated-kernel gain with no change in hash values.
 
 ### Not revisited without new evidence
 
-- Skipping or pairing HMAC iterations
-- Fusing inner+outer into <160 rounds
-- Folding post-σ constant additives into `K[t]`
-- Sharing loop work across nearby mnemonics
-- “Trim W[8..15] saves 50% of the schedule”
-- Bitsliced SHA-512 on GPU (carry-chain argument)
-- Weight-2 Σ/σ identities
+See the failed-approaches list under “Deeper exact-evaluation attacks.”
+The SHF-specific items that stay closed: bitsliced SHA-512 on GPU, weight-2
+Σ/σ, and any claim of <2 SHF per 64-bit rotate on Ampere/Turing.
