@@ -82,12 +82,16 @@ but they cannot be moved into `K[t]` without corrupting later schedule uses:
 |----|--------|--------|
 | H1 | In the random-oracle model, `T = ⊕_{j=1}^{c} f^{j}(x)` requires `c` evaluations of `f`. No closed form skips HMAC evaluations. | **Held.** A shortcut here would be a distinguishing attack on HMAC-SHA512. Even iteration count (`c=2048`) cancels `⊕ O` if feed-forward were XOR; it is ADD, and the next iteration still needs the full `U_j`. |
 | H2 | HMAC cannot be reduced below 2 sequential SHA-512 compressions without changing the function. | **Held.** Nested `H(O \|\| H(I \|\| m))` is the definition. Inner output is the outer message. |
-| H3 | Specializing the HMAC-64 padded block (fixed W[8..15], first expand, K+W fold) reduces *work*. | **Implemented.** Algebra: first expand drops 32σ+48add → 22σ+35add (−10σ −13add per compress). Later expands are dense. Static op-count ≈ **2.5–3.5%** of a compression. Claims of “50% of the schedule / 25–30% overall” from public writeups do not survive this accounting. |
+| H3 | Specializing the HMAC-64 padded block (fixed W[8..15], first expand, K+W fold) reduces *work*. | **Implemented and measured.** Algebra: first expand 32σ+48add → 22σ+35add. CPU: **−3.2% to −3.5%** vs batched generic (two 24-seed runs). Public “25–30%” claims do not survive this accounting. |
 | H4 | Midstate-compiled early rounds (I/O fixed for 2047 iters) save a full first round. | **Derived, not shipped.** Round 0: `T2` and the non-`W[0]` part of `T1` are constant. After round 0, six working variables are still the midstate. Round 1 still needs `Σ1(e)`, `Ch`, `Σ0(a)`, `Maj` on data-dependent `a,e`. Save ≈ one round in 80 (≈1.2%) plus a cheaper Ch/Maj in round 1. Not material. |
-| H5 | Lockstep 2-wide evaluation of independent seeds improves *throughput* (ILP), not work. | **Implemented (CPU).** Same compressions, two independent ARX chains. |
+| H5 | Lockstep 2-wide evaluation of independent seeds improves *throughput* (ILP), not work. | **Implemented (CPU). Loss.** +11% ns/seed vs specialized single. Same work, worse throughput here. |
 | H6 | `x ⊕ HMAC(P,x)` cannot be fused cheaper than computing HMAC and XORing: the next iterate *is* the HMAC. | **Held.** |
 | H7 | Adjacent BIP39 mnemonics share prefixes, so ipad/opad work can be shared. | **True but irrelevant.** Shared prefix only affects the 2 init compressions (`<0.1%`). `I` and `O` mix the whole key; the 4094-loop midstates differ. |
 | H8 | Making `1536` a source-level constant (instead of `(total_len+64)*8`) lets a compiler DCE the first expand. | **Done** by writing the specialized expand explicitly. Previous GPU hot path passed `total_len` as a value even though it was always 128. |
+| H9 | RTX SHF is 32-bit. A 64-bit ROTR is **exactly two SHF**; that is a hardware floor, not a coding style. | **Held.** Ampere/Turing `SHF.R` concatenates two 32-bit regs and extracts 32. Both halves of a 64-bit rotate need one SHF each. No 64-bit SHF exists. |
+| H10 | Bitsliced SHA-512 eliminates SHF (rotates become wire permutes / SHFL) and is fundamentally better on RTX. | **Rejected.** SHA-512 is ARX. Bitsliced 64-bit add is a 64-step carry chain (or Θ(log 64) prefix plus more ops). 80×7×64 ripple steps ≫ 1550 SHF. Warp-split bitslice trades SHF for SHFL **and** a serial adder across lanes. Hashcat/John do not bitslice SHA-512. |
+| H11 | Σ/σ can be computed with fewer than three 64-bit rotates via a different circulant basis. | **Rejected.** Weight-3 circulants `{28,34,39}` and `{14,18,41}` have no 0-offset and no 2-rotate form. Chaining `ROTR(ROTR(x,a),b)` uses the same 2 SHF per rotate. |
+| H12 | Writing rotates as explicit 32-bit SHF (plus `bitselect` Ch/Maj) is the RTX-native execution of the same 80 rounds. | **Implemented.** Rust `sha512_u32` + OpenCL `ror64_shf`/`shr64_shf`. Floor **1550 SHF** per specialized HMAC-64 compression. `rotate(ulong)` is left to the compiler and may emit `shr.b64/shl.b64/or` (more than 2 SHF). |
 
 ## What is not a lower bound
 
@@ -114,8 +118,11 @@ than 80 rounds. ASIC/GPU miners do not skip rounds.
 2. **`pbkdf2_fast`** — NMAC-style key (`I`,`O`) + HMAC-64 recurrence. `derive`
    now calls this. `derive_reference` keeps the old layered loop.
 3. **`hmac64_x2` / `derive_pair`** — lockstep two-seed HMAC-64.
-
-GPU hot path (`hmac_sha512_msg64_u8`, BIP39 U1 outer) calls `sha512_hmac64`.
+   GPU hot path (`hmac_sha512_msg64_u8`, BIP39 U1 outer) calls `sha512_hmac64`.
+4. **`sha512_u32`** — same HMAC-64 compress on `(lo,hi)` 32-bit halves. This is
+   the SHF-native machine: `shf_r(lo,hi,n) = (lo>>n)|(hi<<(32-n))`.
+5. **OpenCL `ror64_shf` / `shr64_shf`** — all SHA-512 Σ/σ on the GPU use this
+   instead of `rotate(ulong)`. Ch/Maj use `bitselect` (LOP3 on NVIDIA).
 
 ## Correctness
 
@@ -187,6 +194,56 @@ as “4094 specialized pad64 compressions,” which is what the math requires
 unless SHA-512 compression itself is implemented with fewer than 80 rounds
 of ARX (no known equivalent circuit).
 
+## SHA-512 execution and RTX SHF
+
+Given H1–H3, the remaining question is whether those 4094 compressions can
+be *executed* with fewer SHF than the conventional 80-round `ulong` form.
+
+### Cost of one specialized HMAC-64 compression
+
+| Piece | Rotates / shifts | SHF (2 per ROTR64, 1 per SHR-half) |
+|-------|------------------|-------------------------------------|
+| 80 × Σ0 | 80 × 3 ROTR | 480 |
+| 80 × Σ1 | 80 × 3 ROTR | 480 |
+| first expand (specialized) | 22 σ-like | 110 |
+| 3 dense expands | 3 × 16 × (σ0+σ1) | 480 |
+| **Total** | | **1550** (`HMAC64_SHF_FLOOR`) |
+
+64-bit ADD is 2× 32-bit IADD + carry (cheap on Ampere). Ch/Maj are LOP3
+(`bitselect`), not SHF.
+
+`4094 × 1550 ≈ 6.35e6` SHF per BIP39 seed is the rotate/shift floor if every
+ROTR is a clean 2-SHF pair.
+
+### Why bitslice is not the SHF escape
+
+Bitslice makes ROTR a permute of bit-position registers (0 SHF). SHA-512
+still needs 64-bit **add**. In bitslice that is a 64-step ripple carry
+(verified: `bitslice_add_ripple(u64::MAX, 1)` is 64 steps and wraps to 0).
+Per compression, ~80×7 adds × 64 steps is tens of thousands of sequential
+carry ops, two orders of magnitude above 1550 SHF. A warp-split layout
+moves bit positions into SHFL; the adder remains serial across lanes.
+This is why production SHA-512 kernels stay word-parallel.
+
+### What we changed
+
+OpenCL no longer uses `rotate(ulong)` / `x >> 7` for Σ/σ. It uses
+`ror64_shf` / `shr64_shf` so the SASS we want is the 32-bit SHF pattern
+John/hashcat already rely on for NVIDIA. The Rust `sha512_u32` compressor
+is the same mapping and matches `compress_hmac64` on 200 random blocks.
+
+### Outcome
+
+**No formulation of exact SHA-512 on RTX uses fewer than 2 SHF per 64-bit
+rotate.** Bitslicing removes SHF and loses on add. Σ/σ have no lower-weight
+rotate basis. The conventional 80-round structure *is* the SHF-optimal
+exact structure; the only RTX-specific win is making those rotates compile
+to the 2-SHF floor instead of a 64-bit shift/shift/or expansion.
+
+Re-measure isolated PBKDF2 on an RTX card. If `rotate(ulong)` was already
+lowering to SHF, expect noise. If it was emitting `shr.b64`, expect a
+real isolated-kernel gain with no change in hash values.
+
 ### Not revisited without new evidence
 
 - Skipping or pairing HMAC iterations
@@ -194,3 +251,5 @@ of ARX (no known equivalent circuit).
 - Folding post-σ constant additives into `K[t]`
 - Sharing loop work across nearby mnemonics
 - “Trim W[8..15] saves 50% of the schedule”
+- Bitsliced SHA-512 on GPU (carry-chain argument)
+- Weight-2 Σ/σ identities

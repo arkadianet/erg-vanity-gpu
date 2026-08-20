@@ -34,16 +34,42 @@ __constant ulong H512_INIT[8] = {
     0x1f83d9abfb41bd6bul, 0x5be0cd19137e2179ul
 };
 
-// Rotate right for 64-bit
-#define ROTR64(x, n) rotate((x), (ulong)(64ul - (n)))
+// RTX/Ampere SHF-native 64-bit rotate. Hardware SHF is 32-bit: each ROTR64
+// is two funnel shifts (lo/hi). `n` must be a literal in 1..63.
+// (lo >> n) | (hi << (32-n)) is the SHF.R pattern ptxas emits.
+inline uint shf_r32(uint lo, uint hi, uint n) {
+    return (lo >> n) | (hi << (32u - n));
+}
 
-// SHA-512 functions
-#define CH64(x, y, z)  (((x) & (y)) ^ (~(x) & (z)))
-#define MAJ64(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
-#define EP0_64(x)      (ROTR64(x, 28) ^ ROTR64(x, 34) ^ ROTR64(x, 39))
-#define EP1_64(x)      (ROTR64(x, 14) ^ ROTR64(x, 18) ^ ROTR64(x, 41))
-#define SIG0_64(x)     (ROTR64(x, 1) ^ ROTR64(x, 8) ^ ((x) >> 7))
-#define SIG1_64(x)     (ROTR64(x, 19) ^ ROTR64(x, 61) ^ ((x) >> 6))
+inline ulong ror64_shf(ulong x, uint n) {
+    uint2 v = as_uint2(x);
+    uint2 r;
+    if (n < 32u) {
+        r.x = shf_r32(v.x, v.y, n);
+        r.y = shf_r32(v.y, v.x, n);
+    } else {
+        uint k = n - 32u;
+        r.x = shf_r32(v.y, v.x, k);
+        r.y = shf_r32(v.x, v.y, k);
+    }
+    return as_ulong(r);
+}
+
+inline ulong shr64_shf(ulong x, uint n) {
+    uint2 v = as_uint2(x);
+    uint2 r;
+    r.x = shf_r32(v.x, v.y, n);
+    r.y = v.y >> n;
+    return as_ulong(r);
+}
+
+#define ROTR64(x, n)   ror64_shf((x), (uint)(n))
+#define CH64(x, y, z)  bitselect((z), (y), (x))
+#define MAJ64(x, y, z) bitselect((x), (y), ((x) ^ (z)))
+#define EP0_64(x)      (ror64_shf((x), 28u) ^ ror64_shf((x), 34u) ^ ror64_shf((x), 39u))
+#define EP1_64(x)      (ror64_shf((x), 14u) ^ ror64_shf((x), 18u) ^ ror64_shf((x), 41u))
+#define SIG0_64(x)     (ror64_shf((x), 1u) ^ ror64_shf((x), 8u) ^ shr64_shf((x), 7u))
+#define SIG1_64(x)     (ror64_shf((x), 19u) ^ ror64_shf((x), 61u) ^ shr64_shf((x), 6u))
 
 // Pack 8 bytes (big-endian) into a ulong
 inline ulong pack_be64(uchar b0, uchar b1, uchar b2, uchar b3,
