@@ -287,7 +287,7 @@ That is already IADD3-shaped. `EP*` still go through `rotate(ulong)`.
 
 | Candidate | Mathematical change | Expected op Δ | PTX/SASS | Regs | Occ. | Instr | Runtime | Throughput | Speedup |
 |-----------|---------------------|---------------|----------|------|------|-------|---------|------------|---------|
-| production baseline | — | — | **unmeasured** | ? | ? | ? | README ~1600 ns/seed | ~625k HMAC-64-equivalent seeds/s isolated | 1.00 |
+| production baseline | — | — | **unmeasured** (harness now dumps PTX/regs when an RTX is present) | ? | ? | ? | README ~1600 ns/seed | ~625k HMAC-64-equivalent seeds/s isolated | 1.00 |
 | HMAC-64 first expand (known) | 32→22 σ in first window | ~3% SHF | unmeasured | same 16 W | ? | −10 σ | unmeasured | unmeasured | ~1.03 predicted |
 | IADD3 assoc | none (same adds) | 0 if IADD3 already | unmeasured | 0 | 0 | −6 IADD/round *if* binary | unmeasured | unmeasured | 0–~14% of compression, compiler-dependent |
 | SHF rotate source | none | 0 if already SHF | unmeasured | +0–2 | ? | −4 half-ops/ROTR *if* soft | unmeasured | unmeasured | 0–large, compiler-dependent |
@@ -374,6 +374,16 @@ Reason: SHA512_R is already written this way. Save is 0 if IADD3
 ```
 
 ```
+Hypothesis: a 4096-wide research launch is a valid RTX measurement
+Why it might work: fewer work items compile and copy faster
+Required property: enough warps to hide SHA-512 latency on Ampere
+Experiment: occupancy model; 3080 Ti has 80 SMs / 48 warps peak
+Decision: KILLED as a measurement
+Reason: 4096 items is ~2.5 warps/SM if local=256. Isolated
+        production bench uses 262144. The harness now matches that.
+```
+
+```
 Hypothesis: CSA / delayed carry (reopen)
 Decision: NOT REOPENED
 Reason: closed; conversion before every Σ reintroduces a CPA and
@@ -425,17 +435,37 @@ The ≥10% question is still the NVIDIA lowering of `rotate(ulong)`.
 
 ## GPU A/B harness (not wired into vanity)
 
-Research-only, production kernels unchanged:
+Research-only, production kernels unchanged. Launch matches the
+isolated production bench (batch 262144, driver-chosen local size,
+OpenCL event timestamps). A 4096-wide grid would underfill an RTX
+and is not a valid measurement.
 
 ```bash
 cargo test --locked -p erg-vanity-crypto sha512_isa
-cargo run --release -p erg-vanity-gpu --bin sha512_circuit_bench
+cargo test --locked -p erg-vanity-gpu sha512_research
+cargo run --release --locked -p erg-vanity-gpu --bin sha512_circuit_bench
 ```
 
-The binary compiles three OpenCL variants of the 2048-iter HMAC-64 loop
-(`RESEARCH_VARIANT` 0/1/2), checks work-item 0 against the CPU
-reference, and prints ns/seed plus the NVIDIA build log. This VM
-exits with `no GPU bench`.
+The binary:
+
+1. Compiles three HMAC-64 loop variants (`RESEARCH_VARIANT` 0/1/2).
+2. Checks the first 8 work-items against the CPU HMAC-64 reference.
+3. Reports median / min / max / stdev ns/seed over 12 timed runs
+   (5 warmup).
+4. Parses `-cl-nv-verbose` for registers / spills and estimates Ampere
+   occupancy from the register count.
+5. Scans the NVIDIA program binary for PTX tokens (`shf.*`, `iadd3`,
+   `lop3`, `shr.b64` / `shl.b64`).
+6. Times production `bench_pbkdf2` on the same device (README ~1600
+   ns/seed on a 3080 Ti is the competent baseline).
+7. Prints `=== DECISION ===` with IMPLEMENT / STOP / CONTINUE.
+
+Env: `SHA512_BENCH_BATCH`, `SHA512_BENCH_ITERS`, `SHA512_BENCH_WARMUP`,
+`SHA512_BENCH_TIMED`, `SHA512_BENCH_LOCAL`, `SHA512_BENCH_SKIP_PROD=1`,
+`SHA512_BENCH_OUT=<path>`.
+
+This VM still has no `/dev/nvidia*` and no NVIDIA ICD. The binary
+exits with `no GPU bench` and recommendation CONTINUE.
 
 ---
 
@@ -450,13 +480,17 @@ not a new round or schedule. The representation search in this pass
 is empty: the conventional Σ/Ch/Maj/add/σ form, plus the known ~3%
 HMAC-64 first expand, is the exact work.
 
-On an RTX machine, run `sha512_circuit_bench` (above). Decision rule:
+On an RTX machine, run `sha512_circuit_bench` (above). The binary
+applies this rule itself:
 
 - best variant ≥10% faster than `prod_rotate_generic` and exact →
   **IMPLEMENT** that source shape into `sha512.cl`.
-- all three within noise and the build log already shows SHF+IADD3 →
+- all three within 3% and PTX/log already looks like the SHF floor →
   **STOP**.
-- `shf_*` wins by a few percent only → partial result; do not claim 10%.
+- `shf_*` wins by a few percent only, or floor not confirmed →
+  **CONTINUE**; do not claim 10%.
+
+Production kernels stay untouched until that printout exists.
 
 ---
 
