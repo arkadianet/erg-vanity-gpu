@@ -5,6 +5,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod arx_basis;
 pub mod base58;
 pub mod blake2b;
 pub mod entropy;

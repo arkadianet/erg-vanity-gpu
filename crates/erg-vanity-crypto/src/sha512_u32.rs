@@ -6,8 +6,9 @@
 //! explicit and the OpenCL kernel can match it.
 //!
 //! This is not a different hash. It is a different *machine* for the same
-//! 80-round ARX. Bitsliced SHA-512 (zero SHF) is analyzed in the research
-//! log: 64-bit add becomes a 64-step carry chain, which loses on RTX.
+//! 80-round ARX. Bit-major evaluation (ripple *or* Kogge–Stone) is the
+//! `arx_basis` module: it changes the representation, then loses on a SIMT
+//! ALU whose add already *is* that prefix network.
 
 #![allow(clippy::too_many_arguments)]
 

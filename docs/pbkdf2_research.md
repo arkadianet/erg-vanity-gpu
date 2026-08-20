@@ -644,13 +644,9 @@ ROTR is a clean 2-SHF pair.
 
 ### Why bitslice is not the SHF escape
 
-Bitslice makes ROTR a permute of bit-position registers (0 SHF). SHA-512
-still needs 64-bit **add**. In bitslice that is a 64-step ripple carry
-(verified: `bitslice_add_ripple(u64::MAX, 1)` is 64 steps and wraps to 0).
-Per compression, ~80×7 adds × 64 steps is tens of thousands of sequential
-carry ops, two orders of magnitude above 1550 SHF. A warp-split layout
-moves bit positions into SHFL; the adder remains serial across lanes.
-This is why production SHA-512 kernels stay word-parallel.
+Ripple-carry is the wrong kill. The live question is whether a *different
+basis* (bit-major + prefix add) beats word-major. That is `arx_basis` and
+the section below. Short version: Kogge–Stone is what the ALU already is.
 
 ### What we changed
 
@@ -674,5 +670,73 @@ real isolated-kernel gain with no change in hash values.
 ### Not revisited without new evidence
 
 See the failed-approaches list under “Deeper exact-evaluation attacks.”
-The SHF-specific items that stay closed: bitsliced SHA-512 on GPU, weight-2
-Σ/σ, and any claim of <2 SHF per 64-bit rotate on Ampere/Turing.
+The SHF-specific items that stay closed: bitsliced SHA-512 on GPU as a
+software basis (IADD already is the prefix adder), weight-2 Σ/σ, and any
+claim of <2 SHF per 64-bit rotate on Ampere/Turing.
+
+## Blank-sheet basis (MiniARX)
+
+Question: if the job is millions of independent copies of this exact
+function, is “64-bit words, 80 rounds, add, rotate” the cheapest basis,
+or just the one everyone writes down?
+
+The only representation that is actually *different* (not a rename of the
+same ring operations) is **bit-major evaluation of the Boolean circuit**,
+with addition as a prefix network over bit position. Everything else tried
+from first principles collapses to that, or increases work:
+
+| Invented basis | Mechanism | Kill |
+|----------------|-----------|------|
+| RNS / GF(2⁶⁴) / Gray / SD | hope add and rotate share a ring | SHA-512’s ops live in two incompatible structures (Z/2⁶⁴Z and GF(2)[x]/(x⁶⁴+1)). The second *is* the bit vector. Conversion at every op is extra work. |
+| Hold CSA through the compression | rotate of (s,c) is free; 5:2 add is cheap | Ch/Maj need canonical bits of e,a every round. Resolving every round is a CPA. On an ALU, IADD ≈ LOP, so CSA+CPA > two IADDs (`csa3_issues`). |
+| Orbit XOR of F = HMAC₆₄ | T = ⊕ F^j(U) as (I+F+…+F²⁰⁴⁷) | F is not linear over GF(2). Avalanche makes the nonlinear remainder the whole function. |
+| Event-driven / BDD | skip gates that do not flip | Avalanche ≈ ½ the bits flip per round; BDD of 512-bit ARX is exponential. |
+| Hybrid: bitslice only Σ/σ | rotate becomes a plane reindex | Must transpose to get there. 32×32 butterfly > 2 SHF (`hybrid_sigma` / word ≈ 5.4 on the GPU model). |
+
+### The hypothesis that deserved a toy
+
+Pack the batch so SIMD lane = **bit position of 32 hashes**, not **one
+hash’s word**. Then:
+
+1. **Representation.** A 64-bit word is 64 bit-planes. Plane `i` is a
+   32-wide vector of bit `i` across the batch. Rotate is a rename / warp
+   shuffle of planes. Add is Kogge–Stone over the 64 planes (6 stages),
+   not 64-step ripple.
+2. **What changes.** The carry dependence becomes a log-depth prefix.
+   The 32 hashes share one issued gate. Rotates no longer touch SHF if
+   planes live in named registers.
+3. **What would be eliminated.** Not moved: the *word-level* rotate unit,
+   and the carry logic already inside IADD (replaced by explicit prefix
+   gates). That second replacement is the trap.
+4. **Why it could beat word-parallel.** On a machine whose SIMD width is
+   the *bit* batch (512-wide AVX-512, or an ASIC column per bit), one
+   AND does 512 hashes and rotate is wiring. Word-parallel only packs
+   `SIMD/64` hashes. Infinite-reg model: `ks_infinite / word ≈ 0.27`.
+5. **Strongest objection.** A GPU warp IADD already performs 32 word-adds
+   in one issue — it *is* a prefix adder in hardware. Re-emitting that
+   network as SHFL+LOP is expanding a unit the ISA collapsed. Register
+   files cannot hold `64 planes × 8 live words`.
+6. **Toy.** `arx_basis`: 8-bit MiniARX, 8 hashes, 8 rounds, same coupling
+   kinds. Word, bitslice-ripple, bitslice-KS, hybrid-Σ are bit-identical
+   on 40 batches. Warp-issue totals: word 244, KS 1484, ripple 3388,
+   hybrid 316.
+7. **Full impl if it had survived.** NVIDIA: one warp = 32 bit-lanes of
+   32 hashes, `shfl.sync` KS, stay bit-major for the whole HMAC. AVX-512:
+   512 hashes × 64 ZMM planes — needs ~512 architectural registers (have
+   32). That impl does not exist because (5) kills it.
+
+Scaled HMAC-64 projection (`gpu_hmac64_cost(1.0)`, `wide_simd_hmac64_cost`):
+
+| Machine | word | KS | ripple | hybrid Σ |
+|---------|------|-----|--------|----------|
+| GPU warp, SHFL=SHF | 2926 | 26830 (9.2×) | 287533 | 15814 (5.4×) |
+| GPU, SHFL=0.25 SHF |  | still >2× word |  |  |
+| AVX-512, 32 ZMM | 182.9 /hash | 3630 (spill) |  |  |
+| AVX-512, ∞ regs | 182.9 /hash | **49.6** |  |  |
+
+The 10–50%+ reduction exists only for a machine we do not have: **spatial
+64-column datapath, rotate = metal, add = one CSA+CPA per round**. That
+is how you would design the chip. On RTX / AVX-512 the word basis already
+matches the ISA. Software cannot instantiate the wiring.
+
+`cargo test -p erg-vanity-crypto --lib arx_basis`
