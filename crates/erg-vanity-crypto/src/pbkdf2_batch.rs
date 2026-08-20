@@ -259,9 +259,8 @@ mod tests {
 
     #[test]
     fn disjoint_inputs_mean_disjoint_data_nodes() {
-        // Circuit size lower bound: N copies of the private DAG plus O(1) shared
-        // constants. If two random keys produced equal I, the private DAGs would
-        // merge; avalanche says they do not.
+        // Conventional product DAG only (H22). Change-of-basis attacks are
+        // in `pbkdf2_basis` (H23). Avalanche: random keys do not share I.
         let mut prev = Hmac64Key::new(b"seed-0").inner;
         for i in 1..32u32 {
             let k = Hmac64Key::new(format!("seed-{i}").as_bytes());

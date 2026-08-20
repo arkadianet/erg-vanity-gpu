@@ -11,6 +11,7 @@ pub mod blake2b;
 pub mod entropy;
 pub mod hmac;
 pub mod pbkdf2;
+pub mod pbkdf2_basis;
 pub mod pbkdf2_batch;
 pub mod pbkdf2_fast;
 pub mod secp256k1;

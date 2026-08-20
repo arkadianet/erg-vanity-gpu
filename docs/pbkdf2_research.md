@@ -101,7 +101,8 @@ but they cannot be moved into `K[t]` without corrupting later schedule uses:
 | H19 | The pad64 schedule has hidden identities after the first expand. | **Rejected.** Const-folded schedule DAG: first expand is exactly 22 σ (44 ror + 22 shr); three dense expands add exactly 192 ror + 96 shr (no extra CSE). For 80 random messages, no `W[t]` (`t≥32`) equals `W[s]`, `W[s]+C`, `σ0(W[s])`, or `σ1(W[s])`. σ0 and σ1 of the same word share no rotate distances. |
 | H20 | Published SHA-2 / PBKDF2 / ARX work contains an exact 10%+ evaluation shortcut. | **Rejected after reading.** See literature section. Every claimed large speedup is midstates (already in the 4094 count), ZB/IS (our ~3%), register packing, SIMD of independent blocks, or critical-path/area — not fewer fundamental ops. |
 | H21 | Automated search can find a 2-rotate equivalent for Σ or for `Σ+Ch` (the ~10% SHF path). | **Rejected in the searched class.** Exhaustive 2-term+shift vs Σ0/Σ1 on all basis vectors: empty. 15 structured fusions: 0/400. Superopt 12k steps: no rotate dropped. Mendel form = same circuit. Related-mnemonic I/O Hamming >180. |
-| H22 | N independent BIP39 PBKDF2 instances cost materially less than N× one instance (shared salt, bitslice, prefix add, last-word family, warp-as-one-circuit). | **Rejected.** Shared DAG nodes are O(1) (U1-inner W, constants) plus O(prefix rounds) of setup. Loop intermediates of related last-words do not collide (8 HMAC steps, 0 word hits). Bitslice/CLA/hybrid-transpose **increase** work vs hardware IADD. See batch section. |
+| H22 | N independent BIP39 PBKDF2 instances cost materially less than N× one instance (shared salt, bitslice, prefix add, last-word family, warp-as-one-circuit). | **Rejected as a conventional-DAG claim.** Shared nodes are O(1). That does **not** bound every algorithm for `C_N` — only the product of N scalar SHA DAGs. See H23. |
+| H23 | A change of computational basis (FFT/Walsh, packing, polynomial/multipoint, mixed-instance SLP, batch-inversion analog, warp-as-one-object) evaluates `C_N` at ≤ 0.9 N · Work(C) without sharing scalar intermediates. | **Rejected for every hook known to beat N×.** Independent ANDs have multiplicative complexity N (exhaustive N=2). Walsh/FFT across instances computes the wrong function and costs extra. Fast multipoint needs a dense high-degree univariate SHA does not provide. SWAR packing costs more word-ops than two native adds. MiniARX-4 mixed superopt: 0/8000 programs cheaper than 2×. Polarization fails for MiniSHA-8 and HMAC-64. See basis section. |
 
 ## What is not a lower bound
 
@@ -111,9 +112,11 @@ distinctions used here:
 - **Cryptographic lower bound:** you need all `c` HMAC evaluations and both
   nested hashes (H1, H2, H18). That bounds *evaluations*, not *cost per
   evaluation*.
-- **Circuit lower bound:** we do not have one. H13–H17, H19 are attacks on
-  the conventional 80-round circuit, not a proof that no cheaper circuit
-  exists.
+- **Circuit lower bound:** we do not have `Size(f^N) ≥ N Size(f)` for
+  arbitrary Boolean circuits (direct-sum is open). H13–H17, H19 attack
+  the conventional 80-round circuit. H22 bounds the *product DAG*.
+  H23 classifies the representations that *do* beat N× on other
+  functions and shows SHA-512/PBKDF2 has none of those hooks.
 - **Known best implementations:** hashcat / John specialize ipad/opad midstates
   and the 64-byte HMAC block. They still run 80 rounds × 2 × 2047.
 - **Conventional:** the previous tree already had midstates, ulong8 registers,
@@ -144,8 +147,10 @@ than 80 rounds. ASIC/GPU miners do not skip rounds.
    2-term Σ search, structured Σ+Ch fusions, 8-bit ADD+ROTR correction,
    STOKE-style superopt of `Σ1+Ch`, Mendel form, related-mnemonic midstate
    Hamming. Not on the production path.
-8. **`pbkdf2_batch`** — batch-complexity accounting and tests. Production
-   `derive` is unchanged.
+8. **`pbkdf2_batch`** — conventional-DAG batch accounting and tests.
+   Production `derive` is unchanged.
+9. **`pbkdf2_basis`** — change-of-basis / collective-evaluation attacks
+   on `C_N`. Production `derive` is unchanged.
 
 ## Correctness
 
@@ -481,6 +486,13 @@ A-chain does not shrink `F`. A cheaper `F` *is* B4 at larger scale.
 LOP3. The nonlinear bulk is the 64-bit adders. An adder-free SHA-512
 is a different function.
 
+**B9 — Collective / change of basis.** Techniques that beat N× on
+other maps need an inverse, a shared-base exp, a non-diagonal
+bilinear tensor, a dense high-degree univariate, or joint dependence
+on all N inputs. SHA-512 has none of those. Independent ANDs have
+multiplicative complexity N. Mixing instances Fourier-style makes
+Ch a convolution. See H23.
+
 ### What a GPU re-test would need
 
 None of the search hits produced a new exact circuit. There is nothing
@@ -512,6 +524,8 @@ candidate.
 - Sparse ADD+ROTR correction / joint ARX basis
 - Cross-seed sharing of the 4094-loop after related BIP39 prefixes
 - Work(N) < N·Work(1) by ≥10% via salt/bitslice/CLA/family/warp-circuit
+- Work(N) < N·Work(1) by ≥10% via FFT/Walsh, multipoint, SWAR packing,
+  mixed-instance ARX, batch-inversion analog, or other change of basis
 
 ## Batch complexity: is Work(N) < N · Work(1)?
 
@@ -597,29 +611,179 @@ helps a **fixed** linear map times many vectors; Σ is already 3 SHF and
 is applied to different `e_i`. No amortization of the nonlinear 80-round
 map: the domain is 512 bits.
 
-### Circuit lower bound
+### Conventional-DAG bound (H22 only)
 
 `C_N(P_1,…,P_N; S) = (C(P_1,S), …, C(P_N,S))`.
 
-If the `P_i` are disjoint inputs, any circuit is a disjoint union of N
-copies of the private cone of `C`, plus the shared cone of `S`. Size
-`≥ N · |private(C)| + |shared(S)|`. We have `|shared| / |private| ≈
-0.25/4098`. Material batch savings require either
+In the *product of N scalar SHA-512 DAGs*, a gate is shareable only if
+it is a function of `S` (and `K`, IV, padding) or two private cones
+collide. That gives size `N · |private(C)| + |shared(S)|` with
+`|shared| / |private| ≈ 0.25/4098`.
 
-1. identifying private nodes that are actually functions of `S` alone
-   (they are not: the 4094-loop depends on `I(P)` and `U_{j-1}(P)`), or
-2. an identity `C(P_i,S) = F(C(P_j,S), P_i, P_j)` cheaper than
-   evaluating `C(P_i,S)` (a related-key shortcut through full HMAC-SHA512
-   after avalanche — not observed, and 0 colliding loop words).
+That is a statement about **common subexpressions in the conventional
+basis**. It is not a statement about every algorithm for `C_N`.
+FFT, batch inversion, fast multipoint evaluation, and Pippenger MSM
+all compute many outputs cheaper than N scalar runs without those
+outputs sharing the same scalar intermediates. The useful sharing is
+in the *representation*.
 
-SIMD/warp occupancy changes **latency hiding**, not that size bound.
+## Change of basis: can Work(C_N) ≪ N · Work(C)?
 
-### What would reopen batch savings
+The question is whether some other encoding of the N states makes the
+*same* function cheaper. Tests live in `pbkdf2_basis` (9 new).
+Production `derive` is unchanged.
 
-A related-chaining-value algorithm that evaluates
-`Compress(I_i, pad64(U_i))` for many `(I_i,U_i)` in `o(N)` compressions
-**after** the 80-round mix. Or a bitslice adder cheaper than `IADD`
-(contradicts the ALU). Neither is supported by the measurements.
+### The phenomenon is real — on the wrong operation
+
+Montgomery batch inversion: N inverses in `F_p` via one inverse and
+`≤ 3N` muls. Measured: N=8 and N=32 beat N Fermat inversions, and the
+recovered values satisfy `x·x⁻¹ = 1`.
+
+The trick needs an **expensive abelian-group inverse** whose products
+commute. SHA-512’s expensive ops are ADD / ROTR / Ch / Maj. There is
+no inversion in the inner loop. Recasting a 64-bit word as a field
+element and batch-inverting it computes a different function.
+
+Pippenger / MSM is the same family: N independent `g^{a_i}` share a
+group and a common base. HMAC-64 is `finalize(O_i, finalize(I_i, U))`
+with a different key per password, not exponentiation.
+
+### Which hooks beat N×, and why SHA-512 has none of them
+
+| Hook | Why it beats N× | SHA-512 / PBKDF2 |
+|------|-----------------|------------------|
+| Group inverse (Montgomery) | 1 inv + O(N) muls | No inverse; ARX is already cheap |
+| Same-base exp (Pippenger) | Bucket accumulation | Not `g^{a_i}` |
+| Convolution / matmul | Tensor rank < N² | N independent products have rank N |
+| Fast multipoint | Dense high-degree univariate | Gates are degree 2; no coeff vector |
+| FFT of a *joint* map | Each output depends on all N inputs | Output *i* is independent of `P_j` |
+| SWAR / under-filled word | 1 wide add = 2 narrow adds | RTX 32-bit ALUs are already full |
+| Polarization of a quadratic | `f(x±y)` recover `f(x), f(y)` | HMAC / MiniSHA / MiniARX are not |
+
+### Independent multiplications cannot be mixed (the algebraic barrier)
+
+Ch = `z ⊕ (x ∧ (y⊕z))` is one AND per bit. N instances on disjoint
+triples are N independent products.
+
+**Exhaustive over GF(2):** no single AND of affine forms of `(a,b,c,d)`
+has both `a∧b` and `c∧d` in the affine span of `{1,a,b,c,d,m}`. So two
+disjoint ANDs require two multiplies even if the circuit may XOR the
+four inputs together in any way. This is not a CSE argument: it is
+multiplicative complexity in the algebraic circuit model, and it is
+representation-independent *inside that model*.
+
+The same-pair identity `a+b = (a⊕b) + 2(a∧b)` relates ADD and AND of
+**one** pair. It does not produce a second pair’s AND.
+
+The bilinear tensor of N independent products is diagonal and has
+tensor rank N. Strassen-style decompositions do not apply.
+
+### Linear change of basis makes the nonlinear part worse
+
+Let `A` be any invertible linear mix of the N instance-states
+(DFT, Walsh–Hadamard, `(x_0+x_1, x_0⊕x_1)`, …).
+
+- ADD and XOR stay pointwise after paying `A` / `A⁻¹` (for DFT:
+  `Θ(N log N)` extra). They do not become cheaper than N word-ops.
+- Pointwise Ch in the Walsh domain is **not** Ch of the originals
+  (60/60 random 8-lane batches). Correct evaluation is IFFT → Ch →
+  FFT: `2 N log N + N·Ch` vs `N·Ch`.
+- Circulant Σ is already 3-sparse. An FFT-N “diagonalization” is
+  `2 N log N · 3` vs `3N` rotates (N=32: 96 vs > 4× that).
+
+The cheap basis for sparse ARX **is** the standard word basis (H14
+inside one instance; the same fact across instances). Mixing across
+instances turns a pointwise low-degree map into a convolution.
+
+A warp treated as one object is `I_32 ⊗ Round`. Evaluating that is
+exactly 32 column-wise rounds. Packing 32 hashes into one
+`GF(2³²)` element and applying a field op is a different function.
+
+### No single ring makes a SHA round a cheap polynomial
+
+- Over GF(2): Ch is degree 2 (Möbius on the 3-bit truth table).
+  Wrapping-add is **not**: bit 3 of a 4-bit add has ANF degree ≥ 4
+  because of carries.
+- Over `ℤ/2⁶⁴ℤ`: XOR, Ch, and ROTR are not low-degree integer
+  polynomials (ROTR is F₂-linear, not ℤ-linear).
+
+Fast multipoint evaluation beats N Horner runs only for a **dense
+high-degree univariate given by coefficients** (`d=N=256`: estimate
+wins; `d=2, N=32`: Horner is already cheaper). SHA is a short
+straight-line program of those mixed-algebra gates. Expanding 80
+rounds to a monomial vector is larger than evaluating the circuit.
+
+MiniARX-4 along an arithmetic progression of `x` does not have
+vanishing 3rd or 7th finite differences, so even a *structured*
+batch of states is not a low-degree integer curve after one ARX
+step. Vanity passwords are not an arithmetic progression in
+SHA-state space after `I`/`O` anyway.
+
+### Packed representation / SWAR
+
+Two 4-bit adds packed in 16 bits with a guard bit are exact (tested
+on a grid). The pack/add/unpack sequence is **12 word-ops vs 2**
+native adds. This wins only on a machine whose adder is wide and
+whose bitwise ops are free. On RTX, `IADD` and `LOP3` have similar
+throughput; the ALUs are already filled with 32-bit halves of
+64-bit words. Bit complexity of N independent n-bit adds is
+`Θ(N n)` in any case.
+
+### Mixed-instance ARX does not factor
+
+MiniARX-4 (`x' = x+rot₄(y,1)`, `y' = y ⊕ (x ∧ rot₄(y,2))`) is a
+5-op SHA-like step. Two instances: 10 ops.
+
+- Applying it to `(x_0+x_1, y_0+y_1)` is not the sum (or XOR) of
+  the two images. MiniSHA-8 is not a homomorphism over `+` or `⊕`
+  (80 random states). HMAC-64 fails `h(x)+h(y)=h(x+y)`,
+  `h(x)⊕h(y)=h(x⊕y)`, and `2h(x)=h(2x)` (40 random keys/messages).
+- Superopt: 8000 random straight-line programs of length 8–9 using
+  ADD/XOR/AND/ROL on *any* mix of the four words, including
+  cross-instance ops. **0** matched both outputs on 48+256 samples.
+  A hit would have been a toy collective ARX win; there was none.
+
+### Repeated HMAC is not a vectorized linear dynamical system
+
+If we only needed `f^c(x)` and `f` were linear, matrix power would
+help. PBKDF2 needs `T = ⊕_{j=1}^{c} f^j(x)` (all orbit points; a
+linear toy already has orbit-sum ≠ last iterate), and `f` is a
+different map per password (`I_i`, `O_i`). One warp is N different
+recurrences, not one recurrence on a packed state.
+
+### What this does *not* prove
+
+A general Boolean-circuit theorem `Size(f^N) ≥ N Size(f) − o(N)` is
+open (direct-sum / direct-product). Restriction of a mixed circuit
+for `f^N` only yields `Size(f^N) ≥ Size(f)`, which is useless.
+
+The claim is narrower and stronger than “the private cones are
+disjoint”:
+
+**Every known technique that evaluates N independent copies in
+`o(N)` (or even `0.9 N`) times the scalar cost requires an
+algebraic hook — expensive inverse, shared group exponent, bilinear
+tensor of rank `< N`, dense high-degree univariate, or a function
+that jointly depends on all N inputs. SHA-512’s costly operations
+are already-optimal sparse ARX in the standard basis plus N
+independent rank-1 products. Linear mixing across instances cannot
+reduce the product count and turns the nonlinear map into a more
+expensive convolution. There is no ring in which a round is a
+low-degree polynomial worth multipoint evaluation.**
+
+A future joint superoptimizer of 80-round SHA-512 on two instances
+could in principle find a bizarre identity the MiniARX search
+missed. That would have to evade the multiplicative-complexity
+barrier on Ch/Maj/carries, which is the part that scales.
+
+### What would reopen collective savings
+
+A representation in which Ch/Maj/carry-AND of N disjoint triples
+have multiplicative complexity `< N`, or a ring/basis where the
+whole HMAC-64 map is a low-degree object with a fast multipoint
+algorithm cheaper than N times the SLP, or a group encoding of
+SHA state in which the round is a MSM-class operation. None of
+those is supported by the tests above.
 
 ## SHA-512 execution and RTX SHF
 
