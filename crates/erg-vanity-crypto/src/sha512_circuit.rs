@@ -100,20 +100,19 @@ fn fused0_64(a: u64, b: u64, c: u64) -> u64 {
     sig0(a).wrapping_add(maj(a, b, c))
 }
 
+fn distinct3(mut v: [u32; 3]) -> usize {
+    v.sort_unstable();
+    1 + usize::from(v[1] != v[0]) + usize::from(v[2] != v[1])
+}
+
 /// Distinct rotate amounts of Σ1 after reduction mod `w`.
 pub fn sigma1_distinct_mod(w: u32) -> usize {
-    let mut v = [14 % w, 18 % w, 41 % w];
-    v.sort_unstable();
-    v.dedup();
-    v.len()
+    distinct3([14 % w, 18 % w, 41 % w])
 }
 
 /// Distinct rotate amounts of Σ0 after reduction mod `w`.
 pub fn sigma0_distinct_mod(w: u32) -> usize {
-    let mut v = [28 % w, 34 % w, 39 % w];
-    v.sort_unstable();
-    v.dedup();
-    v.len()
+    distinct3([28 % w, 34 % w, 39 % w])
 }
 
 /// Textbook Boolean atoms used as mixed rotate/add operands.
@@ -343,10 +342,8 @@ pub fn confirm64(hit: &FusionHit, n: u32) -> bool {
                 .wrapping_add(ror(at[hit.yi as usize], hit.b))
                 .wrapping_add(at[hit.zi as usize]),
             "rot_sum" => {
-                ror(
-                    at[hit.xi as usize].wrapping_add(at[hit.yi as usize]),
-                    hit.a,
-                ) ^ ror(at[hit.zi as usize], hit.b)
+                ror(at[hit.xi as usize].wrapping_add(at[hit.yi as usize]), hit.a)
+                    ^ ror(at[hit.zi as usize], hit.b)
             }
             _ => return false,
         };
@@ -366,50 +363,57 @@ pub fn confirm64(hit: &FusionHit, n: u32) -> bool {
 /// Conventional: X=Y=e (atom 0), Z=Ch (atom 15), {a,b} a 2-subset of {14,18,41}
 /// is NOT a hit unless the missing rotate is free — which it is not.
 fn nontrivial(hits: &[FusionHit]) -> Vec<FusionHit> {
-    hits.iter()
-        .cloned()
-        .filter(|h| confirm64(h, 64))
-        .collect()
+    hits.iter().filter(|&h| confirm64(h, 64)).cloned().collect()
 }
 
-/// Exhaustive 8-bit check that +Ch cannot hide a missing rotate.
-/// Uses a width where {14,18,41} stay distinct (8, 12, 16).
-pub fn missing_rotate_survives_add(w: u32) -> bool {
+/// +Ch is injective in the Σ argument: add(A,Ch)=add(B,Ch) iff A=B.
+/// A 2-rotate Σ' therefore cannot match Σ1+Ch unless Σ'=Σ1.
+/// Returns (injective, n_e_where_two_eq_sigma1). The second count is 1
+/// at every width (e=0); a cheap form would need it equal to 2^w.
+pub fn add_ch_injective(w: u32) -> (bool, u32) {
     let max = 1u32 << w.min(16);
-    // Full exhaustive only at 8-bit. Wider widths sample.
+    let mut eq_sigma = 0u32;
+    let mut injective = true;
     if w <= 8 {
         for e in 0..max {
             let e = e as u64;
             let two = ror_w(e, 14, w) ^ ror_w(e, 18, w);
-            if two == sig1_w(e, w) {
-                return false;
+            let s1 = sig1_w(e, w);
+            if two == s1 {
+                eq_sigma += 1;
             }
-            // add(two, ch) == add(Σ1, ch) iff two == Σ1
             for f in 0..max {
                 for g in 0..max {
                     let f = f as u64;
                     let g = g as u64;
-                    if add_w(two, ch_w(e, f, g, w), w) == fused_w(e, f, g, w) {
-                        return false;
+                    let lhs = add_w(two, ch_w(e, f, g, w), w);
+                    let rhs = fused_w(e, f, g, w);
+                    if (lhs == rhs) != (two == s1) {
+                        injective = false;
                     }
                 }
             }
         }
-        true
     } else {
+        let mask = (1u64 << w) - 1;
         for i in 0..4000u64 {
             let (e, f, g) = sample_triple(i);
-            let mask = (1u64 << w) - 1;
             let e = e & mask;
             let f = f & mask;
             let g = g & mask;
             let two = ror_w(e, 14, w) ^ ror_w(e, 18, w);
-            if add_w(two, ch_w(e, f, g, w), w) == fused_w(e, f, g, w) {
-                return false;
+            let s1 = sig1_w(e, w);
+            if two == s1 {
+                eq_sigma += 1;
+            }
+            let lhs = add_w(two, ch_w(e, f, g, w), w);
+            let rhs = fused_w(e, f, g, w);
+            if (lhs == rhs) != (two == s1) {
+                injective = false;
             }
         }
-        true
     }
+    (injective, eq_sigma)
 }
 
 /// Ampere-style 32-bit instruction model for one SHA-512 round.
@@ -488,7 +492,7 @@ fn hmac64_block(msg: [u64; 8]) -> [u64; 16] {
 
 /// Specialized first expand. Returns W[16..32].
 pub fn hmac64_expand16(msg: [u64; 8]) -> [u64; 16] {
-    let mut w = hmac64_block(msg);
+    let w = hmac64_block(msg);
     // Identities from W[8]=PAD, W[9..14]=0, W[15]=1536.
     let mut out = [0u64; 16];
     let mut v = w;
@@ -645,8 +649,8 @@ pub fn iadd3_assoc_matches(n: u32) -> bool {
         let e_text = d.wrapping_add(t1);
         let a_text = t1.wrapping_add(t2);
         // 3+2 fold
-        let t1_i = (h.wrapping_add(sig1(e)).wrapping_add(ch(e, f, g)))
-            .wrapping_add(k.wrapping_add(w));
+        let t1_i =
+            (h.wrapping_add(sig1(e)).wrapping_add(ch(e, f, g))).wrapping_add(k.wrapping_add(w));
         let e_i = d.wrapping_add(t1_i);
         let a_i = t1_i.wrapping_add(sig0(a)).wrapping_add(maj(a, b, c));
         if t1 != t1_i || e_text != e_i || a_text != a_i {
@@ -675,9 +679,10 @@ mod tests {
 
     #[test]
     fn width_4_collapses_sigma1() {
-        // 14≡18 (mod 4). A 4-bit "win" cannot be lifted.
+        // 14≡18 (mod 4) so Σ1_4 has only 2 amounts. Σ0_4 stays 3-amount
+        // (28,34,39 ≡ 0,2,3). A 4-bit Σ1 "win" cannot be lifted.
         assert_eq!(sigma1_distinct_mod(4), 2);
-        assert_eq!(sigma0_distinct_mod(4), 2);
+        assert_eq!(sigma0_distinct_mod(4), 3);
         assert_eq!(sigma1_distinct_mod(8), 3);
         assert_eq!(sigma1_distinct_mod(12), 3);
         assert_eq!(sigma1_distinct_mod(16), 3);
@@ -686,9 +691,12 @@ mod tests {
 
     #[test]
     fn add_does_not_erase_a_sigma1_rotate() {
-        assert!(missing_rotate_survives_add(8));
-        assert!(missing_rotate_survives_add(12));
-        assert!(missing_rotate_survives_add(16));
+        let (inj8, eq8) = add_ch_injective(8);
+        let (inj12, _) = add_ch_injective(12);
+        let (inj16, _) = add_ch_injective(16);
+        assert!(inj8 && inj12 && inj16);
+        // Only e=0 makes the 2-rotate form equal Σ1 (the zero vector).
+        assert_eq!(eq8, 1);
     }
 
     #[test]
@@ -789,6 +797,18 @@ mod tests {
             let sel = x ^ z;
             let maj_bs = (sel & y) | ((!sel) & x);
             assert_eq!(maj(x, y, z), maj_bs);
+        }
+    }
+
+    #[test]
+    fn dual_rotate_rep_does_not_drop_a_rotate() {
+        // Keep r = ROTR(e,14). Then Σ1 = r ⊕ ROTR(r,4) ⊕ ROTR(r,27).
+        // Still 3 rotates (1 prepaid + 2). Extra live value, same SHF.
+        for i in 0..200u64 {
+            let e = splitmix(i + 9);
+            let r = ror(e, 14);
+            let via = r ^ ror(r, 4) ^ ror(r, 27);
+            assert_eq!(via, sig1(e));
         }
     }
 
