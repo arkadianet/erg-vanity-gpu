@@ -12,7 +12,7 @@ pub use estimate::{
     GPU_BASELINE_SEEDS_PER_SEC,
 };
 pub use search::{
-    list_gpu_devices, run_search, validate_pattern, Backend, Hit, SearchEvent, SearchRequest,
-    MAX_PATTERNS, MAX_PATTERN_DATA, MAX_PATTERN_LEN,
+    list_gpu_devices, run_search, validate_num_indices, validate_pattern, Backend, Hit,
+    SearchEvent, SearchRequest, MAX_NUM_INDICES, MAX_PATTERNS, MAX_PATTERN_DATA, MAX_PATTERN_LEN,
 };
 pub use verify::verify_hit_ergo_lib;

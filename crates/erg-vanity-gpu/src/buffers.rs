@@ -26,19 +26,33 @@ const ADDRESS_BASE58_LEN: usize = 51;
 const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 fn prefix_range(prefix: &[u8]) -> ([u8; ADDRESS_BYTES], [u8; ADDRESS_BYTES]) {
+    // Unmatched interval (lower > upper) for invalid input: the exact-case
+    // kernel matcher then rejects every address.
+    let unmatched = || ([0xFFu8; ADDRESS_BYTES], [0u8; ADDRESS_BYTES]);
+
+    // Longer prefixes cannot map onto the fixed 51-character address width.
+    if prefix.len() > ADDRESS_BASE58_LEN {
+        return unmatched();
+    }
     let mut lower = [0u8; ADDRESS_BYTES];
     for &ch in prefix {
-        let digit = BASE58_ALPHABET
+        // Ignore-case lowercasing can produce non-Base58 bytes
+        // (e.g. 'L' -> 'l'); never panic on them.
+        let Some(digit) = BASE58_ALPHABET
             .iter()
             .position(|&candidate| candidate == ch)
-            .expect("patterns are validated as Base58 before upload") as u16;
-        let mut carry = digit;
+        else {
+            return unmatched();
+        };
+        let mut carry = digit as u16;
         for byte in lower.iter_mut().rev() {
             let value = (*byte as u16) * 58 + carry;
             *byte = value as u8;
             carry = value >> 8;
         }
-        debug_assert_eq!(carry, 0);
+        if carry != 0 {
+            return unmatched(); // value exceeded 304 bits
+        }
     }
 
     let mut upper = lower;
@@ -59,7 +73,9 @@ fn prefix_range(prefix: &[u8]) -> ([u8; ADDRESS_BYTES], [u8; ADDRESS_BYTES]) {
                 *byte = product as u8;
                 carry = product >> 8;
             }
-            debug_assert_eq!(carry, 0);
+            if carry != 0 {
+                return unmatched(); // value exceeded 304 bits
+            }
         }
     }
 
@@ -129,14 +145,18 @@ pub struct GpuBuffers {
     /// PBKDF2 seeds (64 bytes per work item), written by `vanity_seed`
     pub seeds: Buffer<u8>,
     /// External-chain key, chain code, and compressed public key per seed.
-    pub parents: Buffer<u8>,
+    /// Only allocated for the (experimental) index-parallel path.
+    pub parents: Option<Buffer<u8>>,
     /// Batch size this was allocated for
     batch_size: usize,
 }
 
 impl GpuBuffers {
     /// Allocate buffers for a given batch size.
-    pub fn new(ctx: &GpuContext, batch_size: usize) -> Result<Self, GpuError> {
+    ///
+    /// `with_parents` allocates the parent-state buffer for the
+    /// index-parallel search path; skip it when that path is disabled.
+    pub fn new(ctx: &GpuContext, batch_size: usize, with_parents: bool) -> Result<Self, GpuError> {
         let queue = ctx.queue();
 
         // Salt buffer (32 bytes)
@@ -197,11 +217,17 @@ impl GpuBuffers {
             .flags(MemFlags::new().read_write())
             .len(batch_size * SEED_SIZE)
             .build()?;
-        let parents = Buffer::<u8>::builder()
-            .queue(queue.clone())
-            .flags(MemFlags::new().read_write())
-            .len(batch_size * PARENT_SIZE)
-            .build()?;
+        let parents = if with_parents {
+            Some(
+                Buffer::<u8>::builder()
+                    .queue(queue.clone())
+                    .flags(MemFlags::new().read_write())
+                    .len(batch_size * PARENT_SIZE)
+                    .build()?,
+            )
+        } else {
+            None
+        };
 
         Ok(Self {
             salt,
@@ -227,8 +253,15 @@ impl GpuBuffers {
     /// Upload multiple patterns to GPU.
     ///
     /// Validates limits and populates patterns, pattern_offsets, and pattern_lens buffers.
+    /// In ignore-case mode the numeric prefix ranges are neither computed nor
+    /// uploaded: the case-insensitive kernel matcher does not read them (and
+    /// lowercased patterns may contain non-Base58 bytes).
     /// Returns the number of patterns uploaded.
-    pub fn upload_patterns(&self, patterns: &[String]) -> Result<usize, GpuError> {
+    pub fn upload_patterns(
+        &self,
+        patterns: &[String],
+        ignore_case: bool,
+    ) -> Result<usize, GpuError> {
         // Validate number of patterns
         if patterns.is_empty() {
             return Err(GpuError::Other("at least one pattern required".to_string()));
@@ -248,16 +281,18 @@ impl GpuBuffers {
         let mut lowers = vec![[0u8; ADDRESS_BYTES]; MAX_PATTERNS];
         let mut uppers = vec![[0u8; ADDRESS_BYTES]; MAX_PATTERNS];
 
-        for pattern in patterns {
+        for (i, pattern) in patterns.iter().enumerate() {
             let offset = data.len();
             let len = pattern.len();
 
             offsets.push(offset as u32);
             lens.push(len as u32);
             data.extend_from_slice(pattern.as_bytes());
-            let (lower, upper) = prefix_range(pattern.as_bytes());
-            lowers[offsets.len() - 1] = lower;
-            uppers[offsets.len() - 1] = upper;
+            if !ignore_case {
+                let (lower, upper) = prefix_range(pattern.as_bytes());
+                lowers[i] = lower;
+                uppers[i] = upper;
+            }
         }
 
         // Validate total size
@@ -283,10 +318,12 @@ impl GpuBuffers {
         len_data[..lens.len()].copy_from_slice(&lens);
         self.pattern_lens.write(&len_data).enq()?;
 
-        let lower_data: Vec<u8> = lowers.into_iter().flatten().collect();
-        let upper_data: Vec<u8> = uppers.into_iter().flatten().collect();
-        self.pattern_lower.write(&lower_data).enq()?;
-        self.pattern_upper.write(&upper_data).enq()?;
+        if !ignore_case {
+            let lower_data: Vec<u8> = lowers.into_iter().flatten().collect();
+            let upper_data: Vec<u8> = uppers.into_iter().flatten().collect();
+            self.pattern_lower.write(&lower_data).enq()?;
+            self.pattern_upper.write(&upper_data).enq()?;
+        }
 
         Ok(patterns.len())
     }
@@ -337,6 +374,39 @@ mod tests {
         assert_eq!(lower[0], 1);
         assert_eq!(upper[0], 1);
         assert!(lower < upper);
+    }
+
+    #[test]
+    fn prefix_range_invalid_char_is_unmatched() {
+        // 'l' is not Base58; ignore-case lowercasing of 'L' can produce it.
+        let (lower, upper) = prefix_range(b"9el");
+        assert!(lower > upper, "invalid char must yield an empty interval");
+        assert_eq!(lower[0], 0xFF);
+        assert_eq!(upper[0], 0x00);
+    }
+
+    #[test]
+    fn prefix_range_uppercase_matches_reference() {
+        // Reference values computed independently (big-endian 38 bytes).
+        let (lower, upper) = prefix_range(b"9eR");
+        assert_eq!(
+            hex::encode(lower),
+            "0101f23d1ac067ee6bac1e55f455e7dcf9c2b988eedd73961566242c625c931a000000000000"
+        );
+        assert_eq!(
+            hex::encode(upper),
+            "0101f4826241bde6eb8b43927c1720ba4f354c6c4d778f22458cebb24f59e6db000000000000"
+        );
+    }
+
+    #[test]
+    fn prefix_range_too_long_is_unmatched() {
+        let prefix = [b'9'; ADDRESS_BASE58_LEN + 1];
+        let (lower, upper) = prefix_range(&prefix);
+        assert!(
+            lower > upper,
+            "over-long prefix must yield an empty interval"
+        );
     }
 
     #[test]

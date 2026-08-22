@@ -139,8 +139,9 @@ pub struct VanityPipeline {
     comb: CombTableBuffer,
     seed_kernel: Kernel,
     kernel: Kernel,
-    parent_kernel: Kernel,
-    index_kernel: Kernel,
+    /// Index-parallel kernels; `None` when that experimental path is disabled.
+    parent_kernel: Option<Kernel>,
+    index_kernel: Option<Kernel>,
     index_parallel: bool,
     patterns: Vec<String>,
     /// Maps GPU/sorted pattern index back to the caller's original order.
@@ -182,8 +183,12 @@ impl VanityPipeline {
         let queue = ctx.queue();
         let comb = CombTableBuffer::upload(queue)?;
 
+        // The experimental index-parallel path is retained for comparison,
+        // but the loop path currently wins on NVIDIA at the maximum batch.
+        let index_parallel = false;
+
         // Allocate buffers
-        let buffers = GpuBuffers::new(&ctx, cfg.batch_size)?;
+        let buffers = GpuBuffers::new(&ctx, cfg.batch_size, index_parallel)?;
         let wordlist = WordlistBuffers::upload(queue)?;
 
         buffers.upload_salt(&salt)?;
@@ -192,7 +197,7 @@ impl VanityPipeline {
         let (sorted, pattern_index_map) = sort_patterns_longest_first(patterns);
         let patterns_for_gpu_storage = prepare_patterns_for_gpu(&sorted, cfg.ignore_case);
         let patterns_for_gpu: &[String] = patterns_for_gpu_storage.as_deref().unwrap_or(&sorted);
-        let num_patterns = buffers.upload_patterns(patterns_for_gpu)? as u32;
+        let num_patterns = buffers.upload_patterns(patterns_for_gpu, cfg.ignore_case)? as u32;
 
         let recommended = ctx.recommended_work_group_size();
         let local = local_size_for(cfg.batch_size, recommended);
@@ -235,50 +240,71 @@ impl VanityPipeline {
             .arg(&comb.table)
             .build()?;
 
-        // The experimental index-parallel path is retained for comparison,
-        // but the loop path currently wins on NVIDIA at the maximum batch.
-        let index_parallel = false;
-        let mut parent_kernel = Kernel::builder()
-            .program(program.program())
-            .name("vanity_parent")
-            .queue(queue.clone())
-            .global_work_size(cfg.batch_size)
-            .arg(&buffers.seeds)
-            .arg(&buffers.parents)
-            .arg(&comb.table)
-            .build()?;
-        let mut index_kernel = Kernel::builder()
-            .program(program.program())
-            .name("vanity_search_index")
-            .queue(queue.clone())
-            .global_work_size(cfg.batch_size * cfg.num_indices as usize)
-            .arg(0u64)
-            .arg(&buffers.parents)
-            .arg(cfg.num_indices)
-            .arg(&buffers.patterns)
-            .arg(&buffers.pattern_offsets)
-            .arg(&buffers.pattern_lens)
-            .arg(&buffers.pattern_lower)
-            .arg(&buffers.pattern_upper)
-            .arg(num_patterns)
-            .arg(if cfg.ignore_case { 1u32 } else { 0u32 })
-            .arg(&buffers.salt)
-            .arg(&buffers.hits)
-            .arg(&buffers.hit_count)
-            .arg(MAX_HITS as u32)
-            .arg(&comb.table)
-            .build()?;
+        // Index-parallel kernels are only built when that path is enabled:
+        // the parents buffer (batch_size * 128 bytes) and both kernels stay
+        // unallocated otherwise.
+        let mut parent_kernel = if index_parallel {
+            let parents = buffers.parents.as_ref().expect("parents allocated");
+            Some(
+                Kernel::builder()
+                    .program(program.program())
+                    .name("vanity_parent")
+                    .queue(queue.clone())
+                    .global_work_size(cfg.batch_size)
+                    .arg(&buffers.seeds)
+                    .arg(parents)
+                    .arg(&comb.table)
+                    .build()?,
+            )
+        } else {
+            None
+        };
+        let mut index_kernel = if index_parallel {
+            let parents = buffers.parents.as_ref().expect("parents allocated");
+            Some(
+                Kernel::builder()
+                    .program(program.program())
+                    .name("vanity_search_index")
+                    .queue(queue.clone())
+                    .global_work_size(cfg.batch_size * cfg.num_indices as usize)
+                    .arg(0u64)
+                    .arg(parents)
+                    .arg(cfg.num_indices)
+                    .arg(&buffers.patterns)
+                    .arg(&buffers.pattern_offsets)
+                    .arg(&buffers.pattern_lens)
+                    .arg(&buffers.pattern_lower)
+                    .arg(&buffers.pattern_upper)
+                    .arg(num_patterns)
+                    .arg(if cfg.ignore_case { 1u32 } else { 0u32 })
+                    .arg(&buffers.salt)
+                    .arg(&buffers.hits)
+                    .arg(&buffers.hit_count)
+                    .arg(MAX_HITS as u32)
+                    .arg(&comb.table)
+                    .build()?,
+            )
+        } else {
+            None
+        };
 
         let device = ctx.device();
-        let capped = recommended
+        let mut capped = recommended
             .min(kernel_work_group_limit(&seed_kernel, device, recommended))
             .min(kernel_work_group_limit(&kernel, device, recommended));
+        if let Some(index_kernel) = index_kernel.as_ref() {
+            capped = capped.min(kernel_work_group_limit(index_kernel, device, recommended));
+        }
         let local = local_size_for(cfg.batch_size, capped);
         seed_kernel.set_default_local_work_size(local.into());
         kernel.set_default_local_work_size(local.into());
-        parent_kernel.set_default_local_work_size(local.into());
-        let index_local = local_size_for(cfg.batch_size * cfg.num_indices as usize, capped);
-        index_kernel.set_default_local_work_size(index_local.into());
+        if let Some(parent_kernel) = parent_kernel.as_mut() {
+            parent_kernel.set_default_local_work_size(local.into());
+        }
+        if let Some(index_kernel) = index_kernel.as_mut() {
+            let index_local = local_size_for(cfg.batch_size * cfg.num_indices as usize, capped);
+            index_kernel.set_default_local_work_size(index_local.into());
+        }
 
         Ok(Self {
             ctx,
@@ -329,16 +355,13 @@ impl VanityPipeline {
         // Update counter_start (arg index 1) on both kernels
         self.seed_kernel.set_arg(1, self.counter)?;
         self.kernel.set_arg(1, self.counter)?;
-        self.index_kernel.set_arg(0, self.counter)?;
+        if let Some(index_kernel) = self.index_kernel.as_mut() {
+            index_kernel.set_arg(0, self.counter)?;
+        }
 
         unsafe {
             self.seed_kernel.enq()?;
-            if self.index_parallel {
-                self.parent_kernel.enq()?;
-                self.index_kernel.enq()?;
-            } else {
-                self.kernel.enq()?;
-            }
+            self.enqueue_search()?;
         }
 
         // Update counter for next batch
@@ -361,21 +384,32 @@ impl VanityPipeline {
 
         self.seed_kernel.set_arg(1, counter_start)?;
         self.kernel.set_arg(1, counter_start)?;
-        self.index_kernel.set_arg(0, counter_start)?;
+        if let Some(index_kernel) = self.index_kernel.as_mut() {
+            index_kernel.set_arg(0, counter_start)?;
+        }
 
         unsafe {
             self.seed_kernel.enq()?;
-            if self.index_parallel {
-                self.parent_kernel.enq()?;
-                self.index_kernel.enq()?;
-            } else {
-                self.kernel.enq()?;
-            }
+            self.enqueue_search()?;
         }
 
         self.addresses_checked += (self.cfg.batch_size as u64) * (self.num_indices as u64);
 
         self.collect_results()
+    }
+
+    /// Enqueue the search stage: the index-parallel kernel pair when enabled,
+    /// otherwise the loop-based `vanity_search` kernel.
+    unsafe fn enqueue_search(&mut self) -> Result<(), GpuError> {
+        if self.index_parallel {
+            let parent_kernel = self.parent_kernel.as_mut().expect("index-parallel kernels");
+            let index_kernel = self.index_kernel.as_mut().expect("index-parallel kernels");
+            parent_kernel.enq()?;
+            index_kernel.enq()?;
+        } else {
+            self.kernel.enq()?;
+        }
+        Ok(())
     }
 
     fn collect_results(&mut self) -> Result<Vec<VanityResult>, GpuError> {

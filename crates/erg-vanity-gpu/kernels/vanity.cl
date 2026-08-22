@@ -82,7 +82,10 @@ __kernel void vanity_seed(
 }
 
 // Derive the shared external-chain state once per seed for the index-parallel
-// search path. Layout: external key (32), chain code (32), parent pub (33).
+// search path. Layout: external key (32), chain code (32), parent pub (33),
+// validity marker at byte 97, rest padding.
+#define PARENT_VALID_OFFSET 97u
+
 __kernel void vanity_parent(
     __global const uchar* seeds,
     __global uchar* parents,
@@ -91,6 +94,9 @@ __kernel void vanity_parent(
     uint gid = get_global_id(0);
     __global const uchar* seed = seeds + ((ulong)gid * 64ul);
     __global uchar* out = parents + ((ulong)gid * 128ul);
+    // Mark the record invalid first: stale data from a previous batch must
+    // never be reported as a hit if this seed's derivation fails.
+    out[PARENT_VALID_OFFSET] = 0u;
     uchar seed_local[64];
     for (int i = 0; i < 64; i++) seed_local[i] = seed[i];
     uchar key[32], chain[32], pub[33];
@@ -101,6 +107,7 @@ __kernel void vanity_parent(
     for (int i = 0; i < 32; i++) out[i] = key[i];
     for (int i = 0; i < 32; i++) out[32 + i] = chain[i];
     for (int i = 0; i < 33; i++) out[64 + i] = pub[i];
+    out[PARENT_VALID_OFFSET] = 1u;
 }
 
 // BIP32 + k·G + address match. Seeds come from vanity_seed.
@@ -145,11 +152,12 @@ __kernel void vanity_search(
     // First match wins by (address_index ascending, pattern list order)
     HmacSha512Ctx address_hmac;
     hmac_sha512_init(&address_hmac, external_chain_code, 32u);
+    uchar child_chain_code[32];  // scratch: keeps external_chain_code intact
     for (uint addr_idx = 0; addr_idx < num_indices; addr_idx++) {
         // Derive key for this address index: m/44'/429'/0'/0/<addr_idx>
         uchar private_key[32];
         if (bip32_derive_normal_from_pub_ctx(
-                external_key, external_pub, addr_idx, private_key, external_chain_code,
+                external_key, external_pub, addr_idx, private_key, child_chain_code,
                 &address_hmac
             ) != 0) {
             continue;  // Skip invalid (astronomically rare)
@@ -236,12 +244,15 @@ __kernel void vanity_search_index(
     uint seed_gid = flat / num_indices;
     uint addr_idx = flat % num_indices;
     __global const uchar* parent = parents + ((ulong)seed_gid * 128ul);
+    // Skip seeds whose parent derivation failed (marker not set).
+    if (parent[PARENT_VALID_OFFSET] != 1u) return;
     uchar key[32], chain[32], pub[33], private_key[32];
     for (int i = 0; i < 32; i++) { key[i] = parent[i]; chain[i] = parent[32 + i]; }
     for (int i = 0; i < 33; i++) pub[i] = parent[64 + i];
     HmacSha512Ctx address_hmac;
     hmac_sha512_init(&address_hmac, chain, 32u);
-    if (bip32_derive_normal_from_pub_ctx(key, pub, addr_idx, private_key, chain, &address_hmac) != 0)
+    uchar child_chain_code[32];  // scratch: keeps the parent chain code intact
+    if (bip32_derive_normal_from_pub_ctx(key, pub, addr_idx, private_key, child_chain_code, &address_hmac) != 0)
         return;
     uint key_limbs[8];
     sc_from_bytes(key_limbs, private_key);
