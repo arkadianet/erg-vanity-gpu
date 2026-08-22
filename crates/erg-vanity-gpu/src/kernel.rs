@@ -1226,12 +1226,31 @@ mod tests {
 
             result_buf.write(&[0xFFFF_FFFFu32][..]).enq().unwrap();
 
+            // Range bounds for the precheck tests: lower and upper differ only
+            // at byte 2, so the 4 checksum bytes can never decide the outcome
+            // except on a deliberate tie against the lower bound.
+            let mut bounds = [0u8; 76];
+            bounds[0] = 0x01;
+            bounds[1] = 0x02;
+            bounds[2] = 0x40; // lower
+            bounds[38] = 0x01;
+            bounds[39] = 0x02;
+            bounds[40] = 0xc0; // upper
+            let bounds_buf = Buffer::<u8>::builder()
+                .queue(queue.clone())
+                .flags(MemFlags::new().read_only())
+                .len(bounds.len())
+                .build()
+                .unwrap();
+            bounds_buf.write(&bounds[..]).enq().unwrap();
+
             let kernel = ocl::Kernel::builder()
                 .program(program.program())
                 .name("base58_self_test")
                 .queue(queue.clone())
                 .global_work_size(1)
                 .arg(&result_buf)
+                .arg(&bounds_buf)
                 .build()
                 .unwrap();
 
@@ -1248,7 +1267,7 @@ mod tests {
             println!("Base58 self-test result: 0x{:08x}", failures);
 
             if failures != 0 {
-                const TEST_NAMES: [&str; 17] = [
+                const TEST_NAMES: [&str; 19] = [
                     "encode empty -> empty",
                     "encode 0x00 -> \"1\"",
                     "encode 0x00 0x00 -> \"11\"",
@@ -1266,6 +1285,8 @@ mod tests {
                     "no leading zeros must NOT match \"1\"",
                     "2 leading zeros must NOT match \"1a\" (false positive test)",
                     "1 leading zero must NOT match \"9\" (leading zero test)",
+                    "34-byte precheck agrees with the full range matcher",
+                    "34-byte precheck declines when the leading bytes tie",
                 ];
                 for (bit, name) in TEST_NAMES.iter().enumerate() {
                     if failures & (1u32 << bit) != 0 {
@@ -1275,7 +1296,7 @@ mod tests {
                 panic!("Base58 self-test failed with bitmap 0x{:08x}", failures);
             }
 
-            println!("Base58 self-test passed (all 17 tests)!");
+            println!("Base58 self-test passed (all 19 tests)!");
         });
     }
 

@@ -41,9 +41,11 @@ inline void generate_entropy(
 
 // Build Ergo P2PK address from compressed public key
 // addr_bytes: 38 bytes output (1 prefix + 33 pubkey + 4 checksum)
-inline void build_ergo_address(
+// Fill bytes 0..34: the mainnet P2PK prefix and the compressed pubkey.
+// Leaves the checksum to build_ergo_address_checksum.
+inline void build_ergo_address_head(
     __private const uchar* pubkey,  // 33 bytes compressed
-    __private uchar* addr_bytes     // 38 bytes output
+    __private uchar* addr_bytes     // 38 bytes output, first 34 written
 ) {
     // Mainnet P2PK prefix = 0x01
     addr_bytes[0] = 0x01u;
@@ -52,8 +54,10 @@ inline void build_ergo_address(
     for (int i = 0; i < 33; i++) {
         addr_bytes[1 + i] = pubkey[i];
     }
+}
 
-    // Compute checksum: first 4 bytes of Blake2b-256(prefix || pubkey)
+// Fill bytes 34..38: first 4 bytes of Blake2b-256(prefix || pubkey).
+inline void build_ergo_address_checksum(__private uchar* addr_bytes) {
     uchar checksum[4];
     ergo_checksum(addr_bytes, checksum);
 
@@ -61,6 +65,14 @@ inline void build_ergo_address(
     addr_bytes[35] = checksum[1];
     addr_bytes[36] = checksum[2];
     addr_bytes[37] = checksum[3];
+}
+
+inline void build_ergo_address(
+    __private const uchar* pubkey,  // 33 bytes compressed
+    __private uchar* addr_bytes     // 38 bytes output
+) {
+    build_ergo_address_head(pubkey, addr_bytes);
+    build_ergo_address_checksum(addr_bytes);
 }
 
 // PBKDF2 is isolated so the 2048-iter HMAC loop is not compiled into the
@@ -190,9 +202,18 @@ __kernel void vanity_search(
             uchar pubkey[33];
             affine_to_compressed_pubkey(pubkey, xs + j * 8u, ys + j * 8u);
 
-            // Build Ergo address
+            // Build the Ergo address. The checksum is deferred: the range
+            // matcher almost always decides on the leading 34 bytes alone, and
+            // a hit only reports entropy, so the CPU rederives the address
+            // anyway. The case-insensitive matcher reads the whole 38-byte
+            // value, so that path still needs it up front.
             uchar addr_bytes[38];
-            build_ergo_address(pubkey, addr_bytes);
+            build_ergo_address_head(pubkey, addr_bytes);
+            uint checksum_ready = 0u;
+            if (ignore_case) {
+                build_ergo_address_checksum(addr_bytes);
+                checksum_ready = 1u;
+            }
 
             // Check each pattern (inner loop)
             for (uint p = 0; p < num_patterns; p++) {
@@ -203,11 +224,25 @@ __kernel void vanity_search(
                 if (ignore_case) {
                     match = base58_check_prefix_global_icase(addr_bytes, &patterns[offset], len);
                 } else {
-                    match = base58_check_prefix_range(
+                    int pre = base58_prefix_range_precheck(
                         addr_bytes,
                         &pattern_lower[p * 38u],
                         &pattern_upper[p * 38u]
                     );
+                    if (pre < 0) {
+                        // Tied on the leading bytes, so the checksum decides.
+                        if (!checksum_ready) {
+                            build_ergo_address_checksum(addr_bytes);
+                            checksum_ready = 1u;
+                        }
+                        match = base58_check_prefix_range(
+                            addr_bytes,
+                            &pattern_lower[p * 38u],
+                            &pattern_upper[p * 38u]
+                        );
+                    } else {
+                        match = pre;
+                    }
                 }
 
                 if (match) {
