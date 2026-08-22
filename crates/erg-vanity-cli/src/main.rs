@@ -383,6 +383,7 @@ fn main() {
             SearchEvent::Hit(hit) => {
                 found += 1;
                 print_hit(&hit, &patterns, found);
+                let _ = io::stdout().flush();
             }
             SearchEvent::Progress {
                 checked,

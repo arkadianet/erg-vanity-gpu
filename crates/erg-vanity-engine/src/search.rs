@@ -13,6 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub const MAX_PATTERN_LEN: usize = 32;
+pub const MAX_NUM_INDICES: u32 = 500;
 pub use erg_vanity_gpu::buffers::{MAX_PATTERNS, MAX_PATTERN_DATA};
 
 const BASE58: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -99,10 +100,10 @@ impl SearchRequest {
         if self.num_indices == 0 {
             return Err("--index must be at least 1".into());
         }
-        if self.num_indices > 100 {
+        if self.num_indices > MAX_NUM_INDICES {
             return Err(format!(
-                "--index {} exceeds maximum of 100",
-                self.num_indices
+                "--index {} exceeds maximum of {}",
+                self.num_indices, MAX_NUM_INDICES
             ));
         }
         if let Some(0) = self.batch_size {

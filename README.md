@@ -84,7 +84,7 @@ PowerShell chains commands with `;`, not `&&`.
 ./target/release/erg-vanity
 ```
 
-`--index` is a count, not a path index. Default **1** derives only `m/44'/429'/0'/0/0`. `--index N` (1–100) derives address indices `0..N-1` on the same seed. Do not raise the default.
+`--index` is a count, not a path index. Default **1** derives only `m/44'/429'/0'/0/0`. `--index N` (1–500) derives address indices `0..N-1` on the same seed. Do not raise the default.
 
 ### Devices
 
@@ -107,7 +107,7 @@ Default `--devices` is `auto` (GPU if present, else CPU).
 | `--contains` | off | Match anywhere (CPU) |
 | `-i, --ignore-case` | off | Case-insensitive |
 | `-n, --max-results <N>` | `1` | Stop after N matches |
-| `--index <N>` | `1` | Address indices `0..N-1` per seed (1–100) |
+| `--index <N>` | `1` | Address indices `0..N-1` per seed (1–500) |
 | `--devices <list>` | `auto` | `auto`, `0,1`, `all`, or `cpu` |
 | `--batch-size <N>` | device default | Search batch size |
 | `--estimate` | off | Print difficulty and exit |

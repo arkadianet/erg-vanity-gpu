@@ -139,6 +139,9 @@ pub struct VanityPipeline {
     comb: CombTableBuffer,
     seed_kernel: Kernel,
     kernel: Kernel,
+    parent_kernel: Kernel,
+    index_kernel: Kernel,
+    index_parallel: bool,
     patterns: Vec<String>,
     /// Maps GPU/sorted pattern index back to the caller's original order.
     pattern_index_map: Vec<u32>,
@@ -221,9 +224,45 @@ impl VanityPipeline {
             .arg(&buffers.patterns)
             .arg(&buffers.pattern_offsets)
             .arg(&buffers.pattern_lens)
+            .arg(&buffers.pattern_lower)
+            .arg(&buffers.pattern_upper)
             .arg(num_patterns)
             .arg(if cfg.ignore_case { 1u32 } else { 0u32 })
             .arg(cfg.num_indices)
+            .arg(&buffers.hits)
+            .arg(&buffers.hit_count)
+            .arg(MAX_HITS as u32)
+            .arg(&comb.table)
+            .build()?;
+
+        // The experimental index-parallel path is retained for comparison,
+        // but the loop path currently wins on NVIDIA at the maximum batch.
+        let index_parallel = false;
+        let mut parent_kernel = Kernel::builder()
+            .program(program.program())
+            .name("vanity_parent")
+            .queue(queue.clone())
+            .global_work_size(cfg.batch_size)
+            .arg(&buffers.seeds)
+            .arg(&buffers.parents)
+            .arg(&comb.table)
+            .build()?;
+        let mut index_kernel = Kernel::builder()
+            .program(program.program())
+            .name("vanity_search_index")
+            .queue(queue.clone())
+            .global_work_size(cfg.batch_size * cfg.num_indices as usize)
+            .arg(0u64)
+            .arg(&buffers.parents)
+            .arg(cfg.num_indices)
+            .arg(&buffers.patterns)
+            .arg(&buffers.pattern_offsets)
+            .arg(&buffers.pattern_lens)
+            .arg(&buffers.pattern_lower)
+            .arg(&buffers.pattern_upper)
+            .arg(num_patterns)
+            .arg(if cfg.ignore_case { 1u32 } else { 0u32 })
+            .arg(&buffers.salt)
             .arg(&buffers.hits)
             .arg(&buffers.hit_count)
             .arg(MAX_HITS as u32)
@@ -237,6 +276,9 @@ impl VanityPipeline {
         let local = local_size_for(cfg.batch_size, capped);
         seed_kernel.set_default_local_work_size(local.into());
         kernel.set_default_local_work_size(local.into());
+        parent_kernel.set_default_local_work_size(local.into());
+        let index_local = local_size_for(cfg.batch_size * cfg.num_indices as usize, capped);
+        index_kernel.set_default_local_work_size(index_local.into());
 
         Ok(Self {
             ctx,
@@ -246,6 +288,9 @@ impl VanityPipeline {
             comb,
             seed_kernel,
             kernel,
+            parent_kernel,
+            index_kernel,
+            index_parallel,
             patterns: patterns.to_vec(),
             pattern_index_map,
             num_patterns,
@@ -284,10 +329,16 @@ impl VanityPipeline {
         // Update counter_start (arg index 1) on both kernels
         self.seed_kernel.set_arg(1, self.counter)?;
         self.kernel.set_arg(1, self.counter)?;
+        self.index_kernel.set_arg(0, self.counter)?;
 
         unsafe {
             self.seed_kernel.enq()?;
-            self.kernel.enq()?;
+            if self.index_parallel {
+                self.parent_kernel.enq()?;
+                self.index_kernel.enq()?;
+            } else {
+                self.kernel.enq()?;
+            }
         }
 
         // Update counter for next batch
@@ -310,10 +361,16 @@ impl VanityPipeline {
 
         self.seed_kernel.set_arg(1, counter_start)?;
         self.kernel.set_arg(1, counter_start)?;
+        self.index_kernel.set_arg(0, counter_start)?;
 
         unsafe {
             self.seed_kernel.enq()?;
-            self.kernel.enq()?;
+            if self.index_parallel {
+                self.parent_kernel.enq()?;
+                self.index_kernel.enq()?;
+            } else {
+                self.kernel.enq()?;
+            }
         }
 
         self.addresses_checked += (self.cfg.batch_size as u64) * (self.num_indices as u64);

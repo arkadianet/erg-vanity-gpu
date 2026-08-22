@@ -13,12 +13,68 @@ pub const ENTROPY_SIZE: usize = 32;
 
 /// BIP39 seed size written by `vanity_seed` (64 bytes per work item).
 pub const SEED_SIZE: usize = 64;
+pub const PARENT_SIZE: usize = 128;
 
 /// Maximum total size of pattern data (concatenated patterns).
 pub const MAX_PATTERN_DATA: usize = 1024;
 
 /// Maximum number of patterns.
 pub const MAX_PATTERNS: usize = 64;
+const ADDRESS_BYTES: usize = 38;
+const ADDRESS_BASE58_LEN: usize = 51;
+
+const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+fn prefix_range(prefix: &[u8]) -> ([u8; ADDRESS_BYTES], [u8; ADDRESS_BYTES]) {
+    let mut lower = [0u8; ADDRESS_BYTES];
+    for &ch in prefix {
+        let digit = BASE58_ALPHABET
+            .iter()
+            .position(|&candidate| candidate == ch)
+            .expect("patterns are validated as Base58 before upload") as u16;
+        let mut carry = digit;
+        for byte in lower.iter_mut().rev() {
+            let value = (*byte as u16) * 58 + carry;
+            *byte = value as u8;
+            carry = value >> 8;
+        }
+        debug_assert_eq!(carry, 0);
+    }
+
+    let mut upper = lower;
+    for byte in upper.iter_mut().rev() {
+        let (value, overflow) = byte.overflowing_add(1);
+        *byte = value;
+        if !overflow {
+            break;
+        }
+    }
+
+    let remaining = ADDRESS_BASE58_LEN - prefix.len();
+    for _ in 0..remaining {
+        for value in [&mut lower, &mut upper] {
+            let mut carry = 0u16;
+            for byte in value.iter_mut().rev() {
+                let product = (*byte as u16) * 58 + carry;
+                *byte = product as u8;
+                carry = product >> 8;
+            }
+            debug_assert_eq!(carry, 0);
+        }
+    }
+
+    // Address bytes always start with the mainnet P2PK type byte (0x01).
+    // Clamp broad prefixes such as "9" to the representable address domain.
+    if lower[0] == 0 {
+        lower = [0; ADDRESS_BYTES];
+        lower[0] = 1;
+    }
+    if upper[0] >= 2 {
+        upper = [0; ADDRESS_BYTES];
+        upper[0] = 2;
+    }
+    (lower, upper)
+}
 
 /// A hit record from the GPU.
 ///
@@ -62,12 +118,18 @@ pub struct GpuBuffers {
     pub pattern_offsets: Buffer<u32>,
     /// Length of each pattern
     pub pattern_lens: Buffer<u32>,
+    /// Inclusive lower bounds for exact-case Base58 prefix ranges.
+    pub pattern_lower: Buffer<u8>,
+    /// Exclusive upper bounds for exact-case Base58 prefix ranges.
+    pub pattern_upper: Buffer<u8>,
     /// Hit buffer for matches (write-only from GPU)
     pub hits: Buffer<GpuHit>,
     /// Atomic hit counter (i32 to match kernel's `volatile int*`)
     pub hit_count: Buffer<i32>,
     /// PBKDF2 seeds (64 bytes per work item), written by `vanity_seed`
     pub seeds: Buffer<u8>,
+    /// External-chain key, chain code, and compressed public key per seed.
+    pub parents: Buffer<u8>,
     /// Batch size this was allocated for
     batch_size: usize,
 }
@@ -105,6 +167,17 @@ impl GpuBuffers {
             .len(MAX_PATTERNS)
             .build()?;
 
+        let pattern_lower = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().read_only())
+            .len(MAX_PATTERNS * ADDRESS_BYTES)
+            .build()?;
+        let pattern_upper = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().read_only())
+            .len(MAX_PATTERNS * ADDRESS_BYTES)
+            .build()?;
+
         // Hit buffer
         let hits = Buffer::<GpuHit>::builder()
             .queue(queue.clone())
@@ -124,15 +197,23 @@ impl GpuBuffers {
             .flags(MemFlags::new().read_write())
             .len(batch_size * SEED_SIZE)
             .build()?;
+        let parents = Buffer::<u8>::builder()
+            .queue(queue.clone())
+            .flags(MemFlags::new().read_write())
+            .len(batch_size * PARENT_SIZE)
+            .build()?;
 
         Ok(Self {
             salt,
             patterns,
             pattern_offsets,
             pattern_lens,
+            pattern_lower,
+            pattern_upper,
             hits,
             hit_count,
             seeds,
+            parents,
             batch_size,
         })
     }
@@ -164,6 +245,8 @@ impl GpuBuffers {
         let mut data = Vec::with_capacity(MAX_PATTERN_DATA);
         let mut offsets = Vec::with_capacity(patterns.len());
         let mut lens = Vec::with_capacity(patterns.len());
+        let mut lowers = vec![[0u8; ADDRESS_BYTES]; MAX_PATTERNS];
+        let mut uppers = vec![[0u8; ADDRESS_BYTES]; MAX_PATTERNS];
 
         for pattern in patterns {
             let offset = data.len();
@@ -172,6 +255,9 @@ impl GpuBuffers {
             offsets.push(offset as u32);
             lens.push(len as u32);
             data.extend_from_slice(pattern.as_bytes());
+            let (lower, upper) = prefix_range(pattern.as_bytes());
+            lowers[offsets.len() - 1] = lower;
+            uppers[offsets.len() - 1] = upper;
         }
 
         // Validate total size
@@ -196,6 +282,11 @@ impl GpuBuffers {
         let mut len_data = vec![0u32; MAX_PATTERNS];
         len_data[..lens.len()].copy_from_slice(&lens);
         self.pattern_lens.write(&len_data).enq()?;
+
+        let lower_data: Vec<u8> = lowers.into_iter().flatten().collect();
+        let upper_data: Vec<u8> = uppers.into_iter().flatten().collect();
+        self.pattern_lower.write(&lower_data).enq()?;
+        self.pattern_upper.write(&upper_data).enq()?;
 
         Ok(patterns.len())
     }
@@ -232,6 +323,21 @@ impl GpuBuffers {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prefix_range_is_adjacent_and_ordered() {
+        let (lower, upper) = prefix_range(b"9e");
+        assert!(lower < upper);
+        assert_eq!(lower[0..2], [1, 1]);
+    }
+
+    #[test]
+    fn prefix_range_uses_fixed_address_width() {
+        let (lower, upper) = prefix_range(b"9");
+        assert_eq!(lower[0], 1);
+        assert_eq!(upper[0], 1);
+        assert!(lower < upper);
+    }
 
     #[test]
     fn test_gpu_hit_size() {

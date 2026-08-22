@@ -1,20 +1,21 @@
-//! Host-side 8-bit fixed-base comb table for k·G.
+//! Host-side 10-bit fixed-base comb table for k·G.
 //!
-//! Layout: 32 windows × 256 entries × 16 little-endian u32 limbs (affine X||Y).
-//! Window 0 is the MSB of `sc_to_bytes`. Entry 0 is unused (infinity).
+//! Layout: 26 windows × 1024 entries × 16 little-endian u32 limbs (affine X||Y).
+//! Window 0 holds the top 6 bits of `sc_to_bytes`; windows 1..25 hold 10 bits
+//! each. Entry 0 is unused (infinity).
 //!
 //! Regenerate with: cargo run -p erg-vanity-gpu --bin gen_g_table
 
 use crate::context::GpuError;
 use ocl::{flags::MemFlags, Buffer, Queue};
 
-pub const COMB_WINDOWS: usize = 32;
-pub const COMB_ENTRIES: usize = 256;
+pub const COMB_WINDOWS: usize = 26;
+pub const COMB_ENTRIES: usize = 1024;
 pub const COMB_XY_LIMBS: usize = 16;
 pub const COMB_TABLE_U32S: usize = COMB_WINDOWS * COMB_ENTRIES * COMB_XY_LIMBS;
 pub const COMB_TABLE_BYTES: &[u8] = include_bytes!("../kernels/comb_table.bin");
 
-/// Uploaded `__global` comb table (512 KiB).
+/// Uploaded `__global` comb table (~1.7 MB).
 pub struct CombTableBuffer {
     pub table: Buffer<u32>,
 }
@@ -60,7 +61,7 @@ mod tests {
     #[test]
     fn comb_table_lsb_one_is_g() {
         let words = load_comb_table();
-        let off = (31 * COMB_ENTRIES + 1) * COMB_XY_LIMBS;
+        let off = (25 * COMB_ENTRIES + 1) * COMB_XY_LIMBS;
         assert_eq!(&words[off..off + 8], &EXPECTED_GX);
         assert_eq!(&words[off + 8..off + 16], &EXPECTED_GY);
     }
