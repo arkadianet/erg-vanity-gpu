@@ -64,7 +64,26 @@ Limits that matter when changing kernels: 1024 hits/batch, 64 patterns, 1024 byt
 
 `--bench` times isolated PBKDF2, BIP32, secp256k1, and Base58 kernels (event timestamps). PBKDF2 is per seed; the others scale with `--index`.
 
-`--bench` is not live search. On RTX 3080 Ti (19 Aug 2026, `--index 1`) isolated PBKDF2 is ~1600 ns/seed (~56–64% of isolated time), BIP32 ~628 ns, secp ~285 ns. Live search is ~600k seeds/s (measured ~590–610k after comb + batched W; earlier baselines ~330k then ~368k then ~455k).
+`--bench` is not live search, and since batched inversion landed the gap is
+material rather than cosmetic. The bench kernel converts one point at a time;
+`vanity_search` shares one modular inversion across 16 addresses, so its
+per-address secp cost is roughly half what `--bench` reports.
+
+RTX 3090, 23 Aug 2026, isolated (`--bench --bench-num-indices 100`):
+
+| Kernel | Cost | Share |
+|---|---|---|
+| secp256k1 | 42 ns/addr | 68.5% |
+| PBKDF2 | 1615 ns/seed | 26.1% |
+| BIP32 | 2 ns/addr | 3.3% |
+| Base58 | 1 ns/addr | 2.1% |
+
+Live on the same card fits `1763 ns + 24.6 ns × index` per seed, i.e. 561,737
+addr/s at `--index 1` and 35,537,863 at `--index 500`. Compare kernels with
+`--bench`; predict throughput with a live run.
+
+Where the time goes, and what has already been tried, is in the README
+Performance section and in the register-cap note below.
 
 ## Environment
 

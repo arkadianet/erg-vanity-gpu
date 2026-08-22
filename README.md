@@ -195,32 +195,76 @@ Progress goes to stderr: `Checked: N (rate addr/s) [found/target]`.
 
 ## Performance
 
-Measured **RTX 3080 Ti**, 19 Aug 2026, default `--index 1`, after comb *k*·G and batched SHA-512 W:
+Measured **RTX 3090**, 23 Aug 2026, 60s runs at `--batch-size 262144`, after
+batched modular inversion:
 
-| Mode | Result |
-|------|--------|
-| Live search | ~600k seeds/s (measured ~590–610k; earlier ~330k → ~368k → ~455k) |
-| Isolated PBKDF2 | ~1600 ns/seed (~56–64% of isolated time) |
-| Isolated BIP32 | ~628 ns/addr |
-| Isolated secp256k1 | ~285 ns/addr |
+| `--index` | addr/s | seeds/s |
+|---|---:|---:|
+| 1 | 561,737 | 561,737 |
+| 20 | 8,911,166 | 445,558 |
+| 100 | 23,674,745 | 236,747 |
+| 250 | 31,570,498 | 126,282 |
+| 500 | 35,537,863 | 71,076 |
 
-`--bench` times isolated kernels (OpenCL event timestamps). Isolated PBKDF2 share is **not** ~85% and **not** ~172 µs/seed — those figures are stale.
+Those points fit one line to within a percent:
+
+```text
+time per seed = 1763 ns + 24.6 ns × index
+```
+
+The fixed 1763 ns is PBKDF2 (2048 HMAC-SHA512 iterations, unavoidable per seed);
+the 24.6 ns is everything charged per address. That is the whole shape of the
+program: at `--index 1` PBKDF2 is 99% of the work, at `--index 500` it is 12.5%.
+
+`--bench` times **isolated** kernels with OpenCL event timestamps, and its
+secp256k1 figure (~42 ns/addr) no longer matches the live path, which shares one
+modular inversion across a batch of 16 addresses. Live marginal cost is the
+24.6 ns above. Use `--bench` to compare kernels against each other, not to
+predict live throughput.
 
 ```bash
 ./target/release/erg-vanity --bench
 ./target/release/erg-vanity --bench --bench-validate
 ```
 
-Expected wait for a **single** prefix on a 3080 Ti at ~600k seeds/s (`5 × 58^(n−2)` combinations, 1.2× `--estimate` factor). Pre-search GUI/CLI times are a hardware guess; live ETA uses the measured addr/s.
+Expected wait for a **single** prefix at `--index 1` (`5 × 58^(n−2)`
+combinations, 1.2× `--estimate` factor). Pre-search GUI/CLI times are a hardware
+guess; live ETA uses the measured addr/s.
 
 | Pattern | Combinations | Expected time |
 |---------|--------------|---------------|
 | 4 chars (`9err`) | ~17K | < 1 second |
 | 5 chars (`9ergo`) | ~976K | ~2 seconds |
-| 6 chars (`9ergoo`) | ~57M | ~1.9 minutes |
-| 7 chars | ~3.3B | ~1.8 hours |
+| 6 chars (`9ergoo`) | ~57M | ~2 minutes |
+| 7 chars | ~3.3B | ~1.9 hours |
 
-Rates vary by GPU, driver, and pattern. Raising BIP44 slots multiplies **addr/s**, not seeds/s. RTX 4090 is higher; we have not published a current measurement.
+Rates vary by GPU, driver, and pattern.
+
+### Choosing `--index`
+
+`--index N` derives N addresses per seed, so PBKDF2 is paid once for N chances
+instead of one. That is why addr/s climbs so steeply — but the returns flatten,
+and the address you find no longer sits at slot 0:
+
+| `--index` | addr/s | vs `--index 1` | Wallet visibility |
+|---|---:|---:|---|
+| 1 | 561,737 | 1.0× | always shown |
+| 20 | 8,911,166 | 15.9× | within the usual BIP44 gap limit |
+| 100 | 23,674,745 | 42.1× | needs manual scanning |
+| 500 | 35,537,863 | 63.3× | needs manual scanning |
+
+**The default is 1, and raising it is a real tradeoff, not free speed.** Most
+wallets scan forward only about 20 unused addresses (the BIP44 gap limit) before
+stopping, so a hit at slot 431 will not appear on restore unless you tell the
+wallet to look that far. `--index 20` is the largest value that stays inside
+that convention, and it already buys ~16×.
+
+Past 500 the curve is nearly flat: the model puts `--index 1000` at ~37.9M
+addr/s (+6.7%) and the limit as index → ∞ at ~40.6M (+14.3%), because PBKDF2 is
+all that is left to amortize. The cap stays at 500.
+
+Every hit prints its full derivation path, so you always know which slot to look
+in.
 
 ## How it works
 
