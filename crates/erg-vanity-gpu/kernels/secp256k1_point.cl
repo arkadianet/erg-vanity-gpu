@@ -450,8 +450,21 @@ inline int pt_to_affine(__private uint* x_out, __private uint* y_out, __private 
     return 0;
 }
 
+// Compressed public key (33 bytes) from affine coordinates.
+// Format: 0x02 if y is even, 0x03 if y is odd, followed by 32-byte x.
+inline void affine_to_compressed_pubkey(
+    __private uchar* pubkey,
+    __private const uint* x,
+    __private const uint* y
+) {
+    // Check if y is odd (look at least significant bit of least significant limb)
+    pubkey[0] = (y[0] & 1u) ? (uchar)0x03 : (uchar)0x02;
+
+    // Write x in big-endian
+    fe_to_bytes(pubkey + 1, x);
+}
+
 // Get compressed public key (33 bytes) from point
-// Format: 0x02 if y is even, 0x03 if y is odd, followed by 32-byte x
 // Returns 0 on success, 1 if point is at infinity
 inline int pt_to_compressed_pubkey(__private uchar* pubkey, __private const uint* p) {
     uint x[8], y[8];
@@ -459,13 +472,76 @@ inline int pt_to_compressed_pubkey(__private uchar* pubkey, __private const uint
         return 1;
     }
 
-    // Check if y is odd (look at least significant bit of least significant limb)
-    pubkey[0] = (y[0] & 1u) ? (uchar)0x03 : (uchar)0x02;
-
-    // Write x in big-endian
-    fe_to_bytes(pubkey + 1, x);
-
+    affine_to_compressed_pubkey(pubkey, x, y);
     return 0;
+}
+
+// Montgomery batch inversion: convert n Jacobian points to affine using ONE
+// modular inversion instead of one per point.
+//
+// fe_inv is ~255 squarings + 15 multiplies, which costs about as much as the
+// whole 10-bit comb ladder that produced the point. Batching n points costs
+// 1 inversion + 3(n-1) multiplies, so the per-point inversion share falls
+// as 1/n.
+//
+// pts:   n points, 24 uints each (X, Y, Z in Jacobian form)
+// ok:    per-point validity, updated in place. Points at infinity are cleared
+//        here so they never enter the product chain - a zero Z would collapse
+//        it and silently corrupt every other point in the batch.
+// xs/ys: n affine coordinate pairs, 8 uints each. Only entries whose ok[] is
+//        still set are written.
+//
+// n must not exceed PT_BATCH_MAX.
+#define PT_BATCH_MAX 16u
+
+inline void pt_batch_to_affine(
+    __private uint* xs,
+    __private uint* ys,
+    __private uchar* ok,
+    __private const uint* pts,
+    uint n
+) {
+    uint prefix[PT_BATCH_MAX * 8u];
+    uint acc[8], t[8];
+    uint valid = 0u;
+
+    // Forward pass: prefix[i] = product of every valid Z strictly before i.
+    fe_one(acc);
+    for (uint i = 0u; i < n; i++) {
+        if (!ok[i]) continue;
+        __private const uint* pz = pts + i * 24u + 16u;
+        if (fe_is_zero(pz)) {
+            ok[i] = 0u;
+            continue;
+        }
+        for (uint j = 0u; j < 8u; j++) prefix[i * 8u + j] = acc[j];
+        fe_mul(t, acc, pz);
+        fe_copy(acc, t);
+        valid++;
+    }
+    if (valid == 0u) return;
+
+    // acc is now the product of every valid Z.
+    uint inv[8];
+    fe_inv(inv, acc);
+
+    // Backward pass: peel one Z off the running inverse per point.
+    for (int i = (int)n - 1; i >= 0; i--) {
+        if (!ok[i]) continue;
+        __private const uint* px = pts + (uint)i * 24u;
+        __private const uint* py = px + 8u;
+        __private const uint* pz = px + 16u;
+
+        uint zinv[8], zinv2[8], zinv3[8];
+        fe_mul(zinv, inv, prefix + (uint)i * 8u);  // 1 / Z_i
+        fe_mul(t, inv, pz);                        // drop Z_i from the chain
+        fe_copy(inv, t);
+
+        fe_sqr(zinv2, zinv);
+        fe_mul(zinv3, zinv2, zinv);
+        fe_mul(xs + (uint)i * 8u, px, zinv2);
+        fe_mul(ys + (uint)i * 8u, py, zinv3);
+    }
 }
 
 // Private key (32 bytes) → compressed pubkey (33 bytes).

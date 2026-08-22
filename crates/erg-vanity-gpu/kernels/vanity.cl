@@ -153,69 +153,85 @@ __kernel void vanity_search(
     HmacSha512Ctx address_hmac;
     hmac_sha512_init(&address_hmac, external_chain_code, 32u);
     uchar child_chain_code[32];  // scratch: keeps external_chain_code intact
-    for (uint addr_idx = 0; addr_idx < num_indices; addr_idx++) {
-        // Derive key for this address index: m/44'/429'/0'/0/<addr_idx>
-        uchar private_key[32];
-        if (bip32_derive_normal_from_pub_ctx(
-                external_key, external_pub, addr_idx, private_key, child_chain_code,
-                &address_hmac
-            ) != 0) {
-            continue;  // Skip invalid (astronomically rare)
-        }
+    // Address indices run in batches so that their Jacobian -> affine
+    // conversions share a single modular inversion (see pt_batch_to_affine).
+    // Ordering is unchanged: batches ascend, and so does j inside a batch.
+    for (uint base = 0; base < num_indices; base += PT_BATCH_MAX) {
+        uint n = num_indices - base;
+        if (n > PT_BATCH_MAX) n = PT_BATCH_MAX;
 
-        // Private key → public key
-        uint key_limbs[8];
-        sc_from_bytes(key_limbs, private_key);
+        uint pts[PT_BATCH_MAX * 24u];
+        uchar ok[PT_BATCH_MAX];
 
-        uint point[24];
-        pt_mul_generator_comb(point, key_limbs, comb);
-
-        uchar pubkey[33];
-        if (pt_to_compressed_pubkey(pubkey, point) != 0) {
-            continue;  // Point at infinity (shouldn't happen)
-        }
-
-        // Build Ergo address
-        uchar addr_bytes[38];
-        build_ergo_address(pubkey, addr_bytes);
-
-        // Check each pattern (inner loop)
-        for (uint p = 0; p < num_patterns; p++) {
-            uint offset = pattern_offsets[p];
-            int len = (int)pattern_lens[p];
-
-            int match;
-            if (ignore_case) {
-                match = base58_check_prefix_global_icase(addr_bytes, &patterns[offset], len);
-            } else {
-                match = base58_check_prefix_range(
-                    addr_bytes,
-                    &pattern_lower[p * 38u],
-                    &pattern_upper[p * 38u]
-                );
+        for (uint j = 0; j < n; j++) {
+            // Derive key for this address index: m/44'/429'/0'/0/<base + j>
+            uchar private_key[32];
+            if (bip32_derive_normal_from_pub_ctx(
+                    external_key, external_pub, base + j, private_key, child_chain_code,
+                    &address_hmac
+                ) != 0) {
+                ok[j] = 0u;  // Skip invalid (astronomically rare)
+                continue;
             }
 
-            if (match) {
-                // Match found! Recompute entropy (cheap vs PBKDF2) for CPU verify.
-                uchar entropy[32];
-                generate_entropy(gid, counter_start, salt, entropy);
-                uint hit_idx = (uint)atomic_inc(hit_count);
-                if (hit_idx < max_hits) {
-                    for (int w = 0; w < 8; w++) {
-                        int o = w * 4;
-                        uint x =
-                            ((uint)entropy[o + 0]) |
-                            ((uint)entropy[o + 1] << 8) |
-                            ((uint)entropy[o + 2] << 16) |
-                            ((uint)entropy[o + 3] << 24);
-                        hits[hit_idx].entropy_words[w] = x;
-                    }
-                    hits[hit_idx].work_item_id = gid;
-                    hits[hit_idx].address_index = addr_idx;
-                    hits[hit_idx].pattern_index = p;
+            // Private key → point, left in Jacobian form for the batch inverse
+            uint key_limbs[8];
+            sc_from_bytes(key_limbs, private_key);
+            pt_mul_generator_comb(pts + j * 24u, key_limbs, comb);
+            ok[j] = 1u;
+        }
+
+        uint xs[PT_BATCH_MAX * 8u], ys[PT_BATCH_MAX * 8u];
+        pt_batch_to_affine(xs, ys, ok, pts, n);
+
+        for (uint j = 0; j < n; j++) {
+            if (!ok[j]) continue;  // Point at infinity (shouldn't happen)
+
+            uchar pubkey[33];
+            affine_to_compressed_pubkey(pubkey, xs + j * 8u, ys + j * 8u);
+
+            // Build Ergo address
+            uchar addr_bytes[38];
+            build_ergo_address(pubkey, addr_bytes);
+
+            // Check each pattern (inner loop)
+            for (uint p = 0; p < num_patterns; p++) {
+                uint offset = pattern_offsets[p];
+                int len = (int)pattern_lens[p];
+
+                int match;
+                if (ignore_case) {
+                    match = base58_check_prefix_global_icase(addr_bytes, &patterns[offset], len);
+                } else {
+                    match = base58_check_prefix_range(
+                        addr_bytes,
+                        &pattern_lower[p * 38u],
+                        &pattern_upper[p * 38u]
+                    );
                 }
-                // First match wins - exit both loops
-                return;
+
+                if (match) {
+                    // Match found! Recompute entropy (cheap vs PBKDF2) for CPU verify.
+                    uchar entropy[32];
+                    generate_entropy(gid, counter_start, salt, entropy);
+                    uint hit_idx = (uint)atomic_inc(hit_count);
+                    if (hit_idx < max_hits) {
+                        for (int w = 0; w < 8; w++) {
+                            int o = w * 4;
+                            uint x =
+                                ((uint)entropy[o + 0]) |
+                                ((uint)entropy[o + 1] << 8) |
+                                ((uint)entropy[o + 2] << 16) |
+                                ((uint)entropy[o + 3] << 24);
+                            hits[hit_idx].entropy_words[w] = x;
+                        }
+                        hits[hit_idx].work_item_id = gid;
+                        hits[hit_idx].address_index = base + j;
+                        hits[hit_idx].pattern_index = p;
+                    }
+                    // First match wins - exit all loops
+                    return;
+                }
             }
         }
     }

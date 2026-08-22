@@ -46,6 +46,69 @@ inline int comb_eq_pt_mul(
     return 1;
 }
 
+// pt_batch_to_affine must agree with per-point pt_to_affine.
+// Returns a mask: bit 0 = all-valid batch mismatched, bit 1 = a batch holding
+// a point at infinity mismatched, or failed to clear that point's ok flag.
+//
+// The infinity case is the one end-to-end tests never reach: a zero Z entering
+// the shared product chain would zero the whole batch's inverse, silently
+// corrupting every other address rather than just the bad one.
+inline uint batch_affine_failures(__private const uint* g) {
+    uint pts[PT_BATCH_MAX * 24u];
+    uint refx[PT_BATCH_MAX * 8u], refy[PT_BATCH_MAX * 8u];
+    uint xs[PT_BATCH_MAX * 8u], ys[PT_BATCH_MAX * 8u];
+    uchar ok[PT_BATCH_MAX];
+    uint fail = 0u;
+
+    // pts[i] = (i+1)·G, with a per-point affine reference for each
+    for (uint i = 0u; i < PT_BATCH_MAX; i++) {
+        uchar kb[32];
+        for (int j = 0; j < 32; j++) kb[j] = (uchar)0;
+        kb[31] = (uchar)(i + 1u);
+        uint k[8];
+        sc_from_bytes(k, kb);
+        pt_mul(pts + i * 24u, k, g);
+        if (pt_to_affine(refx + i * 8u, refy + i * 8u, pts + i * 24u) != 0) {
+            return 3u;
+        }
+        ok[i] = 1u;
+    }
+
+    pt_batch_to_affine(xs, ys, ok, pts, PT_BATCH_MAX);
+    for (uint i = 0u; i < PT_BATCH_MAX; i++) {
+        if (!ok[i]) {
+            fail |= 1u;
+            continue;
+        }
+        for (uint j = 0u; j < 8u; j++) {
+            if (xs[i * 8u + j] != refx[i * 8u + j] || ys[i * 8u + j] != refy[i * 8u + j]) {
+                fail |= 1u;
+            }
+        }
+    }
+
+    // Same batch, one point forced to infinity.
+    pt_infinity(pts + 3u * 24u);
+    for (uint i = 0u; i < PT_BATCH_MAX; i++) ok[i] = 1u;
+    pt_batch_to_affine(xs, ys, ok, pts, PT_BATCH_MAX);
+    if (ok[3]) {
+        fail |= 2u;
+    }
+    for (uint i = 0u; i < PT_BATCH_MAX; i++) {
+        if (i == 3u) continue;
+        if (!ok[i]) {
+            fail |= 2u;
+            continue;
+        }
+        for (uint j = 0u; j < 8u; j++) {
+            if (xs[i * 8u + j] != refx[i * 8u + j] || ys[i * 8u + j] != refy[i * 8u + j]) {
+                fail |= 2u;
+            }
+        }
+    }
+    return fail;
+}
+
 // Comprehensive self-test kernel for point operations
 // Returns 0 if all tests pass, non-zero otherwise (bit mask of failed tests)
 __kernel void pt_self_test(__global uint* result, __global const uint* comb) {
@@ -328,6 +391,15 @@ __kernel void pt_self_test(__global uint* result, __global const uint* comb) {
     sc_from_bytes(k_span_sc, k_span);
     if (!comb_eq_pt_mul(k_span_sc, comb, g)) {
         failures |= (1u << 24);
+    }
+
+    // Montgomery batch inversion vs per-point conversion
+    uint batch_fail = batch_affine_failures(g);
+    if (batch_fail & 1u) {
+        failures |= (1u << 25);
+    }
+    if (batch_fail & 2u) {
+        failures |= (1u << 26);
     }
 
     *result = failures;
