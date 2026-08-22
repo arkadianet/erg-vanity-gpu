@@ -22,7 +22,7 @@ cargo build --release -p erg-vanity-cli
 
 Run `erg-vanity` / `erg-vanity.exe` with no arguments for the GUI. Use `--no-gui` to stay in the terminal.
 
-- Prefix patterns must start `9e`–`9i` (Ergo mainnet P2PK)
+- Prefix patterns must start `9e`–`9i` (Ergo mainnet P2PK), and the third character is constrained too — [some valid-looking prefixes are impossible](#why-some-valid-looking-prefixes-are-impossible)
 - Prefix uses the GPU when OpenCL is available; **suffix and contains are CPU-only**
 - Devices: `auto` / `0` / `all` / `cpu`
 - BIP44 slots default **1**. More slots = more addr/s on the same seeds
@@ -30,7 +30,7 @@ Run `erg-vanity` / `erg-vanity.exe` with no arguments for the GUI. Use `--no-gui
 
 ![erg-vanity GUI during a prefix search](docs/images/gui-search.png)
 
-*Live ~14.5M addr/s with BIP44 slots set to 100 on an RTX 3080 Ti. That is not the `--index 1` seed rate (~600k seeds/s on the same card).*
+*Screenshot from v0.2.0: ~14.5M addr/s with BIP44 slots set to 100 on an RTX 3080 Ti. That is not the `--index 1` seed rate (~600k seeds/s on the same card). v0.3.0 is considerably faster at high slot counts — see [Performance](#performance).*
 
 ## Features
 
@@ -40,6 +40,7 @@ Run `erg-vanity` / `erg-vanity.exe` with no arguments for the GUI. Use `--no-gui
 - `--estimate` before a long search
 - Multi-GPU (`--devices 0,1` or `all`)
 - Multiple patterns (up to 64; longest prefix wins)
+- Unreachable prefixes rejected up front instead of searched forever
 - BIP44 path `m/44'/429'/0'/0/{address_index}` (default `--index 1` derives only `/0`)
 
 ## Install
