@@ -16,8 +16,25 @@ const EXPECTED_GY: [u32; 8] = [
     0xFB10D4B8, 0x9C47D08F, 0xA6855419, 0xFD17B448, 0x0E1108A8, 0x5DA4FBFC, 0x26A3C465, 0x483ADA77,
 ];
 
-const COMB_WINDOWS: usize = 26;
-const COMB_ENTRIES: usize = 1024;
+/// Comb window width in bits. Every other comb constant derives from it.
+///
+/// Wider windows mean fewer mixed adds per k·G, but the table grows as 2^bits
+/// and is read with one scattered lookup per window:
+///
+/// | bits | windows | entries | table | max adds |
+/// |---|---|---|---|---|
+/// | 8 | 32 | 256 | 512 KB | 31 |
+/// | 9 | 29 | 512 | 950 KB | 28 |
+/// | 10 | 26 | 1024 | 1.7 MB | 25 |
+/// | 11 | 24 | 2048 | 3.1 MB | 23 |
+///
+/// Changing this requires regenerating `kernels/comb_table.bin` and updating
+/// the matching constants in `comb.rs` and `secp256k1_point.cl`.
+const COMB_BITS: usize = 11;
+const COMB_WINDOWS: usize = 256_usize.div_ceil(COMB_BITS);
+const COMB_ENTRIES: usize = 1 << COMB_BITS;
+/// Bits taken by window 0. Windows 1.. take `COMB_BITS` each.
+const COMB_TOP_BITS: usize = 256 - (COMB_WINDOWS - 1) * COMB_BITS;
 const COMB_XY_LIMBS: usize = 16;
 const COMB_BYTES: usize = COMB_WINDOWS * COMB_ENTRIES * COMB_XY_LIMBS * 4;
 
@@ -125,6 +142,25 @@ fn load_affine(buf: &[u8], window: usize, b: usize) -> Point {
     Point::from_affine(x, y)
 }
 
+/// Rebuild k·G from the table exactly the way `pt_mul_generator_comb` does, so
+/// the generator is checked against the consumer's indexing and not just its
+/// own.
+fn reconstruct(buf: &[u8], k_bytes: &[u8; 32]) -> Point {
+    // Window 0 takes the top COMB_TOP_BITS bits of the MSB-first scalar.
+    let first = (k_bytes[0] >> (8 - COMB_TOP_BITS)) as usize;
+    let mut acc = load_affine(buf, 0, first);
+    let mut bit = COMB_TOP_BITS;
+    for window in 1..COMB_WINDOWS {
+        let mut digit = 0usize;
+        for _ in 0..COMB_BITS {
+            digit = (digit << 1) | ((k_bytes[bit / 8] >> (7 - bit % 8)) & 1) as usize;
+            bit += 1;
+        }
+        acc = acc.add(&load_affine(buf, window, digit));
+    }
+    acc
+}
+
 fn build_comb_table() -> Vec<u8> {
     let mut buf = vec![0u8; COMB_BYTES];
     let mut base = Point::generator();
@@ -143,28 +179,30 @@ fn build_comb_table() -> Vec<u8> {
             );
         }
         if window > 0 {
-            for _ in 0..10 {
+            for _ in 0..COMB_BITS {
                 base = base.double();
             }
         }
     }
 
-    let g = load_affine(&buf, 25, 1);
-    let (gx, gy) = g.to_affine().expect("T[25][1] is G");
+    // The last window holds the low bits, so its entry 1 is G itself.
+    let last = COMB_WINDOWS - 1;
+    let g = load_affine(&buf, last, 1);
+    let (gx, gy) = g.to_affine().expect("T[last][1] is G");
     assert_eq!(
         bytes_to_limbs(&gx.to_bytes()),
         EXPECTED_GX,
-        "comb T[25][1] X"
+        "comb T[last][1] X"
     );
     assert_eq!(
         bytes_to_limbs(&gy.to_bytes()),
         EXPECTED_GY,
-        "comb T[25][1] Y"
+        "comb T[last][1] Y"
     );
-    eprintln!("comb T[25][1] matches G");
+    eprintln!("comb T[{last}][1] matches G");
 
-    let two = load_affine(&buf, 25, 2);
-    assert_eq!(two, Point::generator().double(), "comb T[25][2] is 2G");
+    let two = load_affine(&buf, last, 2);
+    assert_eq!(two, Point::generator().double(), "comb T[last][2] is 2G");
 
     for k_bytes in [
         [0u8; 32],
@@ -187,22 +225,11 @@ fn build_comb_table() -> Vec<u8> {
         },
     ] {
         let scalar = Scalar::from_bytes(&k_bytes).expect("test scalar in range");
-        let expected = Point::mul_generator(&scalar);
-        let mut acc = Point::INFINITY;
-        // Window 0 = scalar bits 255..250 (top 6 bits).
-        let first = (k_bytes[0] >> 2) as usize;
-        acc = acc.add(&load_affine(&buf, 0, first));
-        // Windows 1..25 = 10 bits each, MSB-first.
-        let mut bit = 6usize;
-        for window in 1..COMB_WINDOWS {
-            let mut digit = 0usize;
-            for _ in 0..10 {
-                digit = (digit << 1) | ((k_bytes[bit / 8] >> (7 - bit % 8)) & 1) as usize;
-                bit += 1;
-            }
-            acc = acc.add(&load_affine(&buf, window, digit));
-        }
-        assert_eq!(acc, expected, "comb reconstruct mismatch");
+        assert_eq!(
+            reconstruct(&buf, &k_bytes),
+            Point::mul_generator(&scalar),
+            "comb reconstruct mismatch"
+        );
     }
     // Random scalars: full-width coverage of every window/digit path.
     for _ in 0..64 {
@@ -211,20 +238,11 @@ fn build_comb_table() -> Vec<u8> {
             Some(s) => s,
             None => continue, // k >= n, skip
         };
-        let expected = Point::mul_generator(&scalar);
-        let mut acc = Point::INFINITY;
-        let first = (k_bytes[0] >> 2) as usize;
-        acc = acc.add(&load_affine(&buf, 0, first));
-        let mut bit = 6usize;
-        for window in 1..COMB_WINDOWS {
-            let mut digit = 0usize;
-            for _ in 0..10 {
-                digit = (digit << 1) | ((k_bytes[bit / 8] >> (7 - bit % 8)) & 1) as usize;
-                bit += 1;
-            }
-            acc = acc.add(&load_affine(&buf, window, digit));
-        }
-        assert_eq!(acc, expected, "comb reconstruct mismatch (random)");
+        assert_eq!(
+            reconstruct(&buf, &k_bytes),
+            Point::mul_generator(&scalar),
+            "comb reconstruct mismatch (random)"
+        );
     }
     eprintln!("comb reconstruct checks passed");
 
