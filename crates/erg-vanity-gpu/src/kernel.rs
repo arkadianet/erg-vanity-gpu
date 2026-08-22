@@ -43,6 +43,36 @@ pub mod sources {
     pub(crate) const BASE58_TEST: &str = include_str!("../kernels/base58_test.cl");
 }
 
+/// Register cap applied to NVIDIA builds, or `None` to let the compiler choose.
+///
+/// Chosen by measurement on sm_86; see [`nv_maxrregcount`].
+const DEFAULT_NV_MAXRREGCOUNT: Option<u32> = None;
+
+/// NVIDIA register cap for the whole program, or `None` for the default.
+///
+/// `vanity_search` naturally lands at 234 registers on sm_86, which limits it
+/// to 8 of 48 warps per SM. The comb table is ~1.7 MB and takes up to 25
+/// scattered lookups per k·G, so there is real L2 latency to hide and few
+/// resident warps to hide it with. Capping registers trades some spill traffic
+/// for more warps.
+///
+/// The cap applies to every kernel in the program, including `vanity_seed`,
+/// so a value that helps the secp256k1-bound high-index path can hurt the
+/// PBKDF2-bound `--index 1` path. It is therefore set from measurements of
+/// both regimes rather than from `vanity_search` alone.
+///
+/// Override with `ERG_CL_MAXREG=<n>`; `0` disables the cap entirely.
+fn nv_maxrregcount() -> Option<u32> {
+    match std::env::var("ERG_CL_MAXREG") {
+        Ok(v) => match v.trim().parse::<u32>() {
+            Ok(0) => None,
+            Ok(n) => Some(n),
+            Err(_) => DEFAULT_NV_MAXRREGCOUNT,
+        },
+        Err(_) => DEFAULT_NV_MAXRREGCOUNT,
+    }
+}
+
 /// Compiled OpenCL program with kernels.
 pub struct GpuProgram {
     program: Program,
@@ -53,6 +83,9 @@ impl GpuProgram {
     ///
     /// Set `ERG_CL_VERBOSE=1` to enable NVIDIA compile diagnostics (-cl-nv-verbose).
     /// This prints register usage, spills, and occupancy hints to stderr.
+    ///
+    /// Set `ERG_CL_MAXREG=<n>` to override the NVIDIA register cap, or `0` to
+    /// let the compiler choose. See [`nv_maxrregcount`].
     pub fn from_source(ctx: &GpuContext, source: &str) -> Result<Self, GpuError> {
         let is_nvidia = ctx.info().vendor.to_uppercase().contains("NVIDIA");
         let verbose = std::env::var("ERG_CL_VERBOSE")
@@ -63,6 +96,11 @@ impl GpuProgram {
         if is_nvidia && verbose {
             opts.push_str(" -cl-nv-verbose");
             eprintln!("[diag] NVIDIA verbose mode enabled");
+        }
+        if is_nvidia {
+            if let Some(maxreg) = nv_maxrregcount() {
+                opts.push_str(&format!(" -cl-nv-maxrregcount={maxreg}"));
+            }
         }
 
         // NVIDIA's OpenCL compiler can overflow the default thread stack on the

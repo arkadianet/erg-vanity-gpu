@@ -71,5 +71,24 @@ Limits that matter when changing kernels: 1024 hits/batch, 64 patterns, 1024 byt
 | Variable | Purpose |
 |----------|---------|
 | `ERG_CL_VERBOSE=1` | NVIDIA OpenCL register/spill log |
+| `ERG_CL_MAXREG=<n>` | NVIDIA register cap (`-cl-nv-maxrregcount`); `0` or unset lets the compiler choose |
 | `ERG_RUN_GPU_TESTS=1` | Run OpenCL kernel unit tests |
 | `RUST_MIN_STACK` | Set automatically via `.cargo/config.toml` |
+
+### Register cap
+
+`ERG_CL_MAXREG` exists for tuning on cards other than the one measured below;
+it is off by default because capping registers did not pay off on an RTX 3090.
+
+`vanity_search` compiles to 234 registers on sm_86, which allows only 8 of 48
+warps per SM. Forcing fewer registers does raise occupancy, but ptxas has to
+spill to get there, and the spill traffic costs about what the extra warps win:
+
+| `ERG_CL_MAXREG` | `vanity_search` | spill stores | `--index 500` |
+|---|---|---|---|
+| unset | 234 regs, 8/48 warps | 0 B | 29,295,894 addr/s |
+| 168 | 168 regs, 12/48 warps | 520 B | 29,448,366 addr/s |
+| 128 | 128 regs, 16/48 warps | 1466 B | 28,025,263 addr/s |
+
++0.5% at 168 and a loss at 128, so occupancy is not the limiter here. Both
+numbers reproduced exactly across repeat runs.
