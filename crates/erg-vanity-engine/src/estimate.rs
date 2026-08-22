@@ -79,6 +79,10 @@ pub struct PatternEstimate {
     pub attempts_needed: f64,
     pub has_invalid_chars: bool,
     pub invalid_chars: Vec<char>,
+    /// Set when every character is valid Base58 but no address can start with
+    /// this prefix, so no amount of searching would ever find one. Carries the
+    /// explanation from [`crate::search::unreachable_reason`].
+    pub unreachable_reason: Option<String>,
 }
 
 /// List OpenCL GPUs once. Callers should cache this; do not bench on every keystroke.
@@ -228,6 +232,24 @@ pub fn estimate_pattern(
             attempts_needed: f64::INFINITY,
             has_invalid_chars: true,
             invalid_chars,
+            unreachable_reason: None,
+        };
+    }
+
+    // A prefix can be entirely valid Base58 and still name an address that
+    // cannot exist. Report that as impossible rather than quoting a finite
+    // number of attempts the user would wait for forever. Case-insensitive
+    // patterns stand for several intervals at once, so they are left alone;
+    // see crate::search::prefix_is_reachable.
+    if match_type == MatchType::Prefix
+        && !ignore_case
+        && !crate::search::prefix_is_reachable(pattern)
+    {
+        return PatternEstimate {
+            attempts_needed: f64::INFINITY,
+            has_invalid_chars: false,
+            invalid_chars: Vec::new(),
+            unreachable_reason: Some(crate::search::unreachable_reason(pattern)),
         };
     }
 
@@ -261,6 +283,7 @@ pub fn estimate_pattern(
         attempts_needed: attempts * 1.2,
         has_invalid_chars: false,
         invalid_chars: Vec::new(),
+        unreachable_reason: None,
     }
 }
 
@@ -341,6 +364,28 @@ mod tests {
         let e = estimate_pattern("9eO", MatchType::Prefix, false);
         assert!(e.has_invalid_chars);
         assert!(e.attempts_needed.is_infinite());
+    }
+
+    #[test]
+    fn unreachable_prefix_is_impossible() {
+        // Every character is valid Base58, but no address can start with it.
+        let e = estimate_pattern("9eL", MatchType::Prefix, false);
+        assert!(!e.has_invalid_chars);
+        assert!(e.attempts_needed.is_infinite());
+        assert!(e.unreachable_reason.is_some());
+
+        // Reachable prefixes keep a finite estimate.
+        let ok = estimate_pattern("9ergo", MatchType::Prefix, false);
+        assert!(ok.unreachable_reason.is_none());
+        assert!(ok.attempts_needed.is_finite());
+
+        // Case-insensitive and non-prefix modes keep the coarser check.
+        assert!(estimate_pattern("9eL", MatchType::Prefix, true)
+            .unreachable_reason
+            .is_none());
+        assert!(estimate_pattern("9eL", MatchType::Suffix, false)
+            .unreachable_reason
+            .is_none());
     }
 
     #[test]

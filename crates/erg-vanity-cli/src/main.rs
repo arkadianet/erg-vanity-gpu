@@ -202,6 +202,8 @@ fn run_estimate(
                 "Impossible: invalid Base58 characters: {}",
                 est.invalid_chars.iter().collect::<String>()
             );
+        } else if let Some(reason) = &est.unreachable_reason {
+            println!("Impossible: {reason}");
         } else {
             println!(
                 "  ~{} attempts · {} ({})",

@@ -13,3 +13,8 @@ erg-vanity-gpu = { path = "../erg-vanity-gpu" }
 ergo-lib = { workspace = true }
 bip39 = "=2.1.0"
 rand = { workspace = true }
+
+[dev-dependencies]
+# Independent Base58 encoder, used to rederive the address bounds in tests
+# rather than trusting the hardcoded constants.
+bs58 = { workspace = true }

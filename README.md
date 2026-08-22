@@ -129,14 +129,53 @@ Prefix (GPU) patterns must look like a mainnet P2PK start:
 
 - First character `9`
 - Second character `e`, `f`, `g`, `h`, or `i` (uppercase allowed with `-i`)
+- Third character depends on the second (see below)
 - Base58 only (no `0`, `O`, `I`, `l`)
 - Max 32 characters per pattern, 64 patterns, 1024 bytes total
 
 Valid: `9e`, `9err`, `9ergo`, `9fUN`, `9heLLo`
 
-Invalid prefix: `9a` (second char), `9eO` (Base58), `8err` (first char)
+Invalid prefix: `9a` (second char), `9eO` (Base58), `8err` (first char),
+`9eL` (unreachable third character)
 
 Suffix / contains skip the `9e`–`9i` prefix rule.
+
+#### Why some valid-looking prefixes are impossible
+
+Every mainnet P2PK address is the same 38 bytes — `01`, then `02` or `03` for
+the key parity, then a 32-byte X coordinate below the secp256k1 field prime,
+then a 4-byte checksum. All of them encode to exactly 51 Base58 characters, so
+the whole address space is one contiguous interval:
+
+```text
+lowest  9eX4WpoErmVRnevxtZ8o5jgoGRtGigQv1uGmweUHU4j4KSg7JRm
+highest 9iQYsHhJZcqt4J6NhiNnzNtM6f7i266fbBQzRwr4iZDbqp3Tape
+```
+
+A prefix is reachable only if some address in that interval starts with it,
+which constrains more than the first two characters:
+
+| Position | Constraint |
+|---|---|
+| 1 | always `9` |
+| 2 | `e` `f` `g` `h` `i` |
+| 3 | after `9e`: `X`–`Z`, `a`–`z` (28 of 58) · after `9f`/`9g`/`9h`: all 58 · after `9i`: `1`–`9`, `A`–`Q` (24 of 58) |
+| 4 | only at the edge: after `9eX` it must be `4` or later |
+| 5+ | unconstrained |
+
+So 64 of the 290 three-character prefixes that pass the `9e`–`9i` check can
+never occur — `9eL`, `9eR`, `9iZ`, `9is` and friends. Exact-case prefix patterns
+are now rejected with the characters that could have followed instead of
+searching forever:
+
+```console
+$ erg-vanity -p 9eL
+Error: no mainnet address can start with '9eL': after '9e' only [XYZabcdefghijkmnopqrstuvwxyz] can follow
+```
+
+`--estimate` reports the same patterns as impossible. Within the reachable
+region the X coordinate is uniform, so every reachable prefix still costs the
+usual 1/58 per character.
 
 ## Output
 
