@@ -51,7 +51,7 @@ const DEFAULT_NV_MAXRREGCOUNT: Option<u32> = None;
 /// NVIDIA register cap for the whole program, or `None` for the default.
 ///
 /// `vanity_search` naturally lands at 234 registers on sm_86, which limits it
-/// to 8 of 48 warps per SM. The comb table is ~1.7 MB and takes up to 25
+/// to 8 of 48 warps per SM. The comb table is ~3.1 MB and takes up to 23
 /// scattered lookups per k·G, so there is real L2 latency to hide and few
 /// resident warps to hide it with. Capping registers trades some spill traffic
 /// for more warps.
@@ -1099,7 +1099,7 @@ mod tests {
             println!("secp256k1 point self-test result: 0x{:08x}", failures);
 
             if failures != 0 {
-                const TEST_NAMES: [&str; 25] = [
+                const TEST_NAMES: [&str; 27] = [
                     "G is not infinity",
                     "infinity is infinity",
                     "G + infinity = G",
@@ -1125,6 +1125,8 @@ mod tests {
                     "pt_mul_generator_comb(3) = 3G",
                     "pt_mul_generator_comb all-window scalar",
                     "pt_mul_generator_comb multi-window scalar",
+                    "pt_batch_to_affine matches pt_to_affine",
+                    "pt_batch_to_affine clears the infinity entry",
                 ];
                 for (bit, name) in TEST_NAMES.iter().enumerate() {
                     if failures & (1u32 << bit) != 0 {
@@ -1137,7 +1139,7 @@ mod tests {
                 );
             }
 
-            println!("secp256k1 point self-test passed (all 25 tests)!");
+            println!("secp256k1 point self-test passed (all 27 tests)!");
         });
     }
 

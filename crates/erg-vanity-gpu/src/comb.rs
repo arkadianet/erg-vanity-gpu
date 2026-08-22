@@ -25,7 +25,7 @@ const _: () = assert!(COMB_TOP_BITS >= 1 && COMB_TOP_BITS <= 8);
 pub const COMB_TABLE_U32S: usize = COMB_WINDOWS * COMB_ENTRIES * COMB_XY_LIMBS;
 pub const COMB_TABLE_BYTES: &[u8] = include_bytes!("../kernels/comb_table.bin");
 
-/// Uploaded `__global` comb table (~1.7 MB).
+/// Uploaded `__global` comb table (~3.1 MB at the shipped 11-bit width).
 pub struct CombTableBuffer {
     pub table: Buffer<u32>,
 }

@@ -219,7 +219,7 @@ program: at `--index 1` PBKDF2 is 99% of the work, at `--index 500` it is 13.1%.
 `--bench` times **isolated** kernels with OpenCL event timestamps, and its
 secp256k1 figure (~42 ns/addr) no longer matches the live path, which shares one
 modular inversion across a batch of 16 addresses. Live marginal cost is the
-24.6 ns above. Use `--bench` to compare kernels against each other, not to
+23.5 ns above. Use `--bench` to compare kernels against each other, not to
 predict live throughput.
 
 ```bash

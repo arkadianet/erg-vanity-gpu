@@ -488,7 +488,7 @@ inline int pt_to_compressed_pubkey(__private uchar* pubkey, __private const uint
 // modular inversion instead of one per point.
 //
 // fe_inv is ~255 squarings + 15 multiplies, which costs about as much as the
-// whole 10-bit comb ladder that produced the point. Batching n points costs
+// whole comb ladder that produced the point. Batching n points costs
 // 1 inversion + 3(n-1) multiplies, so the per-point inversion share falls
 // as 1/n.
 //
