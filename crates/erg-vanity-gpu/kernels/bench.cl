@@ -91,7 +91,9 @@ __kernel void bench_pbkdf2(
 //
 // Uses EXACT production codepath:
 //   - bip32_derive_ergo_external_chain_comb (master + 4 child derivations)
-//   - bip32_derive_address_index_comb (1 normal derivation per index)
+//   - priv_to_compressed_pubkey_comb once, then
+//     bip32_derive_normal_from_pub_ctx with the shared HMAC context
+//     (1 normal derivation per address index)
 //=============================================================================
 __kernel void bench_bip32(
     __global const uchar* salt,
@@ -115,12 +117,23 @@ __kernel void bench_bip32(
         return;
     }
 
+    uchar external_pub[33];
+    if (priv_to_compressed_pubkey_comb(external_key, external_pub, comb) != 0) {
+        checksums[gid] = 0xDEAD0002u;
+        return;
+    }
+
     // EXACT production: derive each address index (same loop as vanity_search)
     uint checksum = 0;
+    HmacSha512Ctx address_hmac;
+    hmac_sha512_init(&address_hmac, external_chain_code, 32u);
+    uchar child_chain_code[32];  // scratch: keeps external_chain_code intact
     for (uint addr_idx = 0; addr_idx < num_indices; addr_idx++) {
         uchar private_key[32];
-        if (bip32_derive_address_index_comb(external_key, external_chain_code,
-                                            addr_idx, private_key, comb) != 0) {
+        if (bip32_derive_normal_from_pub_ctx(
+                external_key, external_pub, addr_idx, private_key, child_chain_code,
+                &address_hmac
+            ) != 0) {
             continue;
         }
         for (int j = 0; j < 32; j++) checksum ^= private_key[j];

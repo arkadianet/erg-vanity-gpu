@@ -25,7 +25,7 @@ pub fn digest(data: &[u8]) -> [u8; 32] {
     let mut state = H;
     let padded = pad(data);
 
-    for chunk in padded.chunks_exact(64) {
+    for chunk in padded.as_chunks::<64>().0 {
         compress(&mut state, chunk);
     }
 
@@ -61,8 +61,8 @@ fn compress(state: &mut [u32; 8], block: &[u8]) {
     let mut w = [0u32; 64];
 
     // First 16 words from block
-    for (i, chunk) in block.chunks_exact(4).enumerate() {
-        w[i] = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+    for (i, chunk) in block.as_chunks::<4>().0.iter().enumerate() {
+        w[i] = u32::from_be_bytes(*chunk);
     }
 
     // Extend to 64 words

@@ -81,6 +81,35 @@ __kernel void vanity_seed(
     for (int i = 0; i < 64; i++) out[i] = seed[i];
 }
 
+// Derive the shared external-chain state once per seed for the index-parallel
+// search path. Layout: external key (32), chain code (32), parent pub (33),
+// validity marker at byte 97, rest padding.
+#define PARENT_VALID_OFFSET 97u
+
+__kernel void vanity_parent(
+    __global const uchar* seeds,
+    __global uchar* parents,
+    __global const uint* comb
+) {
+    uint gid = get_global_id(0);
+    __global const uchar* seed = seeds + ((ulong)gid * 64ul);
+    __global uchar* out = parents + ((ulong)gid * 128ul);
+    // Mark the record invalid first: stale data from a previous batch must
+    // never be reported as a hit if this seed's derivation fails.
+    out[PARENT_VALID_OFFSET] = 0u;
+    uchar seed_local[64];
+    for (int i = 0; i < 64; i++) seed_local[i] = seed[i];
+    uchar key[32], chain[32], pub[33];
+    if (bip32_derive_ergo_external_chain_comb(seed_local, key, chain, comb) != 0)
+        return;
+    if (priv_to_compressed_pubkey_comb(key, pub, comb) != 0)
+        return;
+    for (int i = 0; i < 32; i++) out[i] = key[i];
+    for (int i = 0; i < 32; i++) out[32 + i] = chain[i];
+    for (int i = 0; i < 33; i++) out[64 + i] = pub[i];
+    out[PARENT_VALID_OFFSET] = 1u;
+}
+
 // BIP32 + k·G + address match. Seeds come from vanity_seed.
 // First match wins by (address_index ascending, pattern list order).
 __kernel void vanity_search(
@@ -90,6 +119,8 @@ __kernel void vanity_search(
     __global const char* patterns,
     __global const uint* pattern_offsets,
     __global const uint* pattern_lens,
+    __global const uchar* pattern_lower,
+    __global const uchar* pattern_upper,
     uint num_patterns,
     uint ignore_case,
     uint num_indices,
@@ -119,11 +150,15 @@ __kernel void vanity_search(
 
     // Step 4-6: Loop over address indices (outer) and patterns (inner)
     // First match wins by (address_index ascending, pattern list order)
+    HmacSha512Ctx address_hmac;
+    hmac_sha512_init(&address_hmac, external_chain_code, 32u);
+    uchar child_chain_code[32];  // scratch: keeps external_chain_code intact
     for (uint addr_idx = 0; addr_idx < num_indices; addr_idx++) {
         // Derive key for this address index: m/44'/429'/0'/0/<addr_idx>
         uchar private_key[32];
-        if (bip32_derive_address_index_from_pub(
-                external_key, external_chain_code, external_pub, addr_idx, private_key
+        if (bip32_derive_normal_from_pub_ctx(
+                external_key, external_pub, addr_idx, private_key, child_chain_code,
+                &address_hmac
             ) != 0) {
             continue;  // Skip invalid (astronomically rare)
         }
@@ -153,7 +188,11 @@ __kernel void vanity_search(
             if (ignore_case) {
                 match = base58_check_prefix_global_icase(addr_bytes, &patterns[offset], len);
             } else {
-                match = base58_check_prefix_global(addr_bytes, &patterns[offset], len);
+                match = base58_check_prefix_range(
+                    addr_bytes,
+                    &pattern_lower[p * 38u],
+                    &pattern_upper[p * 38u]
+                );
             }
 
             if (match) {
@@ -178,6 +217,73 @@ __kernel void vanity_search(
                 // First match wins - exit both loops
                 return;
             }
+        }
+    }
+}
+
+// Index-parallel variant. One work item handles one (seed, address index),
+// allowing large index counts to occupy the GPU more evenly.
+__kernel void vanity_search_index(
+    ulong counter_start,
+    __global const uchar* parents,
+    uint num_indices,
+    __global const char* patterns,
+    __global const uint* pattern_offsets,
+    __global const uint* pattern_lens,
+    __global const uchar* pattern_lower,
+    __global const uchar* pattern_upper,
+    uint num_patterns,
+    uint ignore_case,
+    __global const uchar* salt,
+    __global VanityHit* hits,
+    __global volatile int* hit_count,
+    uint max_hits,
+    __global const uint* comb
+) {
+    uint flat = get_global_id(0);
+    uint seed_gid = flat / num_indices;
+    uint addr_idx = flat % num_indices;
+    __global const uchar* parent = parents + ((ulong)seed_gid * 128ul);
+    // Skip seeds whose parent derivation failed (marker not set).
+    if (parent[PARENT_VALID_OFFSET] != 1u) return;
+    uchar key[32], chain[32], pub[33], private_key[32];
+    for (int i = 0; i < 32; i++) { key[i] = parent[i]; chain[i] = parent[32 + i]; }
+    for (int i = 0; i < 33; i++) pub[i] = parent[64 + i];
+    HmacSha512Ctx address_hmac;
+    hmac_sha512_init(&address_hmac, chain, 32u);
+    uchar child_chain_code[32];  // scratch: keeps the parent chain code intact
+    if (bip32_derive_normal_from_pub_ctx(key, pub, addr_idx, private_key, child_chain_code, &address_hmac) != 0)
+        return;
+    uint key_limbs[8];
+    sc_from_bytes(key_limbs, private_key);
+    uint point[24];
+    pt_mul_generator_comb(point, key_limbs, comb);
+    uchar pubkey[33];
+    if (pt_to_compressed_pubkey(pubkey, point) != 0) return;
+    uchar addr_bytes[38];
+    build_ergo_address(pubkey, addr_bytes);
+    for (uint p = 0; p < num_patterns; p++) {
+        uint offset = pattern_offsets[p];
+        int len = (int)pattern_lens[p];
+        int match = ignore_case
+            ? base58_check_prefix_global_icase(addr_bytes, &patterns[offset], len)
+            : base58_check_prefix_range(addr_bytes, &pattern_lower[p * 38u], &pattern_upper[p * 38u]);
+        if (match) {
+            uchar entropy[32];
+            generate_entropy(seed_gid, counter_start, salt, entropy);
+            uint hit_idx = (uint)atomic_inc(hit_count);
+            if (hit_idx < max_hits) {
+                for (int w = 0; w < 8; w++) {
+                    int o = w * 4;
+                    hits[hit_idx].entropy_words[w] = ((uint)entropy[o]) |
+                        ((uint)entropy[o + 1] << 8) | ((uint)entropy[o + 2] << 16) |
+                        ((uint)entropy[o + 3] << 24);
+                }
+                hits[hit_idx].work_item_id = seed_gid;
+                hits[hit_idx].address_index = addr_idx;
+                hits[hit_idx].pattern_index = p;
+            }
+            return;
         }
     }
 }

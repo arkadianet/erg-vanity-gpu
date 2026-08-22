@@ -55,8 +55,8 @@ fn g(v: &mut [u64; 16], a: usize, b: usize, c: usize, d: usize, x: u64, y: u64) 
 fn compress(h: &mut [u64; 8], block: &[u8; BLOCK_SIZE], t: u128, last: bool) {
     // Parse message block into 16 words
     let mut m = [0u64; 16];
-    for (i, chunk) in block.chunks_exact(8).enumerate() {
-        m[i] = u64::from_le_bytes(chunk.try_into().unwrap());
+    for (i, chunk) in block.as_chunks::<8>().0.iter().enumerate() {
+        m[i] = u64::from_le_bytes(*chunk);
     }
 
     // Initialize working vector

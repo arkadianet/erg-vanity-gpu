@@ -13,6 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub const MAX_PATTERN_LEN: usize = 32;
+pub const MAX_NUM_INDICES: u32 = 500;
 pub use erg_vanity_gpu::buffers::{MAX_PATTERNS, MAX_PATTERN_DATA};
 
 const BASE58: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -96,15 +97,7 @@ impl SearchRequest {
         if self.max_results == 0 {
             return Err("--max-results must be at least 1".into());
         }
-        if self.num_indices == 0 {
-            return Err("--index must be at least 1".into());
-        }
-        if self.num_indices > 100 {
-            return Err(format!(
-                "--index {} exceeds maximum of 100",
-                self.num_indices
-            ));
-        }
+        validate_num_indices(self.num_indices)?;
         if let Some(0) = self.batch_size {
             return Err("--batch-size must be at least 1".into());
         }
@@ -113,6 +106,21 @@ impl SearchRequest {
         }
         Ok(())
     }
+}
+
+/// Validate the BIP44 address-index count (1..=MAX_NUM_INDICES).
+/// Shared by search requests and pre-estimate CLI validation.
+pub fn validate_num_indices(num_indices: u32) -> Result<(), String> {
+    if num_indices == 0 {
+        return Err("--index must be at least 1".into());
+    }
+    if num_indices > MAX_NUM_INDICES {
+        return Err(format!(
+            "--index {} exceeds maximum of {}",
+            num_indices, MAX_NUM_INDICES
+        ));
+    }
+    Ok(())
 }
 
 /// Validate one pattern. Prefix mode requires a full-address `9e`–`9i` start.

@@ -151,6 +151,25 @@ inline int base58_check_prefix_global(
 #undef PREFIX_LOAD
 }
 
+// Exact-case prefix lookup using the numeric interval represented by a
+// Base58 prefix. Ergo P2PK address bytes have a fixed 51-character encoding,
+// so this avoids the per-address repeated-division encoder.
+inline int base58_check_prefix_range(
+    __private const uchar* addr_bytes,
+    __global const uchar* lower,
+    __global const uchar* upper
+) {
+    int lower_cmp = 0;
+    int upper_cmp = 0;
+    for (int i = 0; i < 38; i++) {
+        if (!lower_cmp && addr_bytes[i] != lower[i])
+            lower_cmp = (addr_bytes[i] > lower[i]) ? 1 : -1;
+        if (!upper_cmp && addr_bytes[i] != upper[i])
+            upper_cmp = (addr_bytes[i] < upper[i]) ? 1 : -1;
+    }
+    return lower_cmp >= 0 && upper_cmp > 0;
+}
+
 #undef BASE58_CHECK_PREFIX_BODY
 
 // Case-insensitive prefix check (__global version)

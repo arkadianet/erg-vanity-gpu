@@ -240,6 +240,43 @@ inline void pt_add_mixed(__private uint* r, __private const uint* p1, __private 
     fe_mul(r + 16, h, z1);
 }
 
+// Mixed addition for two known finite, nonzero points. The comb multiplier
+// handles zero table digits itself, so avoid repeating infinity checks here.
+inline void pt_add_mixed_nonzero(
+    __private uint* r, __private const uint* p1, __private const uint* p2
+) {
+    __private const uint* x1 = p1;
+    __private const uint* y1 = p1 + 8;
+    __private const uint* z1 = p1 + 16;
+    __private const uint* x2 = p2;
+    __private const uint* y2 = p2 + 8;
+    uint z1_2[8], z1_3[8], u2[8], s2[8];
+    uint h[8], rr[8], h2[8], h3[8], u1_h2[8], t1[8];
+    fe_sqr(z1_2, z1);
+    fe_mul(z1_3, z1_2, z1);
+    fe_mul(u2, x2, z1_2);
+    fe_mul(s2, y2, z1_3);
+    fe_sub(h, u2, x1);
+    fe_sub(rr, s2, y1);
+    if (fe_is_zero(h)) {
+        if (fe_is_zero(rr)) pt_double(r, p1);
+        else pt_infinity(r);
+        return;
+    }
+    fe_sqr(h2, h);
+    fe_mul(h3, h2, h);
+    fe_mul(u1_h2, x1, h2);
+    fe_sqr(t1, rr);
+    fe_sub(t1, t1, h3);
+    fe_sub(t1, t1, u1_h2);
+    fe_sub(r, t1, u1_h2);
+    fe_sub(t1, u1_h2, r);
+    fe_mul(t1, rr, t1);
+    fe_mul(h3, y1, h3);
+    fe_sub(r + 8, t1, h3);
+    fe_mul(r + 16, h, z1);
+}
+
 // Scalar multiplication: r = k * p
 // Uses double-and-add algorithm, processing from LSB to MSB.
 inline void pt_mul(__private uint* r, __private const uint* k, __private const uint* p) {
@@ -272,16 +309,27 @@ inline void pt_mul(__private uint* r, __private const uint* k, __private const u
     pt_copy(r, result);
 }
 
-// 8-bit comb: COMB[w][b] = b · (2^{8*(31-w)} G), affine XY (16 uints).
-// Window 0 = MSB of sc_to_bytes. b=0 is infinity (not stored).
+// 10-bit comb: COMB[w][b] = b · (2^{10*(25-w)} G), affine XY (16 uints).
+// Window 0 = scalar bits 255..250 (top 6 bits); windows 1..25 = 10 bits each.
+// b=0 is infinity (not stored).
 #define COMB_XY_LIMBS 16u
-#define COMB_WINDOW_STRIDE (256u * 16u)
+#define COMB_WINDOW_STRIDE (1024u * 16u)
+
+// Extract the 10-bit digit for window w (w >= 1) from MSB-first k_bytes.
+inline uint comb_digit_10(__private const uchar* k_bytes, uint w) {
+    uint start = 6u + (w - 1u) * 10u;
+    uint digit = 0u;
+    for (uint j = 0u; j < 10u; j++)
+        digit = (digit << 1u) |
+            ((k_bytes[(start + j) / 8u] >> (7u - (start + j) % 8u)) & 1u);
+    return digit;
+}
 
 inline void comb_select(
     __private uint* p,
     __global const uint* comb,
     uint window,
-    uchar b
+    uint b
 ) {
     if (b == 0) {
         pt_infinity(p);
@@ -292,7 +340,7 @@ inline void comb_select(
     fe_one(p + 16);
 }
 
-// k·G = T_0[k0] + … + T_31[k31]: 31 mixed adds, 0 doubles.
+// k·G = T_0[k0] + … + T_25[k25]: <= 25 mixed adds, 0 doubles.
 inline void pt_mul_generator_comb(
     __private uint* r,
     __private const uint* k,
@@ -305,10 +353,23 @@ inline void pt_mul_generator_comb(
     __private uint* acc = buf0;
     __private uint* tmp = buf1;
 
-    comb_select(acc, comb, 0u, k_bytes[0]);
-    for (int w = 1; w < 32; w++) {
-        comb_select(selected, comb, (uint)w, k_bytes[w]);
-        pt_add_mixed(tmp, acc, selected);
+    uint first = 0u;
+    uint first_digit = (uint)k_bytes[0] >> 2;
+    while (first < 26u && first_digit == 0u) {
+        first++;
+        if (first == 26u) break;
+        first_digit = comb_digit_10(k_bytes, first);
+    }
+    if (first == 26u) {
+        pt_infinity(r);
+        return;
+    }
+    comb_select(acc, comb, first, first_digit);
+    for (uint w = first + 1u; w < 26u; w++) {
+        uint digit = comb_digit_10(k_bytes, w);
+        if (digit == 0u) continue;
+        comb_select(selected, comb, w, digit);
+        pt_add_mixed_nonzero(tmp, acc, selected);
         { __private uint* swap = acc; acc = tmp; tmp = swap; }
     }
 

@@ -101,7 +101,7 @@ pub fn entropy_to_mnemonic(entropy: &[u8]) -> Result<String, &'static str> {
 
     // Convert to words (11 bits per word)
     let mut words = Vec::with_capacity(mtype.word_count());
-    for chunk in bits.chunks_exact(11) {
+    for chunk in bits.as_chunks::<11>().0 {
         let mut index = 0u16;
         for &bit in chunk {
             index = (index << 1) | (bit as u16);

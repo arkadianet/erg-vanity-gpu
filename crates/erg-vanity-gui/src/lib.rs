@@ -714,7 +714,7 @@ impl eframe::App for VanityApp {
                     ui.add_space(8.0);
                     ui.label(RichText::new("INDICES / SEED").color(AMBER).size(11.0).strong());
                     ui.add(
-                        egui::Slider::new(&mut self.num_indices, 1..=100)
+                        egui::Slider::new(&mut self.num_indices, 1..=500)
                             .text("BIP44 slots")
                             .integer(),
                     )
