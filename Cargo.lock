@@ -1576,6 +1576,7 @@ name = "erg-vanity-engine"
 version = "0.2.0"
 dependencies = [
  "bip39",
+ "bs58 0.5.1",
  "erg-vanity-address",
  "erg-vanity-cpu",
  "erg-vanity-gpu",

@@ -289,6 +289,8 @@ impl VanityApp {
             if est.has_invalid_chars {
                 let bad: String = est.invalid_chars.iter().collect();
                 lines.push(format!("{p}: impossible (not Base58: {bad})"));
+            } else if let Some(reason) = &est.unreachable_reason {
+                lines.push(format!("{p}: impossible ({reason})"));
             } else {
                 let left = if self.running {
                     (est.attempts_needed - self.checked as f64).max(0.0)
