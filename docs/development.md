@@ -111,3 +111,30 @@ spill to get there, and the spill traffic costs about what the extra warps win:
 
 +0.5% at 168 and a loss at 128, so occupancy is not the limiter here. Both
 numbers reproduced exactly across repeat runs.
+
+### PBKDF2 is not occupancy-limited either
+
+`vanity_seed` compiles to 127 registers, i.e. 16 of 48 warps, which looks like
+obvious headroom. It is not. Capping its registers buys real occupancy and
+changes throughput by nothing until the spills get large enough to hurt
+(`--index 1`, batch 1048576, 90s runs):
+
+| `ERG_CL_MAXREG` | warps/SM | spill stores | seeds/s |
+|---|---|---|---|
+| unset (127 regs) | 16/48 | 0 B | 584,452 |
+| 112 | 18/48 | 28 B | 587,018 |
+| 96 | 21/48 | 148 B | 584,452 |
+| 80 | 25/48 | 312 B | 560,919 |
+
+Occupancy rises from 33% to 44% for exactly zero gain. PBKDF2 is bound by the
+dependency chain through its 2048 serial HMAC iterations, not by having too few
+warps resident, which also matches the roofline: 584k seeds/s × 4096 SHA-512
+compressions × 80 rounds is ~191 G rounds/s, and a 3090's 8.9 T INT32 ops/s
+leaves only ~46 integer ops per round. With Ampere's LOP3 folding the Ch, Maj,
+and Σ triples, a well-compiled round is already about that.
+
+The practical consequence: restructuring SHA-512 to use fewer registers (a
+rolling 16-word W schedule instead of the batched expansion, say) cannot pay
+off, because the occupancy it would buy is worth nothing here. Any real PBKDF2
+win has to come from fewer or cheaper integer ops per round, not from more
+warps.
