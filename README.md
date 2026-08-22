@@ -196,25 +196,25 @@ Progress goes to stderr: `Checked: N (rate addr/s) [found/target]`.
 ## Performance
 
 Measured **RTX 3090**, 23 Aug 2026, 60s runs at `--batch-size 262144`, after
-batched modular inversion:
+batched modular inversion and the 11-bit comb:
 
 | `--index` | addr/s | seeds/s |
 |---|---:|---:|
-| 1 | 561,737 | 561,737 |
-| 20 | 8,911,166 | 445,558 |
-| 100 | 23,674,745 | 236,747 |
-| 250 | 31,570,498 | 126,282 |
-| 500 | 35,537,863 | 71,076 |
+| 1 | 563,285 | 563,285 |
+| 20 | 8,985,302 | 449,265 |
+| 100 | 24,184,619 | 241,846 |
+| 250 | 32,659,136 | 130,637 |
+| 500 | 36,891,126 | 73,782 |
 
 Those points fit one line to within a percent:
 
 ```text
-time per seed = 1763 ns + 24.6 ns × index
+time per seed = 1780 ns + 23.5 ns × index
 ```
 
-The fixed 1763 ns is PBKDF2 (2048 HMAC-SHA512 iterations, unavoidable per seed);
-the 24.6 ns is everything charged per address. That is the whole shape of the
-program: at `--index 1` PBKDF2 is 99% of the work, at `--index 500` it is 12.5%.
+The fixed 1780 ns is PBKDF2 (2048 HMAC-SHA512 iterations, unavoidable per seed);
+the 23.5 ns is everything charged per address. That is the whole shape of the
+program: at `--index 1` PBKDF2 is 99% of the work, at `--index 500` it is 13.1%.
 
 `--bench` times **isolated** kernels with OpenCL event timestamps, and its
 secp256k1 figure (~42 ns/addr) no longer matches the live path, which shares one
@@ -248,10 +248,10 @@ and the address you find no longer sits at slot 0:
 
 | `--index` | addr/s | vs `--index 1` | Wallet visibility |
 |---|---:|---:|---|
-| 1 | 561,737 | 1.0× | always shown |
-| 20 | 8,911,166 | 15.9× | within the usual BIP44 gap limit |
-| 100 | 23,674,745 | 42.1× | needs manual scanning |
-| 500 | 35,537,863 | 63.3× | needs manual scanning |
+| 1 | 563,285 | 1.0× | always shown |
+| 20 | 8,985,302 | 16.0× | within the usual BIP44 gap limit |
+| 100 | 24,184,619 | 42.9× | needs manual scanning |
+| 500 | 36,891,126 | 65.5× | needs manual scanning |
 
 **The default is 1, and raising it is a real tradeoff, not free speed.** Most
 wallets scan forward only about 20 unused addresses (the BIP44 gap limit) before
@@ -259,8 +259,8 @@ stopping, so a hit at slot 431 will not appear on restore unless you tell the
 wallet to look that far. `--index 20` is the largest value that stays inside
 that convention, and it already buys ~16×.
 
-Past 500 the curve is nearly flat: the model puts `--index 1000` at ~37.9M
-addr/s (+6.7%) and the limit as index → ∞ at ~40.6M (+14.3%), because PBKDF2 is
+Past 500 the curve is nearly flat: the model puts `--index 1000` at ~39.5M
+addr/s (+7.0%) and the limit as index → ∞ at ~42.6M (+15.3%), because PBKDF2 is
 all that is left to amortize. The cap stays at 500.
 
 Every hit prints its full derivation path, so you always know which slot to look

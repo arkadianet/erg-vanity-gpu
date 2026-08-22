@@ -78,8 +78,8 @@ RTX 3090, 23 Aug 2026, isolated (`--bench --bench-num-indices 100`):
 | BIP32 | 2 ns/addr | 3.3% |
 | Base58 | 1 ns/addr | 2.1% |
 
-Live on the same card fits `1763 ns + 24.6 ns × index` per seed, i.e. 561,737
-addr/s at `--index 1` and 35,537,863 at `--index 500`. Compare kernels with
+Live on the same card fits `1780 ns + 23.5 ns × index` per seed, i.e. 563,285
+addr/s at `--index 1` and 36,891,126 at `--index 500`. Compare kernels with
 `--bench`; predict throughput with a live run.
 
 Where the time goes, and what has already been tried, is in the README
