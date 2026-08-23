@@ -598,7 +598,11 @@ pub fn run_overlap_probe(
     let mut seed_only: Vec<u64> = Vec::with_capacity(iters as usize);
     let mut counter = 0u64;
 
-    let run_serial = |seed_k: &mut Kernel, search_k: &mut Kernel, sa: &Buffer<u8>, c: u64| -> Result<u64, GpuError> {
+    let run_serial = |seed_k: &mut Kernel,
+                      search_k: &mut Kernel,
+                      sa: &Buffer<u8>,
+                      c: u64|
+     -> Result<u64, GpuError> {
         seed_k.set_arg(1, c)?;
         seed_k.set_arg(4, sa)?;
         search_k.set_arg(1, c)?;
@@ -612,7 +616,11 @@ pub fn run_overlap_probe(
         Ok(t.elapsed().as_nanos() as u64)
     };
 
-    let run_concurrent = |seed_k: &mut Kernel, search_k: &mut Kernel, sa: &Buffer<u8>, c: u64| -> Result<u64, GpuError> {
+    let run_concurrent = |seed_k: &mut Kernel,
+                          search_k: &mut Kernel,
+                          sa: &Buffer<u8>,
+                          c: u64|
+     -> Result<u64, GpuError> {
         seed_k.set_arg(1, c)?;
         seed_k.set_arg(4, sa)?;
         search_k.set_arg(1, c)?;

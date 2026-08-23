@@ -135,7 +135,7 @@ fn kernel_work_group_limit(kernel: &Kernel, device: ocl::Device, fallback: usize
 }
 
 fn search_disabled() -> bool {
-    std::env::var("ERG_NO_SEARCH").map_or(false, |v| v == "1")
+    std::env::var("ERG_NO_SEARCH").is_ok_and(|v| v == "1")
 }
 
 /// GPU-accelerated vanity address search pipeline.
