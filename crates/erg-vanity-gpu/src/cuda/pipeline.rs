@@ -79,12 +79,13 @@ pub struct CudaVanityPipeline {
     hit_count_pp: [CuDevicePtr; 2],
     batch_index: u64,
     pending: Option<PendingBatch>,
+    // Pinned host staging for async hit readback (overlap mode only).
+    pin_count: [*mut c_void; 2],
+    pin_hits: [*mut c_void; 2],
 }
 
 struct PendingBatch {
     slot: usize,
-    #[allow(dead_code)]
-    counter_start: u64,
 }
 
 impl CudaVanityPipeline {
@@ -159,6 +160,8 @@ impl CudaVanityPipeline {
         let mut streams = [std::ptr::null_mut(); 2];
         let mut ev_seed_done = [std::ptr::null_mut(); 2];
         let mut ev_search_done = [std::ptr::null_mut(); 2];
+        let mut pin_count = [std::ptr::null_mut(); 2];
+        let mut pin_hits = [std::ptr::null_mut(); 2];
         if overlap {
             for s in streams.iter_mut() {
                 check!(device.lib, cuStreamCreate, s, 0u32);
@@ -166,13 +169,32 @@ impl CudaVanityPipeline {
             for e in ev_seed_done.iter_mut().chain(ev_search_done.iter_mut()) {
                 check!(device.lib, cuEventCreate, e, 0u32);
             }
+            for slot in 0..2 {
+                check!(device.lib, cuMemAllocHost, &mut pin_count[slot], 16);
+                check!(
+                    device.lib,
+                    cuMemAllocHost,
+                    &mut pin_hits[slot],
+                    MAX_HITS * 64
+                );
+                unsafe {
+                    std::ptr::write_bytes(pin_count[slot] as *mut u8, 0, 16);
+                }
+            }
         }
 
         // Per-kernel block sizes: 128 measured fastest for the PBKDF2-
         // dominated seed kernel on sm_86; the search kernel matches the
         // OpenCL path's large work groups.
-        let seed_local = 128usize;
-        let search_local = 256usize;
+        // Defaults measured fastest on sm_86; overridable for other chips.
+        let seed_local: usize = std::env::var("ERG_CUDA_SEED_LOCAL")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(128);
+        let search_local: usize = std::env::var("ERG_CUDA_SEARCH_LOCAL")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(128);
 
         Ok(CudaVanityPipeline {
             seed_fn,
@@ -210,6 +232,8 @@ impl CudaVanityPipeline {
             hit_count_pp: [hit_count_ptr0; 2],
             batch_index: 0,
             pending: None,
+            pin_count,
+            pin_hits,
         })
     }
 
@@ -342,16 +366,8 @@ impl CudaVanityPipeline {
         let s_seed = self.streams[0];
         let s_search = self.streams[1];
 
-        // 1) Harvest the previous batch (same slot was already synchronized).
-        let mut out = Vec::new();
-        if let Some(pending) = self.pending.take() {
-            check!(
-                self.device.lib,
-                cuEventSynchronize,
-                self.ev_search_done[pending.slot]
-            );
-            out = self.read_and_verify(pending.slot)?;
-        }
+        // Enqueue FIRST, harvest LAST: seed(n+1) overlaps search(n) on the
+        // other stream - the whole point of the ping-pong.
 
         // 2) Free the slot: wait until search(n-2) finished reading it.
         if self.batch_index >= 2 {
@@ -362,11 +378,18 @@ impl CudaVanityPipeline {
                 self.ev_search_done[slot],
                 0u32
             );
-        } else {
-            // First use of this slot: clear its hit counter on the host side.
-            let zeros = [0u8; 16];
-            self.upload_raw(self.hit_count_pp[slot], &zeros)?;
         }
+        // Zero this slot's device-side hit counter on stream A; ordered
+        // before seed(n), and search(n) is gated behind seed(n).
+        let zeros = [0u8; 16];
+        check!(
+            self.device.lib,
+            cuMemcpyHtoDAsync_v2,
+            self.hit_count_pp[slot],
+            zeros.as_ptr() as *const c_void,
+            16usize,
+            s_seed
+        );
 
         // 3) Seed kernel on stream A.
         let mut salt_ptr = self.salt.ptr;
@@ -441,6 +464,24 @@ impl CudaVanityPipeline {
             s_search,
             &mut params_b,
         )?;
+        // Async readback of this slot's results on the same stream: by the
+        // time ev_search_done fires, host staging is already filled.
+        check!(
+            self.device.lib,
+            cuMemcpyDtoHAsync_v2,
+            self.pin_count[slot],
+            self.hit_count_pp[slot],
+            16usize,
+            s_search
+        );
+        check!(
+            self.device.lib,
+            cuMemcpyDtoHAsync_v2,
+            self.pin_hits[slot],
+            self.hits_pp[slot],
+            MAX_HITS * 64usize,
+            s_search
+        );
         check!(
             self.device.lib,
             cuEventRecord,
@@ -448,29 +489,48 @@ impl CudaVanityPipeline {
             s_search
         );
 
-        self.pending = Some(PendingBatch {
-            slot,
-            counter_start,
-        });
+        // Harvest batch n-1 WHILE the GPU chews on batch n.
+        let mut out = Vec::new();
+        if let Some(pending) = self.pending.take() {
+            check!(
+                self.device.lib,
+                cuEventSynchronize,
+                self.ev_search_done[pending.slot]
+            );
+            out = self.read_and_verify_pinned(pending.slot)?;
+        }
+
+        self.pending = Some(PendingBatch { slot });
         self.batch_index += 1;
 
         Ok(out)
     }
 
-    fn read_and_verify(&mut self, slot: usize) -> Result<Vec<VanityResult>, GpuError> {
-        let mut count_bytes = [0u8; 16];
-        self.download_raw(self.hit_count_pp[slot], &mut count_bytes)?;
+    /// Read results from PINNED host staging (filled by async copies that
+    /// completed before ev_search_done fired).
+    ///
+    /// # Safety
+    /// `pin_count`/`pin_hits` must have been filled by the matching async
+    /// copies for `slot`, synchronized by the caller.
+    unsafe fn read_and_verify_pinned(
+        &mut self,
+        slot: usize,
+    ) -> Result<Vec<VanityResult>, GpuError> {
+        let count_bytes = std::slice::from_raw_parts(self.pin_count[slot] as *const u8, 16);
         let hit_count = i32::from_le_bytes(count_bytes[0..4].try_into().unwrap());
         if hit_count <= 0 {
+            // Clear the counter for the next use of this slot.
+            std::ptr::write_bytes(self.pin_count[slot] as *mut u8, 0, 16);
             return Ok(Vec::new());
         }
         let dropped = (hit_count as usize).saturating_sub(MAX_HITS);
         if dropped > 0 {
             self.hits_dropped_total += dropped as u64;
         }
+        // Reset counter staging for the next use of this slot.
+        std::ptr::write_bytes(self.pin_count[slot] as *mut u8, 0, 16);
         let take = (hit_count as usize).min(MAX_HITS);
-        let mut raw = vec![0u8; take * 64];
-        self.download_raw(self.hits_pp[slot], &mut raw)?;
+        let raw = std::slice::from_raw_parts(self.pin_hits[slot] as *const u8, take * 64);
         let mut hits = Vec::with_capacity(take);
         for c in raw.chunks_exact(64) {
             let mut hit = GpuHit::default();
@@ -492,28 +552,6 @@ impl CudaVanityPipeline {
             self.match_type,
             self.ignore_case,
         )
-    }
-
-    fn upload_raw(&self, dst: CuDevicePtr, data: &[u8]) -> Result<(), GpuError> {
-        check!(
-            self.device.lib,
-            cuMemcpyHtoD_v2,
-            dst,
-            data.as_ptr() as *const c_void,
-            data.len()
-        );
-        Ok(())
-    }
-
-    fn download_raw(&self, src: CuDevicePtr, out: &mut [u8]) -> Result<(), GpuError> {
-        check!(
-            self.device.lib,
-            cuMemcpyDtoH_v2,
-            out.as_mut_ptr() as *mut c_void,
-            src,
-            out.len()
-        );
-        Ok(())
     }
 }
 

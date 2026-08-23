@@ -29,6 +29,17 @@ pub fn enumerate_devices() -> Result<Vec<DeviceInfo>, GpuError> {
     }
 }
 
+/// Device-recommended batch size for the active backend.
+///
+/// Measured optimum differs: OpenCL likes 1M work items, CUDA peaks at
+/// 512k with stream overlap enabled.
+pub fn recommended_batch_size(device_index: usize) -> Result<usize, GpuError> {
+    if backend_pref() == "cuda" {
+        return Ok(1 << 19); // 524,288
+    }
+    Ok(crate::context::GpuContext::with_device(device_index)?.recommended_batch_size())
+}
+
 fn backend_pref() -> &'static str {
     static ONCE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     ONCE.get_or_init(|| std::env::var("ERG_BACKEND").unwrap_or_else(|_| "auto".to_string()))
@@ -42,11 +53,9 @@ impl AnyPipeline {
         salt: [u8; 32],
     ) -> Result<Self, GpuError> {
         let pref = backend_pref();
-        let want_cuda = match pref {
-            "cuda" => true,
-            "auto" => crate::cuda::pipeline::CUDA_BUILT,
-            _ => false,
-        };
+        // `auto` stays on the battle-tested OpenCL path; CUDA is opt-in
+        // while it soaks (live parity today, kernel-level wins pending).
+        let want_cuda = pref == "cuda";
         if want_cuda {
             match CudaVanityPipeline::new(patterns, cfg.clone(), device_index, salt) {
                 Ok(p) => return Ok(AnyPipeline::Cuda(p)),

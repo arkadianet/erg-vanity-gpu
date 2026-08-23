@@ -34,6 +34,12 @@ pub struct LibCuda {
         unsafe extern "C" fn(*mut CuFunction, CuModule, *const c_char) -> CuResult,
     pub cuMemAlloc_v2: unsafe extern "C" fn(*mut CuDevicePtr, usize) -> CuResult,
     pub cuMemFree_v2: unsafe extern "C" fn(CuDevicePtr) -> CuResult,
+    pub cuMemAllocHost: unsafe extern "C" fn(*mut *mut c_void, usize) -> CuResult,
+    pub cuMemFreeHost: unsafe extern "C" fn(*mut c_void) -> CuResult,
+    pub cuMemcpyHtoDAsync_v2:
+        unsafe extern "C" fn(CuDevicePtr, *const c_void, usize, CuStream) -> CuResult,
+    pub cuMemcpyDtoHAsync_v2:
+        unsafe extern "C" fn(*mut c_void, CuDevicePtr, usize, CuStream) -> CuResult,
     pub cuMemcpyHtoD_v2: unsafe extern "C" fn(CuDevicePtr, *const c_void, usize) -> CuResult,
     pub cuMemcpyDtoH_v2: unsafe extern "C" fn(*mut c_void, CuDevicePtr, usize) -> CuResult,
     pub cuStreamCreate: unsafe extern "C" fn(*mut CuStream, c_uint) -> CuResult,
@@ -99,6 +105,10 @@ pub unsafe fn load_libcuda() -> Result<LibCuda, String> {
         cuCtxSetCurrent: sym!("cuCtxSetCurrent"),
         cuModuleLoadData: sym!("cuModuleLoadData"),
         cuModuleGetFunction: sym!("cuModuleGetFunction"),
+        cuMemAllocHost: sym!("cuMemAllocHost_v2"),
+        cuMemFreeHost: sym!("cuMemFreeHost"),
+        cuMemcpyHtoDAsync_v2: sym!("cuMemcpyHtoDAsync_v2"),
+        cuMemcpyDtoHAsync_v2: sym!("cuMemcpyDtoHAsync_v2"),
         cuMemAlloc_v2: sym!("cuMemAlloc_v2"),
         cuMemFree_v2: sym!("cuMemFree_v2"),
         cuMemcpyHtoD_v2: sym!("cuMemcpyHtoD_v2"),

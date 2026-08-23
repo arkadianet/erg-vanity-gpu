@@ -407,7 +407,7 @@ enum WorkerMsg {
 }
 
 fn resolve_gpu_devices(backend: &Backend) -> Result<Vec<usize>, String> {
-    let devices = GpuContext::enumerate_devices().map_err(|e| e.to_string())?;
+    let devices = erg_vanity_gpu::dispatch::enumerate_devices().map_err(|e| e.to_string())?;
     if devices.is_empty() {
         return Err("no OpenCL GPU devices found".into());
     }
@@ -444,10 +444,8 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
     let mut salt = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut salt);
 
-    let default_batch = GpuContext::with_device(devices[0])
-        .ok()
-        .map(|ctx| ctx.recommended_batch_size())
-        .unwrap_or(1 << 18);
+    let default_batch =
+        erg_vanity_gpu::dispatch::recommended_batch_size(devices[0]).unwrap_or(1 << 18);
     let batch_size = req.batch_size.unwrap_or(default_batch).max(1);
     let cfg = VanityConfig {
         batch_size,
