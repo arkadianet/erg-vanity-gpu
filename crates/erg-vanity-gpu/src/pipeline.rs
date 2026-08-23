@@ -110,6 +110,13 @@ pub(crate) fn sort_patterns_longest_first(patterns: &[String]) -> (Vec<String>, 
 }
 
 fn local_size_for(batch: usize, recommended: usize) -> usize {
+    if let Ok(v) = std::env::var("ERG_LOCAL_SIZE") {
+        if let Ok(ls) = v.parse::<usize>() {
+            if ls >= 1 && batch.is_multiple_of(ls) {
+                return ls;
+            }
+        }
+    }
     let mut ls = recommended.min(batch).max(1);
     while !batch.is_multiple_of(ls) {
         ls /= 2;
@@ -125,6 +132,10 @@ fn kernel_work_group_limit(kernel: &Kernel, device: ocl::Device, fallback: usize
         Ok(KernelWorkGroupInfoResult::WorkGroupSize(n)) if n > 0 => n,
         _ => fallback,
     }
+}
+
+fn search_disabled() -> bool {
+    std::env::var("ERG_NO_SEARCH").is_ok_and(|v| v == "1")
 }
 
 /// GPU-accelerated vanity address search pipeline.
@@ -401,6 +412,9 @@ impl VanityPipeline {
     /// Enqueue the search stage: the index-parallel kernel pair when enabled,
     /// otherwise the loop-based `vanity_search` kernel.
     unsafe fn enqueue_search(&mut self) -> Result<(), GpuError> {
+        if search_disabled() {
+            return Ok(());
+        }
         if self.index_parallel {
             let parent_kernel = self.parent_kernel.as_mut().expect("index-parallel kernels");
             let index_kernel = self.index_kernel.as_mut().expect("index-parallel kernels");
