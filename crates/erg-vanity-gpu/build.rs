@@ -27,6 +27,8 @@ const VANITY_ORDER: &[&str] = &[
     "bip39",
     "bip32",
     "vanity",
+    // Benchmark kernels (used by --bench on both backends).
+    "bench",
 ];
 
 fn main() {

@@ -4,18 +4,19 @@
 //! launches go to the default (NULL) stream, matching the in-order OpenCL
 //! queue semantics the rest of the code assumes.
 
-use self::ffi::{CuDevice, CuDevicePtr, CuFunction, CuModule};
+use self::ffi::{CuDevice, CuDevicePtr, CuFunction, CuModule, CuStream};
 use crate::context::{DeviceInfo, GpuError};
 use std::ffi::{c_char, c_int, c_uint, c_void};
 
+pub mod bench;
 pub mod ffi;
 pub mod pipeline;
 
 pub use pipeline::CudaVanityPipeline;
 
-const CUDA_SUCCESS: i32 = 0;
+pub(crate) const CUDA_SUCCESS: i32 = 0;
 
-fn err(op: &str, code: i32) -> GpuError {
+pub(crate) fn err(op: &str, code: i32) -> GpuError {
     GpuError::Other(format!("CUDA {op} failed with error {code}"))
 }
 
@@ -23,11 +24,12 @@ macro_rules! check {
     ($lib:expr, $op:ident, $($args:expr),* $(,)?) => {{
         // SAFETY: symbols resolved from a live libcuda handle at init.
         let rc = unsafe { ($lib.$op)($($args),*) };
-        if rc != CUDA_SUCCESS {
-            return Err(err(stringify!($op), rc));
+        if rc != $crate::cuda::CUDA_SUCCESS {
+            return Err($crate::cuda::err(stringify!($op), rc));
         }
     }};
 }
+pub(crate) use check;
 
 pub struct CudaDevice {
     pub lib: ffi::LibCuda,
@@ -36,6 +38,23 @@ pub struct CudaDevice {
 }
 
 impl CudaDevice {
+    /// Enumerate CUDA devices without creating contexts.
+    pub fn enumerate() -> Result<Vec<DeviceInfo>, GpuError> {
+        let lib = unsafe { ffi::load_libcuda() }.map_err(GpuError::Other)?;
+        check!(lib, cuInit, 0u32);
+        let mut count: c_int = 0;
+        check!(lib, cuDeviceGetCount, &mut count);
+        let mut out = Vec::new();
+        for idx in 0..count {
+            let mut dev: CuDevice = 0;
+            if unsafe { (lib.cuDeviceGet)(&mut dev, idx) } != CUDA_SUCCESS {
+                continue;
+            }
+            out.push(Self::describe(&lib, dev, idx as usize));
+        }
+        Ok(out)
+    }
+
     fn attr(lib: &ffi::LibCuda, dev: CuDevice, which: c_uint) -> i32 {
         let mut v: c_int = 0;
         // SAFETY: valid device handle from cuDeviceGet.
@@ -170,6 +189,40 @@ impl CudaModule {
     }
 }
 
+/// Launch on an explicit stream. See `launch` for semantics.
+///
+/// # Safety
+/// Same requirements as `launch`.
+pub unsafe fn launch_on(
+    dev: &CudaDevice,
+    func: CuFunction,
+    global: usize,
+    local: usize,
+    stream: CuStream,
+    params: &mut [*mut c_void],
+) -> Result<(), GpuError> {
+    let lx =
+        c_uint::try_from(local.max(1)).map_err(|_| GpuError::Other("block too large".into()))?;
+    let blocks = global.div_ceil(local.max(1));
+    let gx = c_uint::try_from(blocks).map_err(|_| GpuError::Other("grid too large".into()))?;
+    check!(
+        dev.lib,
+        cuLaunchKernel,
+        func,
+        gx,
+        1u32,
+        1u32,
+        lx,
+        1u32,
+        1u32,
+        0usize,
+        stream,
+        params.as_mut_ptr(),
+        std::ptr::null_mut()
+    );
+    Ok(())
+}
+
 /// Launch on the default stream with OpenCL semantics: `global` is the TOTAL
 /// thread count and `local` the block size (`0` lets the driver choose).
 ///
@@ -197,7 +250,7 @@ pub unsafe fn launch(
         lx,
         1u32,
         1u32,
-        0u32,
+        0usize,
         std::ptr::null_mut::<c_void>(),
         params.as_mut_ptr(),
         std::ptr::null_mut()

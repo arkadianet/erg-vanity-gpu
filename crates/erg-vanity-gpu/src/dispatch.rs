@@ -5,7 +5,7 @@
 //!   - `cuda`: require the CUDA backend; error if unavailable.
 //!   - `auto`: CUDA when built-in and a driver is present, else OpenCL.
 
-use crate::context::GpuError;
+use crate::context::{DeviceInfo, GpuError};
 use crate::cuda::CudaVanityPipeline;
 use crate::pipeline::{VanityConfig, VanityPipeline, VanityResult};
 
@@ -13,6 +13,20 @@ use crate::pipeline::{VanityConfig, VanityPipeline, VanityResult};
 pub enum AnyPipeline {
     Ocl(VanityPipeline),
     Cuda(CudaVanityPipeline),
+}
+
+/// Enumerate devices of the active backend, respecting `ERG_BACKEND`.
+pub fn enumerate_devices() -> Result<Vec<DeviceInfo>, GpuError> {
+    match backend_pref() {
+        "cuda" => crate::cuda::CudaDevice::enumerate(),
+        _ => {
+            if crate::cuda::pipeline::CUDA_BUILT {
+                // auto: report OpenCL devices (the default path) but note
+                // CUDA availability separately in --list-devices.
+            }
+            crate::context::GpuContext::enumerate_devices()
+        }
+    }
 }
 
 fn backend_pref() -> &'static str {

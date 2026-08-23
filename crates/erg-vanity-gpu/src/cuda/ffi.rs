@@ -12,6 +12,7 @@ pub type CuModule = *mut c_void;
 pub type CuFunction = *mut c_void;
 pub type CuStream = *mut c_void;
 pub type CuDevicePtr = u64;
+pub type CuEvent = *mut c_void;
 
 // cuDeviceGetAttribute selectors
 pub const CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT: c_uint = 16;
@@ -35,6 +36,13 @@ pub struct LibCuda {
     pub cuMemFree_v2: unsafe extern "C" fn(CuDevicePtr) -> CuResult,
     pub cuMemcpyHtoD_v2: unsafe extern "C" fn(CuDevicePtr, *const c_void, usize) -> CuResult,
     pub cuMemcpyDtoH_v2: unsafe extern "C" fn(*mut c_void, CuDevicePtr, usize) -> CuResult,
+    pub cuStreamCreate: unsafe extern "C" fn(*mut CuStream, c_uint) -> CuResult,
+    pub cuStreamSynchronize: unsafe extern "C" fn(CuStream) -> CuResult,
+    pub cuStreamWaitEvent: unsafe extern "C" fn(CuStream, CuEvent, c_uint) -> CuResult,
+    pub cuEventCreate: unsafe extern "C" fn(*mut CuEvent, c_uint) -> CuResult,
+    pub cuEventRecord: unsafe extern "C" fn(CuEvent, CuStream) -> CuResult,
+    pub cuEventSynchronize: unsafe extern "C" fn(CuEvent) -> CuResult,
+    pub cuEventElapsedTime: unsafe extern "C" fn(*mut f32, CuEvent, CuEvent) -> CuResult,
     pub cuLaunchKernel: unsafe extern "C" fn(
         CuFunction,
         c_uint,
@@ -43,7 +51,7 @@ pub struct LibCuda {
         c_uint,
         c_uint,
         c_uint,
-        c_uint,
+        usize, // sharedMemBytes is size_t
         CuStream,
         *mut *mut c_void,
         *mut *mut c_void,
@@ -95,6 +103,13 @@ pub unsafe fn load_libcuda() -> Result<LibCuda, String> {
         cuMemFree_v2: sym!("cuMemFree_v2"),
         cuMemcpyHtoD_v2: sym!("cuMemcpyHtoD_v2"),
         cuMemcpyDtoH_v2: sym!("cuMemcpyDtoH_v2"),
+        cuStreamCreate: sym!("cuStreamCreate"),
+        cuStreamSynchronize: sym!("cuStreamSynchronize"),
+        cuStreamWaitEvent: sym!("cuStreamWaitEvent"),
+        cuEventCreate: sym!("cuEventCreate"),
+        cuEventRecord: sym!("cuEventRecord"),
+        cuEventSynchronize: sym!("cuEventSynchronize"),
+        cuEventElapsedTime: sym!("cuEventElapsedTime"),
         cuLaunchKernel: sym!("cuLaunchKernel"),
     })
 }
