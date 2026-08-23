@@ -4,7 +4,8 @@ use crate::verify::verify_hit_ergo_lib;
 use erg_vanity_address::Network;
 use erg_vanity_cpu::{search_counter_range, MatchType, Pattern};
 use erg_vanity_gpu::context::GpuContext;
-use erg_vanity_gpu::pipeline::{VanityConfig, VanityPipeline};
+use erg_vanity_gpu::dispatch::AnyPipeline;
+use erg_vanity_gpu::pipeline::VanityConfig;
 use rand::RngCore;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
@@ -468,7 +469,7 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
         let stop = Arc::clone(&stop);
         let total_checked = Arc::clone(&total_checked);
         let handle = thread::spawn(move || {
-            let mut pipeline = match VanityPipeline::new_with_device_and_salt(
+            let mut pipeline = match AnyPipeline::new_with_device_and_salt(
                 &patterns,
                 cfg.clone(),
                 device_index,

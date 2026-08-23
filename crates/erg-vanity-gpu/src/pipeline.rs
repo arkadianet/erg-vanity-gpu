@@ -53,6 +53,84 @@ pub(crate) fn sort_results_deterministically(results: &mut [VanityResult]) {
     });
 }
 
+/// CPU verification of GPU hits, shared by the OpenCL and CUDA pipelines.
+///
+/// Derivation failures are dropped (with a warning) so one bad hit cannot stop
+/// a multi-GPU run; output is sorted deterministically.
+pub(crate) fn verify_hits_shared(
+    hits: &[GpuHit],
+    patterns: &[String],
+    pattern_index_map: &[u32],
+    match_type: MatchType,
+    ignore_case: bool,
+) -> Result<Vec<VanityResult>, GpuError> {
+    use erg_vanity_address::encode_p2pk_mainnet;
+    use erg_vanity_bip::bip32::ExtendedPrivateKey;
+    use erg_vanity_bip::bip39::{entropy_to_mnemonic, mnemonic_to_seed};
+    use erg_vanity_bip::bip44::derive_ergo_key;
+    use erg_vanity_crypto::secp256k1::pubkey::PublicKey;
+    use erg_vanity_crypto::secp256k1::scalar::Scalar;
+
+    let mut results = Vec::new();
+    for hit in hits {
+        let verified = (|| -> Result<Option<VanityResult>, GpuError> {
+            let entropy = hit.entropy_bytes();
+
+            let mnemonic = entropy_to_mnemonic(&entropy)
+                .map_err(|e| GpuError::Other(format!("mnemonic error: {}", e)))?;
+            let seed = mnemonic_to_seed(&mnemonic, "");
+            let master = ExtendedPrivateKey::from_seed(&seed)
+                .map_err(|e| GpuError::Other(format!("bip32 error: {:?}", e)))?;
+            let ergo_key = derive_ergo_key(&master, 0, 0, hit.address_index)
+                .map_err(|e| GpuError::Other(format!("bip44 error: {:?}", e)))?;
+
+            let privkey = *ergo_key.private_key();
+            let scalar = Scalar::from_bytes(&privkey)
+                .ok_or_else(|| GpuError::Other("invalid scalar".to_string()))?;
+            let pubkey = PublicKey::from_private_key(&scalar)
+                .ok_or_else(|| GpuError::Other("invalid pubkey".to_string()))?;
+
+            let address = encode_p2pk_mainnet(pubkey.as_bytes());
+
+            let sorted_idx = hit.pattern_index as usize;
+            let original_idx = *pattern_index_map.get(sorted_idx).ok_or_else(|| {
+                GpuError::Other(format!("pattern_index {} out of range", sorted_idx))
+            })?;
+            let pattern = patterns.get(original_idx as usize).ok_or_else(|| {
+                GpuError::Other(format!(
+                    "original pattern_index {} out of range",
+                    original_idx
+                ))
+            })?;
+
+            let matcher = Pattern::new(pattern.clone(), match_type).ignore_case(ignore_case);
+            if matcher.matches(&address) {
+                Ok(Some(VanityResult {
+                    entropy,
+                    work_item_id: hit.work_item_id,
+                    address_index: hit.address_index,
+                    pattern_index: original_idx,
+                    address,
+                    mnemonic,
+                }))
+            } else {
+                eprintln!(
+                    "Warning: GPU hit did not verify on CPU (addr={}, pattern={}, index={}, icase={})",
+                    address, pattern, hit.address_index, ignore_case
+                );
+                Ok(None)
+            }
+        })();
+        match verified {
+            Ok(Some(v)) => results.push(v),
+            Ok(None) => {}
+            Err(e) => eprintln!("Warning: GPU hit failed CPU verify ({e}); dropping"),
+        }
+    }
+    sort_results_deterministically(&mut results);
+    Ok(results)
+}
+
 /// Prepare patterns for GPU upload.
 ///
 /// When `ignore_case` is true, returns lowercased patterns (GPU kernel expects pre-lowercased).
@@ -441,19 +519,14 @@ impl VanityPipeline {
         }
 
         let hits = self.buffers.read_hits(hit_count)?;
-
-        // Verify each hit on CPU
-        let mut results = Vec::new();
-        for hit in hits {
-            if let Some(result) = self.verify_hit(&hit)? {
-                results.push(result);
-            }
-        }
-
-        // Sort for stable output (GPU atomic_inc order is nondeterministic)
-        sort_results_deterministically(&mut results);
-
-        Ok(results)
+        // CPU verification + deterministic ordering happen in one shared place.
+        verify_hits_shared(
+            &hits,
+            &self.patterns,
+            &self.pattern_index_map,
+            self.match_type,
+            self.ignore_case,
+        )
     }
 
     /// Search until a match is found (blocking).
@@ -463,82 +536,6 @@ impl VanityPipeline {
             if let Some(result) = results.into_iter().next() {
                 return Ok(result);
             }
-        }
-    }
-
-    /// Verify a hit on CPU and return the result if valid.
-    ///
-    /// Derivation errors are dropped (not fatal) so one bad hit cannot stop
-    /// a multi-GPU run. OpenCL enqueue/read errors stay fatal at the caller.
-    fn verify_hit(&self, hit: &GpuHit) -> Result<Option<VanityResult>, GpuError> {
-        match self.try_verify_hit(hit) {
-            Ok(v) => Ok(v),
-            Err(e) => {
-                eprintln!("Warning: GPU hit failed CPU verify ({e}); dropping");
-                Ok(None)
-            }
-        }
-    }
-
-    fn try_verify_hit(&self, hit: &GpuHit) -> Result<Option<VanityResult>, GpuError> {
-        use erg_vanity_address::encode_p2pk_mainnet;
-        use erg_vanity_bip::bip32::ExtendedPrivateKey;
-        use erg_vanity_bip::bip39::{entropy_to_mnemonic, mnemonic_to_seed};
-        use erg_vanity_bip::bip44::derive_ergo_key;
-        use erg_vanity_crypto::secp256k1::pubkey::PublicKey;
-        use erg_vanity_crypto::secp256k1::scalar::Scalar;
-
-        let entropy = hit.entropy_bytes();
-
-        let mnemonic = entropy_to_mnemonic(&entropy)
-            .map_err(|e| GpuError::Other(format!("mnemonic error: {}", e)))?;
-
-        let seed = mnemonic_to_seed(&mnemonic, "");
-
-        let master = ExtendedPrivateKey::from_seed(&seed)
-            .map_err(|e| GpuError::Other(format!("bip32 error: {:?}", e)))?;
-
-        let ergo_key = derive_ergo_key(&master, 0, 0, hit.address_index)
-            .map_err(|e| GpuError::Other(format!("bip44 error: {:?}", e)))?;
-
-        let privkey = *ergo_key.private_key();
-        let scalar = Scalar::from_bytes(&privkey)
-            .ok_or_else(|| GpuError::Other("invalid scalar".to_string()))?;
-        let pubkey = PublicKey::from_private_key(&scalar)
-            .ok_or_else(|| GpuError::Other("invalid pubkey".to_string()))?;
-
-        let address = encode_p2pk_mainnet(pubkey.as_bytes());
-
-        let sorted_idx = hit.pattern_index as usize;
-        let original_idx = *self
-            .pattern_index_map
-            .get(sorted_idx)
-            .ok_or_else(|| GpuError::Other(format!("pattern_index {} out of range", sorted_idx)))?;
-        let pattern = self.patterns.get(original_idx as usize).ok_or_else(|| {
-            GpuError::Other(format!(
-                "original pattern_index {} out of range",
-                original_idx
-            ))
-        })?;
-
-        let matcher = Pattern::new(pattern.clone(), self.match_type).ignore_case(self.ignore_case);
-        let matches = matcher.matches(&address);
-
-        if matches {
-            Ok(Some(VanityResult {
-                entropy,
-                work_item_id: hit.work_item_id,
-                address_index: hit.address_index,
-                pattern_index: original_idx,
-                address,
-                mnemonic,
-            }))
-        } else {
-            eprintln!(
-                "Warning: GPU hit did not verify on CPU (addr={}, pattern={}, index={}, icase={})",
-                address, pattern, hit.address_index, self.ignore_case
-            );
-            Ok(None)
         }
     }
 }
