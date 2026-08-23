@@ -6,4 +6,5 @@ pub mod comb;
 pub mod context;
 pub mod kernel;
 pub mod pipeline;
+pub mod sha512_research;
 pub mod wordlist;
