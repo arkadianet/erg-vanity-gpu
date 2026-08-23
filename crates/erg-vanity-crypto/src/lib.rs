@@ -9,6 +9,8 @@ pub mod base58;
 pub mod blake2b;
 pub mod entropy;
 pub mod hmac;
+pub mod orbit_circuit;
+pub mod orbit_xor;
 pub mod pbkdf2;
 pub mod secp256k1;
 pub mod sha256;
