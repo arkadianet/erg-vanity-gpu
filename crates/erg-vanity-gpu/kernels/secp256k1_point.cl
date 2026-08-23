@@ -240,6 +240,43 @@ inline void pt_add_mixed(__private uint* r, __private const uint* p1, __private 
     fe_mul(r + 16, h, z1);
 }
 
+// Mixed addition for two known finite, nonzero points. The comb multiplier
+// handles zero table digits itself, so avoid repeating infinity checks here.
+inline void pt_add_mixed_nonzero(
+    __private uint* r, __private const uint* p1, __private const uint* p2
+) {
+    __private const uint* x1 = p1;
+    __private const uint* y1 = p1 + 8;
+    __private const uint* z1 = p1 + 16;
+    __private const uint* x2 = p2;
+    __private const uint* y2 = p2 + 8;
+    uint z1_2[8], z1_3[8], u2[8], s2[8];
+    uint h[8], rr[8], h2[8], h3[8], u1_h2[8], t1[8];
+    fe_sqr(z1_2, z1);
+    fe_mul(z1_3, z1_2, z1);
+    fe_mul(u2, x2, z1_2);
+    fe_mul(s2, y2, z1_3);
+    fe_sub(h, u2, x1);
+    fe_sub(rr, s2, y1);
+    if (fe_is_zero(h)) {
+        if (fe_is_zero(rr)) pt_double(r, p1);
+        else pt_infinity(r);
+        return;
+    }
+    fe_sqr(h2, h);
+    fe_mul(h3, h2, h);
+    fe_mul(u1_h2, x1, h2);
+    fe_sqr(t1, rr);
+    fe_sub(t1, t1, h3);
+    fe_sub(t1, t1, u1_h2);
+    fe_sub(r, t1, u1_h2);
+    fe_sub(t1, u1_h2, r);
+    fe_mul(t1, rr, t1);
+    fe_mul(h3, y1, h3);
+    fe_sub(r + 8, t1, h3);
+    fe_mul(r + 16, h, z1);
+}
+
 // Scalar multiplication: r = k * p
 // Uses double-and-add algorithm, processing from LSB to MSB.
 inline void pt_mul(__private uint* r, __private const uint* k, __private const uint* p) {
@@ -272,16 +309,34 @@ inline void pt_mul(__private uint* r, __private const uint* k, __private const u
     pt_copy(r, result);
 }
 
-// 8-bit comb: COMB[w][b] = b · (2^{8*(31-w)} G), affine XY (16 uints).
-// Window 0 = MSB of sc_to_bytes. b=0 is infinity (not stored).
+// Fixed-base comb: COMB[w][b] = b · (2^{COMB_BITS*(COMB_WINDOWS-1-w)} G),
+// affine XY (16 uints). Window 0 holds the top COMB_TOP_BITS bits of the
+// scalar; windows 1.. hold COMB_BITS each. b=0 is infinity (not stored).
+//
+// COMB_BITS must match gen_g_table.rs, which generates comb_table.bin, and
+// the constants in comb.rs. See gen_g_table.rs for the size/adds tradeoff.
+#define COMB_BITS 11u
+#define COMB_WINDOWS ((256u + COMB_BITS - 1u) / COMB_BITS)
+#define COMB_ENTRIES (1u << COMB_BITS)
+#define COMB_TOP_BITS (256u - (COMB_WINDOWS - 1u) * COMB_BITS)
 #define COMB_XY_LIMBS 16u
-#define COMB_WINDOW_STRIDE (256u * 16u)
+#define COMB_WINDOW_STRIDE (COMB_ENTRIES * COMB_XY_LIMBS)
+
+// Extract the digit for window w (w >= 1) from MSB-first k_bytes.
+inline uint comb_digit(__private const uchar* k_bytes, uint w) {
+    uint start = COMB_TOP_BITS + (w - 1u) * COMB_BITS;
+    uint digit = 0u;
+    for (uint j = 0u; j < COMB_BITS; j++)
+        digit = (digit << 1u) |
+            ((k_bytes[(start + j) / 8u] >> (7u - (start + j) % 8u)) & 1u);
+    return digit;
+}
 
 inline void comb_select(
     __private uint* p,
     __global const uint* comb,
     uint window,
-    uchar b
+    uint b
 ) {
     if (b == 0) {
         pt_infinity(p);
@@ -292,7 +347,8 @@ inline void comb_select(
     fe_one(p + 16);
 }
 
-// k·G = T_0[k0] + … + T_31[k31]: 31 mixed adds, 0 doubles.
+// k·G = T_0[k0] + … + T_{COMB_WINDOWS-1}[k_last]:
+// <= COMB_WINDOWS-1 mixed adds, 0 doubles.
 inline void pt_mul_generator_comb(
     __private uint* r,
     __private const uint* k,
@@ -305,10 +361,23 @@ inline void pt_mul_generator_comb(
     __private uint* acc = buf0;
     __private uint* tmp = buf1;
 
-    comb_select(acc, comb, 0u, k_bytes[0]);
-    for (int w = 1; w < 32; w++) {
-        comb_select(selected, comb, (uint)w, k_bytes[w]);
-        pt_add_mixed(tmp, acc, selected);
+    uint first = 0u;
+    uint first_digit = (uint)k_bytes[0] >> (8u - COMB_TOP_BITS);
+    while (first < COMB_WINDOWS && first_digit == 0u) {
+        first++;
+        if (first == COMB_WINDOWS) break;
+        first_digit = comb_digit(k_bytes, first);
+    }
+    if (first == COMB_WINDOWS) {
+        pt_infinity(r);
+        return;
+    }
+    comb_select(acc, comb, first, first_digit);
+    for (uint w = first + 1u; w < COMB_WINDOWS; w++) {
+        uint digit = comb_digit(k_bytes, w);
+        if (digit == 0u) continue;
+        comb_select(selected, comb, w, digit);
+        pt_add_mixed_nonzero(tmp, acc, selected);
         { __private uint* swap = acc; acc = tmp; tmp = swap; }
     }
 
@@ -389,8 +458,21 @@ inline int pt_to_affine(__private uint* x_out, __private uint* y_out, __private 
     return 0;
 }
 
+// Compressed public key (33 bytes) from affine coordinates.
+// Format: 0x02 if y is even, 0x03 if y is odd, followed by 32-byte x.
+inline void affine_to_compressed_pubkey(
+    __private uchar* pubkey,
+    __private const uint* x,
+    __private const uint* y
+) {
+    // Check if y is odd (look at least significant bit of least significant limb)
+    pubkey[0] = (y[0] & 1u) ? (uchar)0x03 : (uchar)0x02;
+
+    // Write x in big-endian
+    fe_to_bytes(pubkey + 1, x);
+}
+
 // Get compressed public key (33 bytes) from point
-// Format: 0x02 if y is even, 0x03 if y is odd, followed by 32-byte x
 // Returns 0 on success, 1 if point is at infinity
 inline int pt_to_compressed_pubkey(__private uchar* pubkey, __private const uint* p) {
     uint x[8], y[8];
@@ -398,13 +480,76 @@ inline int pt_to_compressed_pubkey(__private uchar* pubkey, __private const uint
         return 1;
     }
 
-    // Check if y is odd (look at least significant bit of least significant limb)
-    pubkey[0] = (y[0] & 1u) ? (uchar)0x03 : (uchar)0x02;
-
-    // Write x in big-endian
-    fe_to_bytes(pubkey + 1, x);
-
+    affine_to_compressed_pubkey(pubkey, x, y);
     return 0;
+}
+
+// Montgomery batch inversion: convert n Jacobian points to affine using ONE
+// modular inversion instead of one per point.
+//
+// fe_inv is ~255 squarings + 15 multiplies, which costs about as much as the
+// whole comb ladder that produced the point. Batching n points costs
+// 1 inversion + 3(n-1) multiplies, so the per-point inversion share falls
+// as 1/n.
+//
+// pts:   n points, 24 uints each (X, Y, Z in Jacobian form)
+// ok:    per-point validity, updated in place. Points at infinity are cleared
+//        here so they never enter the product chain - a zero Z would collapse
+//        it and silently corrupt every other point in the batch.
+// xs/ys: n affine coordinate pairs, 8 uints each. Only entries whose ok[] is
+//        still set are written.
+//
+// n must not exceed PT_BATCH_MAX.
+#define PT_BATCH_MAX 16u
+
+inline void pt_batch_to_affine(
+    __private uint* xs,
+    __private uint* ys,
+    __private uchar* ok,
+    __private const uint* pts,
+    uint n
+) {
+    uint prefix[PT_BATCH_MAX * 8u];
+    uint acc[8], t[8];
+    uint valid = 0u;
+
+    // Forward pass: prefix[i] = product of every valid Z strictly before i.
+    fe_one(acc);
+    for (uint i = 0u; i < n; i++) {
+        if (!ok[i]) continue;
+        __private const uint* pz = pts + i * 24u + 16u;
+        if (fe_is_zero(pz)) {
+            ok[i] = 0u;
+            continue;
+        }
+        for (uint j = 0u; j < 8u; j++) prefix[i * 8u + j] = acc[j];
+        fe_mul(t, acc, pz);
+        fe_copy(acc, t);
+        valid++;
+    }
+    if (valid == 0u) return;
+
+    // acc is now the product of every valid Z.
+    uint inv[8];
+    fe_inv(inv, acc);
+
+    // Backward pass: peel one Z off the running inverse per point.
+    for (int i = (int)n - 1; i >= 0; i--) {
+        if (!ok[i]) continue;
+        __private const uint* px = pts + (uint)i * 24u;
+        __private const uint* py = px + 8u;
+        __private const uint* pz = px + 16u;
+
+        uint zinv[8], zinv2[8], zinv3[8];
+        fe_mul(zinv, inv, prefix + (uint)i * 8u);  // 1 / Z_i
+        fe_mul(t, inv, pz);                        // drop Z_i from the chain
+        fe_copy(inv, t);
+
+        fe_sqr(zinv2, zinv);
+        fe_mul(zinv3, zinv2, zinv);
+        fe_mul(xs + (uint)i * 8u, px, zinv2);
+        fe_mul(ys + (uint)i * 8u, py, zinv3);
+    }
 }
 
 // Private key (32 bytes) → compressed pubkey (33 bytes).

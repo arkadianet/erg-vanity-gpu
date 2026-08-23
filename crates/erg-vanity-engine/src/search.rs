@@ -13,6 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 pub const MAX_PATTERN_LEN: usize = 32;
+pub const MAX_NUM_INDICES: u32 = 500;
 pub use erg_vanity_gpu::buffers::{MAX_PATTERNS, MAX_PATTERN_DATA};
 
 const BASE58: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -96,15 +97,7 @@ impl SearchRequest {
         if self.max_results == 0 {
             return Err("--max-results must be at least 1".into());
         }
-        if self.num_indices == 0 {
-            return Err("--index must be at least 1".into());
-        }
-        if self.num_indices > 100 {
-            return Err(format!(
-                "--index {} exceeds maximum of 100",
-                self.num_indices
-            ));
-        }
+        validate_num_indices(self.num_indices)?;
         if let Some(0) = self.batch_size {
             return Err("--batch-size must be at least 1".into());
         }
@@ -113,6 +106,95 @@ impl SearchRequest {
         }
         Ok(())
     }
+}
+
+/// Validate the BIP44 address-index count (1..=MAX_NUM_INDICES).
+/// Shared by search requests and pre-estimate CLI validation.
+pub fn validate_num_indices(num_indices: u32) -> Result<(), String> {
+    if num_indices == 0 {
+        return Err("--index must be at least 1".into());
+    }
+    if num_indices > MAX_NUM_INDICES {
+        return Err(format!(
+            "--index {} exceeds maximum of {}",
+            num_indices, MAX_NUM_INDICES
+        ));
+    }
+    Ok(())
+}
+
+/// Every mainnet P2PK address encodes to exactly this many Base58 characters.
+///
+/// The address is always 38 bytes (`01 ‖ 02|03 ‖ X(32) ‖ checksum(4)`), and the
+/// fixed `01` leading byte pins the encoded length, so there is no
+/// leading-zero-padding case to consider.
+const ADDRESS_CHARS: usize = 51;
+
+/// Widest possible bounds on a mainnet P2PK address, as Base58 strings.
+///
+/// Only the first two bytes of the 38 are fixed (`01`, then `02` or `03` for
+/// the compressed-key parity). X is bounded by the secp256k1 field prime and
+/// the 4 checksum bytes are unconstrained, so every real address lies in
+/// `[01 02 00…00 00000000, 01 03 (p-1) ffffffff]`.
+///
+/// These are bounds, not achieved addresses: no key produces either string.
+/// That direction is deliberate - the interval is a superset of the reachable
+/// set, so a prefix it rejects is definitely unreachable, while a prefix it
+/// accepts may still be unreachable in its trailing characters. Rejecting a
+/// prefix a user could actually have found would be far worse than missing one.
+///
+/// [`address_bounds_bracket_every_p2pk_address`] rederives both from the byte
+/// layout.
+const LOWEST_ADDRESS: &str = "9eX4WpoErmVRnevxtZ8o5jgoGRtGigQv1uGmweUHU4j4KSg7JRm";
+const HIGHEST_ADDRESS: &str = "9iQYsHhJZcqt4J6NhiNnzNtM6f7i266fbBQzRwr4iZDbqp3Tape";
+
+/// Can any mainnet P2PK address start with `prefix`?
+///
+/// The Base58 alphabet is in ascending ASCII order, so for two strings of equal
+/// length lexicographic order matches numeric order. Padding `prefix` with the
+/// smallest and largest Base58 characters therefore gives the exact interval of
+/// addresses starting with it, and the prefix is reachable precisely when that
+/// interval overlaps `[LOWEST_ADDRESS, HIGHEST_ADDRESS]`.
+pub(crate) fn prefix_is_reachable(prefix: &str) -> bool {
+    if prefix.len() > ADDRESS_CHARS {
+        return false;
+    }
+    let pad = ADDRESS_CHARS - prefix.len();
+    let smallest: String = prefix
+        .chars()
+        .chain(std::iter::repeat_n('1', pad))
+        .collect();
+    let largest: String = prefix
+        .chars()
+        .chain(std::iter::repeat_n('z', pad))
+        .collect();
+    largest.as_str() >= LOWEST_ADDRESS && smallest.as_str() <= HIGHEST_ADDRESS
+}
+
+/// Explain why `pattern` can never occur, naming the characters that could have
+/// followed the part of it that is still reachable.
+pub(crate) fn unreachable_reason(pattern: &str) -> String {
+    let chars: Vec<char> = pattern.chars().collect();
+    let mut reachable_len = 0;
+    while reachable_len < chars.len() {
+        let candidate: String = chars[..=reachable_len].iter().collect();
+        if !prefix_is_reachable(&candidate) {
+            break;
+        }
+        reachable_len += 1;
+    }
+    let stem: String = chars[..reachable_len].iter().collect();
+    let allowed: String = BASE58
+        .chars()
+        .filter(|c| {
+            let mut candidate = stem.clone();
+            candidate.push(*c);
+            prefix_is_reachable(&candidate)
+        })
+        .collect();
+    format!(
+        "no mainnet address can start with '{pattern}': after '{stem}' only [{allowed}] can follow"
+    )
 }
 
 /// Validate one pattern. Prefix mode requires a full-address `9e`–`9i` start.
@@ -160,6 +242,17 @@ pub fn validate_pattern(
                 "invalid pattern '{pattern}': mainnet P2PK addresses start with 9e/9f/9g/9h/9i"
             ));
         }
+    }
+    // The 9e-9i rule above is only the first two characters of a constraint
+    // that runs deeper: 64 of the 290 three-character prefixes it accepts can
+    // never occur either. Reject those too rather than search for them forever.
+    //
+    // Exact-case prefixes denote a single interval of addresses, so this test
+    // is decisive. Under --ignore-case a pattern stands for every case variant
+    // at once and rejecting it would require all of their intervals to miss, so
+    // that path keeps the coarser check.
+    if !ignore_case && !prefix_is_reachable(pattern) {
+        return Err(unreachable_reason(pattern));
     }
     Ok(())
 }
@@ -537,6 +630,77 @@ mod tests {
     #[test]
     fn suffix_allows_non_prefix() {
         assert!(validate_pattern("cafe", MatchType::Suffix, false).is_ok());
+    }
+
+    /// Rederive the address bounds from the byte layout so the constants cannot
+    /// drift from the format they describe.
+    #[test]
+    fn address_bounds_bracket_every_p2pk_address() {
+        // 38 bytes: 01 ‖ 02|03 ‖ X(32) ‖ checksum(4).
+        let mut lowest = [0u8; 38];
+        lowest[0] = 0x01;
+        lowest[1] = 0x02;
+        // X = 0 and checksum = 0 are already in place.
+
+        let mut highest = [0xffu8; 38];
+        highest[0] = 0x01;
+        highest[1] = 0x03;
+        // X = p - 1 for the secp256k1 field prime p = 2^256 - 2^32 - 977,
+        // whose low eight bytes are ff ff ff fe ff ff fc 2f. X starts at byte 2.
+        highest[2 + 27] = 0xfe;
+        highest[2 + 30] = 0xfc;
+        highest[2 + 31] = 0x2e;
+        // The 4 checksum bytes are unconstrained, so they stay 0xff.
+
+        assert_eq!(bs58::encode(lowest).into_string(), LOWEST_ADDRESS);
+        assert_eq!(bs58::encode(highest).into_string(), HIGHEST_ADDRESS);
+        assert_eq!(LOWEST_ADDRESS.len(), ADDRESS_CHARS);
+        assert_eq!(HIGHEST_ADDRESS.len(), ADDRESS_CHARS);
+        assert!(LOWEST_ADDRESS < HIGHEST_ADDRESS);
+    }
+
+    #[test]
+    fn known_prefixes_agree_with_the_address_window() {
+        for p in ["9e", "9err", "9ergo", "9fun", "9iQ", "9eX", "9eX4"] {
+            assert!(prefix_is_reachable(p), "{p} should be reachable");
+        }
+        // After 9e only XYZa-z can follow, after 9i only 1-9A-Q, and 9eX sits on
+        // the low boundary so its next character cannot go below '4'.
+        for p in ["9eL", "9eR", "9iZ", "9is", "9eX3"] {
+            assert!(!prefix_is_reachable(p), "{p} should be unreachable");
+        }
+    }
+
+    #[test]
+    fn sixty_four_three_char_prefixes_are_unreachable() {
+        let mut total = 0;
+        let mut unreachable = 0;
+        for second in VALID_SECOND {
+            for third in BASE58.chars() {
+                total += 1;
+                if !prefix_is_reachable(&format!("9{second}{third}")) {
+                    unreachable += 1;
+                }
+            }
+        }
+        assert_eq!(total, 290, "prefixes passing the 9e-9i check");
+        assert_eq!(unreachable, 64, "of those, ones no address can have");
+    }
+
+    #[test]
+    fn unreachable_prefix_is_rejected_with_the_allowed_characters() {
+        let err = validate_pattern("9eL", MatchType::Prefix, false).unwrap_err();
+        assert!(err.contains("9eL"), "{err}");
+        assert!(err.contains("after '9e'"), "{err}");
+        assert!(err.contains("[XYZabcdefghijkmnopqrstuvwxyz]"), "{err}");
+    }
+
+    #[test]
+    fn ignore_case_keeps_the_coarser_check() {
+        // Case-insensitive patterns stand for every case variant at once, so the
+        // single-interval test does not apply and must not reject them.
+        assert!(validate_pattern("9eL", MatchType::Prefix, true).is_ok());
+        assert!(validate_pattern("9eL", MatchType::Prefix, false).is_err());
     }
 
     #[test]

@@ -124,6 +124,44 @@ inline int bip32_derive_normal_from_pub(
     __private uchar* child_chain_code
 );
 
+// Normal CKD with a caller-owned chain-code HMAC context. The chain code and
+// parent public key are constant across all address indices for one seed, so
+// caching the HMAC ipad/opad midstates removes two SHA-512 compressions per
+// index.
+inline int bip32_derive_normal_from_pub_ctx(
+    __private const uchar* parent_key,
+    __private const uchar* parent_pub,
+    uint index,
+    __private uchar* child_key,
+    __private uchar* child_chain_code,
+    __private HmacSha512Ctx* ctx
+) {
+    uint parent_limbs[8];
+    sc_from_bytes(parent_limbs, parent_key);
+
+    uchar data[37];
+    for (int i = 0; i < 33; i++) data[i] = parent_pub[i];
+    data[33] = (uchar)(index >> 24);
+    data[34] = (uchar)(index >> 16);
+    data[35] = (uchar)(index >> 8);
+    data[36] = (uchar)(index);
+
+    uchar hmac_out[64];
+    hmac_sha512(ctx, data, 37u, hmac_out);
+
+    uint il_limbs[8];
+    sc_from_bytes(il_limbs, hmac_out);
+    if (sc_is_zero(il_limbs) || sc_gte_n(il_limbs)) return 1;
+
+    uint child_limbs[8];
+    sc_add(child_limbs, il_limbs, parent_limbs);
+    if (sc_is_zero(child_limbs)) return 1;
+
+    sc_to_bytes(child_key, child_limbs);
+    for (int i = 0; i < 32; i++) child_chain_code[i] = hmac_out[32 + i];
+    return 0;
+}
+
 // Normal (non-hardened) child derivation.
 // Data = compressed_pubkey || index (37 bytes)
 // Returns 0 on success, 1 if derived key is invalid
@@ -187,49 +225,11 @@ inline int bip32_derive_normal_from_pub(
     __private uchar* child_key,
     __private uchar* child_chain_code
 ) {
-    uint parent_limbs[8];
-    sc_from_bytes(parent_limbs, parent_key);
-
-    // Build data: pubkey || index
-    uchar data[37];
-    for (int i = 0; i < 33; i++) {
-        data[i] = parent_pub[i];
-    }
-    data[33] = (uchar)(index >> 24);
-    data[34] = (uchar)(index >> 16);
-    data[35] = (uchar)(index >> 8);
-    data[36] = (uchar)(index);
-
-    // HMAC-SHA512(chain_code, data)
     HmacSha512Ctx ctx;
     hmac_sha512_init(&ctx, parent_chain_code, 32u);
-
-    uchar hmac_out[64];
-    hmac_sha512(&ctx, data, 37u, hmac_out);
-
-    // Parse IL as scalar
-    uint il_limbs[8];
-    sc_from_bytes(il_limbs, hmac_out);
-
-    if (sc_is_zero(il_limbs) || sc_gte_n(il_limbs)) {
-        return 1;
-    }
-
-    // Child key = IL + parent_key (mod n)
-    uint child_limbs[8];
-    sc_add(child_limbs, il_limbs, parent_limbs);
-
-    if (sc_is_zero(child_limbs)) {
-        return 1;
-    }
-
-    sc_to_bytes(child_key, child_limbs);
-
-    for (int i = 0; i < 32; i++) {
-        child_chain_code[i] = hmac_out[32 + i];
-    }
-
-    return 0;
+    return bip32_derive_normal_from_pub_ctx(
+        parent_key, parent_pub, index, child_key, child_chain_code, &ctx
+    );
 }
 
 // Shared prefix of the three external-chain variants: master + m/44'/429'/0'.

@@ -22,7 +22,7 @@ cargo build --release -p erg-vanity-cli
 
 Run `erg-vanity` / `erg-vanity.exe` with no arguments for the GUI. Use `--no-gui` to stay in the terminal.
 
-- Prefix patterns must start `9e`–`9i` (Ergo mainnet P2PK)
+- Prefix patterns must start `9e`–`9i` (Ergo mainnet P2PK), and the third character is constrained too — [some valid-looking prefixes are impossible](#why-some-valid-looking-prefixes-are-impossible)
 - Prefix uses the GPU when OpenCL is available; **suffix and contains are CPU-only**
 - Devices: `auto` / `0` / `all` / `cpu`
 - BIP44 slots default **1**. More slots = more addr/s on the same seeds
@@ -30,7 +30,7 @@ Run `erg-vanity` / `erg-vanity.exe` with no arguments for the GUI. Use `--no-gui
 
 ![erg-vanity GUI during a prefix search](docs/images/gui-search.png)
 
-*Live ~14.5M addr/s with BIP44 slots set to 100 on an RTX 3080 Ti. That is not the `--index 1` seed rate (~600k seeds/s on the same card).*
+*Screenshot from v0.2.0: ~14.5M addr/s with BIP44 slots set to 100 on an RTX 3080 Ti. That is not the `--index 1` seed rate (~600k seeds/s on the same card). v0.3.0 is considerably faster at high slot counts — see [Performance](#performance).*
 
 ## Features
 
@@ -40,6 +40,7 @@ Run `erg-vanity` / `erg-vanity.exe` with no arguments for the GUI. Use `--no-gui
 - `--estimate` before a long search
 - Multi-GPU (`--devices 0,1` or `all`)
 - Multiple patterns (up to 64; longest prefix wins)
+- Unreachable prefixes rejected up front instead of searched forever
 - BIP44 path `m/44'/429'/0'/0/{address_index}` (default `--index 1` derives only `/0`)
 
 ## Install
@@ -84,7 +85,7 @@ PowerShell chains commands with `;`, not `&&`.
 ./target/release/erg-vanity
 ```
 
-`--index` is a count, not a path index. Default **1** derives only `m/44'/429'/0'/0/0`. `--index N` (1–100) derives address indices `0..N-1` on the same seed. Do not raise the default.
+`--index` is a count, not a path index. Default **1** derives only `m/44'/429'/0'/0/0`. `--index N` (1–500) derives address indices `0..N-1` on the same seed. Do not raise the default.
 
 ### Devices
 
@@ -107,7 +108,7 @@ Default `--devices` is `auto` (GPU if present, else CPU).
 | `--contains` | off | Match anywhere (CPU) |
 | `-i, --ignore-case` | off | Case-insensitive |
 | `-n, --max-results <N>` | `1` | Stop after N matches |
-| `--index <N>` | `1` | Address indices `0..N-1` per seed (1–100) |
+| `--index <N>` | `1` | Address indices `0..N-1` per seed (1–500) |
 | `--devices <list>` | `auto` | `auto`, `0,1`, `all`, or `cpu` |
 | `--batch-size <N>` | device default | Search batch size |
 | `--estimate` | off | Print difficulty and exit |
@@ -129,14 +130,53 @@ Prefix (GPU) patterns must look like a mainnet P2PK start:
 
 - First character `9`
 - Second character `e`, `f`, `g`, `h`, or `i` (uppercase allowed with `-i`)
+- Third character depends on the second (see below)
 - Base58 only (no `0`, `O`, `I`, `l`)
 - Max 32 characters per pattern, 64 patterns, 1024 bytes total
 
 Valid: `9e`, `9err`, `9ergo`, `9fUN`, `9heLLo`
 
-Invalid prefix: `9a` (second char), `9eO` (Base58), `8err` (first char)
+Invalid prefix: `9a` (second char), `9eO` (Base58), `8err` (first char),
+`9eL` (unreachable third character)
 
 Suffix / contains skip the `9e`–`9i` prefix rule.
+
+#### Why some valid-looking prefixes are impossible
+
+Every mainnet P2PK address is the same 38 bytes — `01`, then `02` or `03` for
+the key parity, then a 32-byte X coordinate below the secp256k1 field prime,
+then a 4-byte checksum. All of them encode to exactly 51 Base58 characters, so
+the whole address space is one contiguous interval:
+
+```text
+lowest  9eX4WpoErmVRnevxtZ8o5jgoGRtGigQv1uGmweUHU4j4KSg7JRm
+highest 9iQYsHhJZcqt4J6NhiNnzNtM6f7i266fbBQzRwr4iZDbqp3Tape
+```
+
+A prefix is reachable only if some address in that interval starts with it,
+which constrains more than the first two characters:
+
+| Position | Constraint |
+|---|---|
+| 1 | always `9` |
+| 2 | `e` `f` `g` `h` `i` |
+| 3 | after `9e`: `X`–`Z`, `a`–`z` (28 of 58) · after `9f`/`9g`/`9h`: all 58 · after `9i`: `1`–`9`, `A`–`Q` (24 of 58) |
+| 4 | only at the edge: after `9eX` it must be `4` or later |
+| 5+ | unconstrained |
+
+So 64 of the 290 three-character prefixes that pass the `9e`–`9i` check can
+never occur — `9eL`, `9eR`, `9iZ`, `9is` and friends. Exact-case prefix patterns
+are now rejected with the characters that could have followed instead of
+searching forever:
+
+```console
+$ erg-vanity -p 9eL
+Error: no mainnet address can start with '9eL': after '9e' only [XYZabcdefghijkmnopqrstuvwxyz] can follow
+```
+
+`--estimate` reports the same patterns as impossible. Within the reachable
+region the X coordinate is uniform, so every reachable prefix still costs the
+usual 1/58 per character.
 
 ## Output
 
@@ -156,32 +196,76 @@ Progress goes to stderr: `Checked: N (rate addr/s) [found/target]`.
 
 ## Performance
 
-Measured **RTX 3080 Ti**, 19 Aug 2026, default `--index 1`, after comb *k*·G and batched SHA-512 W:
+Measured **RTX 3090**, 23 Aug 2026, 60s runs at `--batch-size 262144`, after
+batched modular inversion and the 11-bit comb:
 
-| Mode | Result |
-|------|--------|
-| Live search | ~600k seeds/s (measured ~590–610k; earlier ~330k → ~368k → ~455k) |
-| Isolated PBKDF2 | ~1600 ns/seed (~56–64% of isolated time) |
-| Isolated BIP32 | ~628 ns/addr |
-| Isolated secp256k1 | ~285 ns/addr |
+| `--index` | addr/s | seeds/s |
+|---|---:|---:|
+| 1 | 563,285 | 563,285 |
+| 20 | 8,985,302 | 449,265 |
+| 100 | 24,184,619 | 241,846 |
+| 250 | 32,659,136 | 130,637 |
+| 500 | 36,891,126 | 73,782 |
 
-`--bench` times isolated kernels (OpenCL event timestamps). Isolated PBKDF2 share is **not** ~85% and **not** ~172 µs/seed — those figures are stale.
+Those points fit one line to within a percent:
+
+```text
+time per seed = 1780 ns + 23.5 ns × index
+```
+
+The fixed 1780 ns is PBKDF2 (2048 HMAC-SHA512 iterations, unavoidable per seed);
+the 23.5 ns is everything charged per address. That is the whole shape of the
+program: at `--index 1` PBKDF2 is 99% of the work, at `--index 500` it is 13.1%.
+
+`--bench` times **isolated** kernels with OpenCL event timestamps, and its
+secp256k1 figure (~42 ns/addr) no longer matches the live path, which shares one
+modular inversion across a batch of 16 addresses. Live marginal cost is the
+23.5 ns above. Use `--bench` to compare kernels against each other, not to
+predict live throughput.
 
 ```bash
 ./target/release/erg-vanity --bench
 ./target/release/erg-vanity --bench --bench-validate
 ```
 
-Expected wait for a **single** prefix on a 3080 Ti at ~600k seeds/s (`5 × 58^(n−2)` combinations, 1.2× `--estimate` factor). Pre-search GUI/CLI times are a hardware guess; live ETA uses the measured addr/s.
+Expected wait for a **single** prefix at `--index 1` (`5 × 58^(n−2)`
+combinations, 1.2× `--estimate` factor). Pre-search GUI/CLI times are a hardware
+guess; live ETA uses the measured addr/s.
 
 | Pattern | Combinations | Expected time |
 |---------|--------------|---------------|
 | 4 chars (`9err`) | ~17K | < 1 second |
 | 5 chars (`9ergo`) | ~976K | ~2 seconds |
-| 6 chars (`9ergoo`) | ~57M | ~1.9 minutes |
-| 7 chars | ~3.3B | ~1.8 hours |
+| 6 chars (`9ergoo`) | ~57M | ~2 minutes |
+| 7 chars | ~3.3B | ~1.9 hours |
 
-Rates vary by GPU, driver, and pattern. Raising BIP44 slots multiplies **addr/s**, not seeds/s. RTX 4090 is higher; we have not published a current measurement.
+Rates vary by GPU, driver, and pattern.
+
+### Choosing `--index`
+
+`--index N` derives N addresses per seed, so PBKDF2 is paid once for N chances
+instead of one. That is why addr/s climbs so steeply — but the returns flatten,
+and the address you find no longer sits at slot 0:
+
+| `--index` | addr/s | vs `--index 1` | Wallet visibility |
+|---|---:|---:|---|
+| 1 | 563,285 | 1.0× | always shown |
+| 20 | 8,985,302 | 16.0× | within the usual BIP44 gap limit |
+| 100 | 24,184,619 | 42.9× | needs manual scanning |
+| 500 | 36,891,126 | 65.5× | needs manual scanning |
+
+**The default is 1, and raising it is a real tradeoff, not free speed.** Most
+wallets scan forward only about 20 unused addresses (the BIP44 gap limit) before
+stopping, so a hit at slot 431 will not appear on restore unless you tell the
+wallet to look that far. `--index 20` is the largest value that stays inside
+that convention, and it already buys ~16×.
+
+Past 500 the curve is nearly flat: the model puts `--index 1000` at ~39.5M
+addr/s (+7.0%) and the limit as index → ∞ at ~42.6M (+15.3%), because PBKDF2 is
+all that is left to amortize. The cap stays at 500.
+
+Every hit prints its full derivation path, so you always know which slot to look
+in.
 
 ## How it works
 

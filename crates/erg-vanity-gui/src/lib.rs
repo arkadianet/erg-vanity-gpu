@@ -289,6 +289,8 @@ impl VanityApp {
             if est.has_invalid_chars {
                 let bad: String = est.invalid_chars.iter().collect();
                 lines.push(format!("{p}: impossible (not Base58: {bad})"));
+            } else if let Some(reason) = &est.unreachable_reason {
+                lines.push(format!("{p}: impossible ({reason})"));
             } else {
                 let left = if self.running {
                     (est.attempts_needed - self.checked as f64).max(0.0)
@@ -714,7 +716,7 @@ impl eframe::App for VanityApp {
                     ui.add_space(8.0);
                     ui.label(RichText::new("INDICES / SEED").color(AMBER).size(11.0).strong());
                     ui.add(
-                        egui::Slider::new(&mut self.num_indices, 1..=100)
+                        egui::Slider::new(&mut self.num_indices, 1..=500)
                             .text("BIP44 slots")
                             .integer(),
                     )

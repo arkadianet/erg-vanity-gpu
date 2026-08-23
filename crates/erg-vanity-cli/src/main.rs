@@ -2,7 +2,7 @@ use clap::Parser;
 use erg_vanity_cpu::MatchType;
 use erg_vanity_engine::{
     estimate_pattern, format_rate, format_time, guess_rate_for, list_gpu_device_hints,
-    list_gpu_devices, run_search, Backend, SearchEvent, SearchRequest,
+    list_gpu_devices, run_search, validate_num_indices, Backend, SearchEvent, SearchRequest,
 };
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -206,6 +206,8 @@ fn run_estimate(
                 "Impossible: invalid Base58 characters: {}",
                 est.invalid_chars.iter().collect::<String>()
             );
+        } else if let Some(reason) = &est.unreachable_reason {
+            println!("Impossible: {reason}");
         } else {
             println!(
                 "  ~{} attempts · {} ({})",
@@ -219,6 +221,13 @@ fn run_estimate(
 
 fn main() {
     let args = Args::parse();
+
+    // Validate --index before any mode-specific early return (bench, estimate,
+    // GUI) so invalid counts are rejected consistently with live search.
+    if let Err(e) = validate_num_indices(args.num_indices) {
+        eprintln!("Error: {e}");
+        std::process::exit(2);
+    }
 
     if args.list_devices {
         match list_gpu_devices() {
@@ -416,6 +425,7 @@ fn main() {
             SearchEvent::Hit(hit) => {
                 found += 1;
                 print_hit(&hit, &patterns, found);
+                let _ = io::stdout().flush();
             }
             SearchEvent::Progress {
                 checked,

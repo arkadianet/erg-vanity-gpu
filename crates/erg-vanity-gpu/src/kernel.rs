@@ -43,6 +43,36 @@ pub mod sources {
     pub(crate) const BASE58_TEST: &str = include_str!("../kernels/base58_test.cl");
 }
 
+/// Register cap applied to NVIDIA builds, or `None` to let the compiler choose.
+///
+/// Chosen by measurement on sm_86; see [`nv_maxrregcount`].
+const DEFAULT_NV_MAXRREGCOUNT: Option<u32> = None;
+
+/// NVIDIA register cap for the whole program, or `None` for the default.
+///
+/// `vanity_search` naturally lands at 234 registers on sm_86, which limits it
+/// to 8 of 48 warps per SM. The comb table is ~3.1 MB and takes up to 23
+/// scattered lookups per k·G, so there is real L2 latency to hide and few
+/// resident warps to hide it with. Capping registers trades some spill traffic
+/// for more warps.
+///
+/// The cap applies to every kernel in the program, including `vanity_seed`,
+/// so a value that helps the secp256k1-bound high-index path can hurt the
+/// PBKDF2-bound `--index 1` path. It is therefore set from measurements of
+/// both regimes rather than from `vanity_search` alone.
+///
+/// Override with `ERG_CL_MAXREG=<n>`; `0` disables the cap entirely.
+fn nv_maxrregcount() -> Option<u32> {
+    match std::env::var("ERG_CL_MAXREG") {
+        Ok(v) => match v.trim().parse::<u32>() {
+            Ok(0) => None,
+            Ok(n) => Some(n),
+            Err(_) => DEFAULT_NV_MAXRREGCOUNT,
+        },
+        Err(_) => DEFAULT_NV_MAXRREGCOUNT,
+    }
+}
+
 /// Compiled OpenCL program with kernels.
 pub struct GpuProgram {
     program: Program,
@@ -53,6 +83,9 @@ impl GpuProgram {
     ///
     /// Set `ERG_CL_VERBOSE=1` to enable NVIDIA compile diagnostics (-cl-nv-verbose).
     /// This prints register usage, spills, and occupancy hints to stderr.
+    ///
+    /// Set `ERG_CL_MAXREG=<n>` to override the NVIDIA register cap, or `0` to
+    /// let the compiler choose. See [`nv_maxrregcount`].
     pub fn from_source(ctx: &GpuContext, source: &str) -> Result<Self, GpuError> {
         let is_nvidia = ctx.info().vendor.to_uppercase().contains("NVIDIA");
         let verbose = std::env::var("ERG_CL_VERBOSE")
@@ -63,6 +96,11 @@ impl GpuProgram {
         if is_nvidia && verbose {
             opts.push_str(" -cl-nv-verbose");
             eprintln!("[diag] NVIDIA verbose mode enabled");
+        }
+        if is_nvidia {
+            if let Some(maxreg) = nv_maxrregcount() {
+                opts.push_str(&format!(" -cl-nv-maxrregcount={maxreg}"));
+            }
         }
 
         // NVIDIA's OpenCL compiler can overflow the default thread stack on the
@@ -1061,7 +1099,7 @@ mod tests {
             println!("secp256k1 point self-test result: 0x{:08x}", failures);
 
             if failures != 0 {
-                const TEST_NAMES: [&str; 25] = [
+                const TEST_NAMES: [&str; 27] = [
                     "G is not infinity",
                     "infinity is infinity",
                     "G + infinity = G",
@@ -1087,6 +1125,8 @@ mod tests {
                     "pt_mul_generator_comb(3) = 3G",
                     "pt_mul_generator_comb all-window scalar",
                     "pt_mul_generator_comb multi-window scalar",
+                    "pt_batch_to_affine matches pt_to_affine",
+                    "pt_batch_to_affine clears the infinity entry",
                 ];
                 for (bit, name) in TEST_NAMES.iter().enumerate() {
                     if failures & (1u32 << bit) != 0 {
@@ -1099,7 +1139,7 @@ mod tests {
                 );
             }
 
-            println!("secp256k1 point self-test passed (all 25 tests)!");
+            println!("secp256k1 point self-test passed (all 27 tests)!");
         });
     }
 
@@ -1188,12 +1228,31 @@ mod tests {
 
             result_buf.write(&[0xFFFF_FFFFu32][..]).enq().unwrap();
 
+            // Range bounds for the precheck tests: lower and upper differ only
+            // at byte 2, so the 4 checksum bytes can never decide the outcome
+            // except on a deliberate tie against the lower bound.
+            let mut bounds = [0u8; 76];
+            bounds[0] = 0x01;
+            bounds[1] = 0x02;
+            bounds[2] = 0x40; // lower
+            bounds[38] = 0x01;
+            bounds[39] = 0x02;
+            bounds[40] = 0xc0; // upper
+            let bounds_buf = Buffer::<u8>::builder()
+                .queue(queue.clone())
+                .flags(MemFlags::new().read_only())
+                .len(bounds.len())
+                .build()
+                .unwrap();
+            bounds_buf.write(&bounds[..]).enq().unwrap();
+
             let kernel = ocl::Kernel::builder()
                 .program(program.program())
                 .name("base58_self_test")
                 .queue(queue.clone())
                 .global_work_size(1)
                 .arg(&result_buf)
+                .arg(&bounds_buf)
                 .build()
                 .unwrap();
 
@@ -1210,7 +1269,7 @@ mod tests {
             println!("Base58 self-test result: 0x{:08x}", failures);
 
             if failures != 0 {
-                const TEST_NAMES: [&str; 17] = [
+                const TEST_NAMES: [&str; 19] = [
                     "encode empty -> empty",
                     "encode 0x00 -> \"1\"",
                     "encode 0x00 0x00 -> \"11\"",
@@ -1228,6 +1287,8 @@ mod tests {
                     "no leading zeros must NOT match \"1\"",
                     "2 leading zeros must NOT match \"1a\" (false positive test)",
                     "1 leading zero must NOT match \"9\" (leading zero test)",
+                    "34-byte precheck agrees with the full range matcher",
+                    "34-byte precheck declines when the leading bytes tie",
                 ];
                 for (bit, name) in TEST_NAMES.iter().enumerate() {
                     if failures & (1u32 << bit) != 0 {
@@ -1237,7 +1298,7 @@ mod tests {
                 panic!("Base58 self-test failed with bitmap 0x{:08x}", failures);
             }
 
-            println!("Base58 self-test passed (all 17 tests)!");
+            println!("Base58 self-test passed (all 19 tests)!");
         });
     }
 

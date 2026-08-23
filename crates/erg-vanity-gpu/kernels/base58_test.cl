@@ -39,7 +39,7 @@ __kernel void base58_test(
 
 // Self-test kernel
 // Returns 0 if all tests pass, non-zero otherwise (bit mask of failed tests)
-__kernel void base58_self_test(__global uint* result) {
+__kernel void base58_self_test(__global uint* result, __global const uchar* bounds) {
     if (get_global_id(0) != 0u) return;
 
     uint failures = 0u;
@@ -238,6 +238,52 @@ __kernel void base58_self_test(__global uint* result) {
 
         if (base58_check_prefix(addr, TEST_PREFIX_9, 1)) {
             failures |= (1u << 16);
+        }
+    }
+
+    // Test 17: whenever the 34-byte precheck decides, it must give the same
+    // answer as the full 38-byte matcher, for any checksum.
+    // Test 18: when the leading bytes tie a bound it must decline instead.
+    //
+    // bounds holds lower (38 bytes) then upper (38 bytes); both differ from
+    // each other only at byte 2, so the checksum can never matter except on a
+    // deliberate tie.
+    {
+        __global const uchar* lower = bounds;
+        __global const uchar* upper = bounds + 38;
+
+        uchar addr[38];
+        uchar third[3];
+        third[0] = (uchar)0x20;  // below lower
+        third[1] = (uchar)0x80;  // inside
+        third[2] = (uchar)0xe0;  // above upper
+
+        for (int c = 0; c < 3; c++) {
+            for (int i = 0; i < 38; i++) addr[i] = 0u;
+            addr[0] = 0x01u;
+            addr[1] = 0x02u;
+            addr[2] = third[c];
+            for (int cs = 0; cs < 2; cs++) {
+                for (int i = 34; i < 38; i++) addr[i] = cs ? (uchar)0xff : (uchar)0x00;
+                int pre = base58_prefix_range_precheck(addr, lower, upper);
+                int full = base58_check_prefix_range(addr, lower, upper);
+                if (pre < 0 || pre != full) {
+                    failures |= (1u << 17);
+                }
+            }
+        }
+
+        // Identical to the lower bound across all 34 leading bytes.
+        for (int i = 0; i < 38; i++) addr[i] = 0u;
+        addr[0] = 0x01u;
+        addr[1] = 0x02u;
+        addr[2] = 0x40u;
+        if (base58_prefix_range_precheck(addr, lower, upper) != -1) {
+            failures |= (1u << 18);
+        }
+        // The lower bound is inclusive, so the full matcher still accepts it.
+        if (!base58_check_prefix_range(addr, lower, upper)) {
+            failures |= (1u << 18);
         }
     }
 
