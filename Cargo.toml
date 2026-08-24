@@ -10,6 +10,7 @@ members = [
     "crates/erg-vanity-cli",
     "crates/erg-vanity-engine",
     "crates/erg-vanity-gui",
+    "crates/erg-boxid-vanity",
 ]
 
 [workspace.package]
