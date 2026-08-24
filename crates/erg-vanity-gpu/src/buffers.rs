@@ -151,6 +151,74 @@ pub struct GpuBuffers {
     batch_size: usize,
 }
 
+/// CPU-side pattern packing shared by the OpenCL and CUDA upload paths.
+pub(crate) struct PatternPack {
+    pub data: Vec<u8>,
+    pub offsets: Vec<u32>,
+    pub lens: Vec<u32>,
+    pub lowers: Vec<u8>,
+    pub uppers: Vec<u8>,
+}
+
+/// Build concatenated pattern data plus range tables exactly as kernels expect.
+pub(crate) fn pack_patterns(
+    patterns: &[String],
+    ignore_case: bool,
+) -> Result<PatternPack, GpuError> {
+    if patterns.is_empty() {
+        return Err(GpuError::Other("at least one pattern required".to_string()));
+    }
+    if patterns.len() > MAX_PATTERNS {
+        return Err(GpuError::Other(format!(
+            "too many patterns: {} exceeds {} limit",
+            patterns.len(),
+            MAX_PATTERNS
+        )));
+    }
+
+    let mut data = Vec::with_capacity(MAX_PATTERN_DATA);
+    let mut offsets = Vec::with_capacity(patterns.len());
+    let mut lens = Vec::with_capacity(patterns.len());
+    let mut lowers = vec![[0u8; ADDRESS_BYTES]; MAX_PATTERNS];
+    let mut uppers = vec![[0u8; ADDRESS_BYTES]; MAX_PATTERNS];
+
+    for (i, pattern) in patterns.iter().enumerate() {
+        offsets.push(data.len() as u32);
+        lens.push(pattern.len() as u32);
+        data.extend_from_slice(pattern.as_bytes());
+        if !ignore_case {
+            let (lower, upper) = prefix_range(pattern.as_bytes());
+            lowers[i] = lower;
+            uppers[i] = upper;
+        }
+    }
+
+    if data.len() > MAX_PATTERN_DATA {
+        return Err(GpuError::Other(format!(
+            "pattern data too large: {} bytes exceeds {} limit",
+            data.len(),
+            MAX_PATTERN_DATA
+        )));
+    }
+    data.resize(MAX_PATTERN_DATA, 0);
+
+    let mut offset_data = vec![0u32; MAX_PATTERNS];
+    offset_data[..offsets.len()].copy_from_slice(&offsets);
+    let mut len_data = vec![0u32; MAX_PATTERNS];
+    len_data[..lens.len()].copy_from_slice(&lens);
+
+    let lower_data: Vec<u8> = lowers.into_iter().flatten().collect();
+    let upper_data: Vec<u8> = uppers.into_iter().flatten().collect();
+
+    Ok(PatternPack {
+        data,
+        offsets: offset_data,
+        lens: len_data,
+        lowers: lower_data,
+        uppers: upper_data,
+    })
+}
+
 impl GpuBuffers {
     /// Allocate buffers for a given batch size.
     ///
@@ -262,69 +330,14 @@ impl GpuBuffers {
         patterns: &[String],
         ignore_case: bool,
     ) -> Result<usize, GpuError> {
-        // Validate number of patterns
-        if patterns.is_empty() {
-            return Err(GpuError::Other("at least one pattern required".to_string()));
-        }
-        if patterns.len() > MAX_PATTERNS {
-            return Err(GpuError::Other(format!(
-                "too many patterns: {} exceeds {} limit",
-                patterns.len(),
-                MAX_PATTERNS
-            )));
-        }
-
-        // Build concatenated pattern data
-        let mut data = Vec::with_capacity(MAX_PATTERN_DATA);
-        let mut offsets = Vec::with_capacity(patterns.len());
-        let mut lens = Vec::with_capacity(patterns.len());
-        let mut lowers = vec![[0u8; ADDRESS_BYTES]; MAX_PATTERNS];
-        let mut uppers = vec![[0u8; ADDRESS_BYTES]; MAX_PATTERNS];
-
-        for (i, pattern) in patterns.iter().enumerate() {
-            let offset = data.len();
-            let len = pattern.len();
-
-            offsets.push(offset as u32);
-            lens.push(len as u32);
-            data.extend_from_slice(pattern.as_bytes());
-            if !ignore_case {
-                let (lower, upper) = prefix_range(pattern.as_bytes());
-                lowers[i] = lower;
-                uppers[i] = upper;
-            }
-        }
-
-        // Validate total size
-        if data.len() > MAX_PATTERN_DATA {
-            return Err(GpuError::Other(format!(
-                "pattern data too large: {} bytes exceeds {} limit",
-                data.len(),
-                MAX_PATTERN_DATA
-            )));
-        }
-
-        // Pad data to buffer size
-        data.resize(MAX_PATTERN_DATA, 0);
-        self.patterns.write(&data).enq()?;
-
-        // Pad and upload offsets
-        let mut offset_data = vec![0u32; MAX_PATTERNS];
-        offset_data[..offsets.len()].copy_from_slice(&offsets);
-        self.pattern_offsets.write(&offset_data).enq()?;
-
-        // Pad and upload lengths
-        let mut len_data = vec![0u32; MAX_PATTERNS];
-        len_data[..lens.len()].copy_from_slice(&lens);
-        self.pattern_lens.write(&len_data).enq()?;
-
+        let pack = pack_patterns(patterns, ignore_case)?;
+        self.patterns.write(&pack.data).enq()?;
+        self.pattern_offsets.write(&pack.offsets).enq()?;
+        self.pattern_lens.write(&pack.lens).enq()?;
         if !ignore_case {
-            let lower_data: Vec<u8> = lowers.into_iter().flatten().collect();
-            let upper_data: Vec<u8> = uppers.into_iter().flatten().collect();
-            self.pattern_lower.write(&lower_data).enq()?;
-            self.pattern_upper.write(&upper_data).enq()?;
+            self.pattern_lower.write(&pack.lowers).enq()?;
+            self.pattern_upper.write(&pack.uppers).enq()?;
         }
-
         Ok(patterns.len())
     }
 

@@ -3,8 +3,8 @@
 use crate::verify::verify_hit_ergo_lib;
 use erg_vanity_address::Network;
 use erg_vanity_cpu::{search_counter_range, MatchType, Pattern};
-use erg_vanity_gpu::context::GpuContext;
-use erg_vanity_gpu::pipeline::{VanityConfig, VanityPipeline};
+use erg_vanity_gpu::dispatch::AnyPipeline;
+use erg_vanity_gpu::pipeline::VanityConfig;
 use rand::RngCore;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
@@ -284,7 +284,7 @@ pub fn run_search(req: SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicB
 }
 
 fn gpu_available() -> bool {
-    GpuContext::enumerate_devices()
+    erg_vanity_gpu::dispatch::enumerate_devices()
         .map(|d| !d.is_empty())
         .unwrap_or(false)
 }
@@ -406,9 +406,9 @@ enum WorkerMsg {
 }
 
 fn resolve_gpu_devices(backend: &Backend) -> Result<Vec<usize>, String> {
-    let devices = GpuContext::enumerate_devices().map_err(|e| e.to_string())?;
+    let devices = erg_vanity_gpu::dispatch::enumerate_devices().map_err(|e| e.to_string())?;
     if devices.is_empty() {
-        return Err("no OpenCL GPU devices found".into());
+        return Err("no GPU devices found".into());
     }
     let available: Vec<usize> = devices.iter().map(|d| d.global_idx).collect();
     match backend {
@@ -443,10 +443,8 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
     let mut salt = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut salt);
 
-    let default_batch = GpuContext::with_device(devices[0])
-        .ok()
-        .map(|ctx| ctx.recommended_batch_size())
-        .unwrap_or(1 << 18);
+    let default_batch =
+        erg_vanity_gpu::dispatch::recommended_batch_size(devices[0]).unwrap_or(1 << 18);
     let batch_size = req.batch_size.unwrap_or(default_batch).max(1);
     let cfg = VanityConfig {
         batch_size,
@@ -468,7 +466,7 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
         let stop = Arc::clone(&stop);
         let total_checked = Arc::clone(&total_checked);
         let handle = thread::spawn(move || {
-            let mut pipeline = match VanityPipeline::new_with_device_and_salt(
+            let mut pipeline = match AnyPipeline::new_with_device_and_salt(
                 &patterns,
                 cfg.clone(),
                 device_index,
@@ -484,6 +482,10 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
                 }
             };
             let _ = wtx.send(WorkerMsg::Ready);
+            // At most one WorkerMsg::Error per worker: the collector counts
+            // each error as a finished worker, so a second one would skew
+            // workers_left and can leave --duration runs never stopping.
+            let mut worker_failed = false;
             while !stop.load(Ordering::Relaxed) {
                 let counter_start = counter.fetch_add(cfg.batch_size as u64, Ordering::Relaxed);
                 let batch = match pipeline.run_batch_with_counter(counter_start) {
@@ -493,6 +495,7 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
                             device: device_index,
                             message: e.to_string(),
                         });
+                        worker_failed = true;
                         break;
                     }
                 };
@@ -514,6 +517,35 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
                     {
                         stop.store(true, Ordering::Relaxed);
                         return;
+                    }
+                }
+            }
+            // Report the final in-flight overlapped batch (CUDA path keeps
+            // one batch in flight; OpenCL returns every batch immediately).
+            match pipeline.drain() {
+                Ok(last) => {
+                    for result in last {
+                        if wtx
+                            .send(WorkerMsg::Hit(Hit {
+                                address: result.address,
+                                mnemonic: result.mnemonic,
+                                entropy: result.entropy,
+                                address_index: result.address_index,
+                                pattern_index: result.pattern_index,
+                                device_label: format!("gpu:{device_index}"),
+                            }))
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    if !worker_failed {
+                        let _ = wtx.send(WorkerMsg::Error {
+                            device: device_index,
+                            message: e.to_string(),
+                        });
                     }
                 }
             }

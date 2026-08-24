@@ -242,10 +242,68 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        match erg_vanity_gpu::cuda::CudaDevice::enumerate() {
+            Ok(list) if !list.is_empty() => {
+                println!();
+                println!("CUDA devices (ERG_BACKEND=cuda):");
+                for d in &list {
+                    println!(
+                        "  [{}] {} - {} ({} CUs)",
+                        d.global_idx, d.platform_name, d.device_name, d.compute_units
+                    );
+                }
+            }
+            Ok(_) => {
+                if erg_vanity_gpu::cuda::pipeline::CUDA_BUILT {
+                    println!("\nNo CUDA devices found.");
+                } else {
+                    println!(
+                        "\nCUDA backend not built into this binary (nvcc missing at build time)."
+                    );
+                }
+            }
+            Err(err) => println!("\nCUDA unavailable: {err}"),
+        }
         return;
     }
 
     if args.bench {
+        if std::env::var("ERG_BACKEND").as_deref() == Ok("cuda") {
+            let backend = match parse_backend(&args.devices) {
+                Ok(b) => b,
+                Err(err) => {
+                    eprintln!("Error: {err}");
+                    std::process::exit(2);
+                }
+            };
+            let device_indices = match backend {
+                Backend::Gpu { devices } => devices,
+                Backend::Auto => vec![0],
+                Backend::Cpu => {
+                    eprintln!("Error: --bench requires GPU devices");
+                    std::process::exit(2);
+                }
+            };
+            let cfg = erg_vanity_gpu::bench::BenchConfig {
+                batch_size: args.bench_batch_size.unwrap_or(1 << 18),
+                iters: args.bench_iters,
+                warmup: args.bench_warmup,
+                validate: args.bench_validate,
+                num_indices: args.bench_num_indices.unwrap_or(args.num_indices),
+            };
+            let mut results = Vec::new();
+            for device_index in &device_indices {
+                match erg_vanity_gpu::cuda::bench::run_bench_cuda(*device_index, &cfg) {
+                    Ok(stats) => results.push(stats),
+                    Err(e) => {
+                        eprintln!("Error running CUDA bench on device {device_index}: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+            erg_vanity_gpu::bench::print_bench_results(&results, &cfg);
+            return;
+        }
         let backend = match parse_backend(&args.devices) {
             Ok(Backend::Gpu { devices }) => devices,
             Ok(Backend::Auto) => Vec::new(),

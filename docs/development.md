@@ -93,6 +93,20 @@ Performance section and in the register-cap note below.
 | `ERG_CL_MAXREG=<n>` | NVIDIA register cap (`-cl-nv-maxrregcount`); `0` or unset lets the compiler choose |
 | `ERG_RUN_GPU_TESTS=1` | Run OpenCL kernel unit tests |
 | `RUST_MIN_STACK` | Set automatically via `.cargo/config.toml` |
+| `ERG_BACKEND=cuda\|opencl\|auto` | GPU backend selection; `auto` (default) stays on the OpenCL path - set `cuda` explicitly to opt in (errors if unavailable) |
+| `ERG_CUDA_ARCH=<arch>` | nvcc target for the CUDA backend (`compute_75` default, e.g. `sm_86`) |
+| `ERG_CUDA_NVCC=/path` | Explicit nvcc path for build.rs |
+| `ERG_CUDA_OVERLAP=0` | Disable CUDA ping-pong streaming (on by default; seed(n+1) overlaps search(n), results return one batch late) |
+
+### CUDA backend
+
+When `nvcc` is available at build time, `build.rs` compiles the SAME `.cl`
+kernel sources to PTX through `kernels/cuda_shim.cuh` (an OpenCL C
+compatibility layer) and embeds it; at run time the driver JITs it via the
+driver API loaded with dlopen - no link-time CUDA dependency. Hits are CPU
+verified exactly like OpenCL. Measured RTX 3090: parity with OpenCL live
+(~566k addr/s at index 1); isolated PBKDF2 kernels are up to 4% faster under
+nvcc but the advantage washes out in the full pipeline.
 
 ### Register cap
 
