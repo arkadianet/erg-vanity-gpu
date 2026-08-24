@@ -58,6 +58,17 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ocl-icd-opencl-dev opencl-headers
 
+      # Embed the CUDA backend in Linux release binaries. The shipped image
+      # is compute_75 PTX; the user's driver JITs it for any sm_75+ GPU
+      # (Turing through current), so one binary covers 20/30/40/50 series.
+      # macOS/Windows builds stay OpenCL-only (the CUDA runtime module uses
+      # dlopen and POSIX ulong).
+      - name: Install CUDA nvcc (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nvidia-cuda-toolkit || echo "::warning::nvcc unavailable, building OpenCL-only"
+
       - name: Install OpenCL SDK (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -145,6 +156,8 @@ jobs:
 
             A GPU with up-to-date drivers (NVIDIA, AMD, or Intel). Drivers include OpenCL support needed to run this tool.
 
+            The **Linux** build also embeds an optional NVIDIA CUDA backend for sm_75+ GPUs (GTX 16xx, RTX 20/30/40/50 series). It is opt-in: set `ERG_BACKEND=cuda`, otherwise OpenCL is used.
+
             ## Getting Started
 
             ### Windows
@@ -176,6 +189,7 @@ jobs:
 
             ```bash
             ./erg-vanity 9err                    # Find address starting with "9err"
+            ERG_BACKEND=cuda ./erg-vanity 9err   # NVIDIA CUDA backend (Linux build)
             ./erg-vanity -p 9ErGo -i             # Case-insensitive
             ./erg-vanity -p 9err,9ego,9fun       # Multiple patterns
             ./erg-vanity -p 9err -n 5            # Find 5 matches
