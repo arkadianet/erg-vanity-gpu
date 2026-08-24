@@ -113,7 +113,7 @@ impl CudaVanityPipeline {
 
         let device = CudaDevice::open(device_index)?;
         eprintln!("Compiling CUDA module from embedded PTX (first run JITs; cached afterwards)...");
-        let module = CudaModule::load_ptx(&device, VANITY_PTX)?;
+        let module = CudaModule::load_ptx(&device, vanity_ptx())?;
         let seed_fn = module.function(&device, "vanity_seed")?;
         let search_fn = module.function(&device, "vanity_search")?;
 

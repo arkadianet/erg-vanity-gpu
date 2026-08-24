@@ -118,6 +118,10 @@ fn main() {
 }
 
 fn find_nvcc() -> Option<PathBuf> {
+    // Test hook: force the OpenCL-only configuration locally.
+    if env::var("ERG_CUDA_DISABLE").as_deref() == Ok("1") {
+        return None;
+    }
     if let Ok(p) = env::var("ERG_CUDA_NVCC") {
         let pb = PathBuf::from(p);
         if pb.exists() {
