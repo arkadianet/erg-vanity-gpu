@@ -6,7 +6,8 @@
 //! verification is shared with `pipeline.rs`.
 
 use super::check;
-use super::ffi::{CuDevicePtr, CuEvent, CuFunction, CuStream};
+use super::ffi::{CuEvent, CuFunction, CuStream};
+use super::CUDA_SUCCESS;
 use super::{launch, launch_on, CudaBuffer, CudaDevice, CudaModule};
 use crate::buffers::{pack_patterns, GpuHit, MAX_HITS, MAX_PATTERNS, MAX_PATTERN_DATA};
 use crate::comb::load_comb_table;
@@ -43,7 +44,6 @@ pub(crate) fn vanity_ptx() -> &'static [u8] {
 pub const CUDA_BUILT: bool = false;
 
 pub struct CudaVanityPipeline {
-    device: CudaDevice,
     #[allow(dead_code)]
     module: CudaModule,
     seed_fn: CuFunction,
@@ -78,18 +78,67 @@ pub struct CudaVanityPipeline {
     streams: [CuStream; 2],
     ev_seed_done: [CuEvent; 2],
     ev_search_done: [CuEvent; 2],
-    seeds_pp: [CuDevicePtr; 2],
-    hits_pp: [CuDevicePtr; 2],
-    hit_count_pp: [CuDevicePtr; 2],
+    /// Ping-pong slot storage: DISTINCT allocations per slot so async
+    /// seed(n+1) can never race search(n)'s reads.
+    seed_bufs: [CudaBuffer; 2],
+    hit_bufs: [CudaBuffer; 2],
+    count_bufs: [CudaBuffer; 2],
     batch_index: u64,
     pending: Option<PendingBatch>,
     // Pinned host staging for async hit readback (overlap mode only).
     pin_count: [*mut c_void; 2],
     pin_hits: [*mut c_void; 2],
+    device: CudaDevice,
 }
 
 struct PendingBatch {
     slot: usize,
+}
+
+/// Convert one 64-byte chunk into a GpuHit without pointer casts.
+fn hit_from_chunk(c: &[u8]) -> GpuHit {
+    let mut hit = GpuHit::default();
+    // SAFETY: GpuHit is repr(C, align(16)) plain-old-data, exactly 64 bytes;
+    // `c` is a valid 64-byte chunk.
+    unsafe {
+        std::ptr::copy_nonoverlapping(c.as_ptr(), &mut hit as *mut GpuHit as *mut u8, 64);
+    }
+    hit
+}
+
+impl Drop for CudaVanityPipeline {
+    fn drop(&mut self) {
+        if !self.overlap {
+            return;
+        }
+        // SAFETY: handles created in new(); runs before field teardown, so
+        // the context (device, declared last) is still alive here. The
+        // slot buffers are CudaBuffer fields dropped after this and free
+        // their own device memory against the still-live context.
+        unsafe {
+            for s in &self.streams {
+                let _ = (self.device.lib.cuStreamSynchronize)(*s);
+            }
+        }
+        for p in self.pin_count.iter().chain(self.pin_hits.iter()) {
+            if !p.is_null() {
+                // SAFETY: allocated via cuMemAllocHost_v2, freed once.
+                unsafe { (self.device.lib.cuMemFreeHost)(*p) };
+            }
+        }
+        for e in self.ev_seed_done.iter().chain(self.ev_search_done.iter()) {
+            if !e.is_null() {
+                // SAFETY: created via cuEventCreate.
+                unsafe { (self.device.lib.cuEventDestroy_v2)(*e) };
+            }
+        }
+        for s in self.streams.iter() {
+            if !s.is_null() {
+                // SAFETY: created via cuStreamCreate.
+                unsafe { (self.device.lib.cuStreamDestroy)(*s) };
+            }
+        }
+    }
 }
 
 impl CudaVanityPipeline {
@@ -156,9 +205,24 @@ impl CudaVanityPipeline {
         let comb_buf = CudaBuffer::new(&device, comb_bytes.len())?;
         comb_buf.upload(&device, &comb_bytes)?;
 
-        let seeds_ptr0 = seeds_buf.ptr;
-        let hits_ptr0 = hits_buf.ptr;
-        let hit_count_ptr0 = hit_count_buf.ptr;
+        // Distinct ping-pong slot allocations (overlap mode).
+        let mk = |sz: usize| -> Result<CudaBuffer, GpuError> { CudaBuffer::new(&device, sz) };
+        let zero16 = [0u8; 16];
+        let mut seed_slots = Vec::new();
+        let mut hit_slots = Vec::new();
+        let mut count_slots = Vec::new();
+        for _ in 0..2 {
+            let b = mk(batch * 64)?;
+            seed_slots.push(b);
+            let b = mk(MAX_HITS * 64)?;
+            hit_slots.push(b);
+            let c = mk(16)?;
+            c.upload(&device, &zero16)?;
+            count_slots.push(c);
+        }
+        let seed_bufs: [CudaBuffer; 2] = [seed_slots.remove(0), seed_slots.remove(0)];
+        let hit_bufs: [CudaBuffer; 2] = [hit_slots.remove(0), hit_slots.remove(0)];
+        let count_bufs: [CudaBuffer; 2] = [count_slots.remove(0), count_slots.remove(0)];
 
         // Ping-pong streaming is a clear win at production batch sizes; opt out
         // with ERG_CUDA_OVERLAP=0.
@@ -169,22 +233,64 @@ impl CudaVanityPipeline {
         let mut pin_count = [std::ptr::null_mut(); 2];
         let mut pin_hits = [std::ptr::null_mut(); 2];
         if overlap {
-            for s in streams.iter_mut() {
-                check!(device.lib, cuStreamCreate, s, 0u32);
-            }
-            for e in ev_seed_done.iter_mut().chain(ev_search_done.iter_mut()) {
-                check!(device.lib, cuEventCreate, e, 0u32);
-            }
+            // Rollback-safe acquisition: on any failure release everything
+            // acquired so far before propagating the error.
+            let cleanup = |streams: &[CuStream], events: &[CuEvent], pins: &[*mut c_void]| {
+                // SAFETY: handles created above; freed exactly once here.
+                unsafe {
+                    for &s in streams {
+                        let _ = (device.lib.cuStreamDestroy)(s);
+                    }
+                    for &e in events {
+                        let _ = (device.lib.cuEventDestroy_v2)(e);
+                    }
+                    for &p in pins {
+                        if !p.is_null() {
+                            let _ = (device.lib.cuMemFreeHost)(p);
+                        }
+                    }
+                }
+            };
+            let mut pins: Vec<*mut c_void> = Vec::new();
+            let mut events: Vec<CuEvent> = Vec::new();
+            let rc_err = |op: &str, rc: i32| -> GpuError { super::err(op, rc) };
             for slot in 0..2 {
-                check!(device.lib, cuMemAllocHost, &mut pin_count[slot], 16);
-                check!(
-                    device.lib,
-                    cuMemAllocHost,
-                    &mut pin_hits[slot],
-                    MAX_HITS * 64
-                );
+                match unsafe { (device.lib.cuMemAllocHost)(&mut pin_count[slot], 16) } {
+                    CUDA_SUCCESS => {}
+                    rc => {
+                        cleanup(&streams, &events, &pins);
+                        return Err(rc_err("cuMemAllocHost", rc));
+                    }
+                }
+                pins.push(pin_count[slot]);
+                match unsafe { (device.lib.cuMemAllocHost)(&mut pin_hits[slot], MAX_HITS * 64) } {
+                    CUDA_SUCCESS => {}
+                    rc => {
+                        cleanup(&streams, &events, &pins);
+                        return Err(rc_err("cuMemAllocHost", rc));
+                    }
+                }
+                pins.push(pin_hits[slot]);
                 unsafe {
                     std::ptr::write_bytes(pin_count[slot] as *mut u8, 0, 16);
+                }
+            }
+            for e in ev_seed_done.iter_mut().chain(ev_search_done.iter_mut()) {
+                match unsafe { (device.lib.cuEventCreate)(e, 0u32) } {
+                    CUDA_SUCCESS => events.push(*e),
+                    rc => {
+                        cleanup(&streams, &events, &pins);
+                        return Err(rc_err("cuEventCreate", rc));
+                    }
+                }
+            }
+            for s in streams.iter_mut() {
+                match unsafe { (device.lib.cuStreamCreate)(s, 0u32) } {
+                    CUDA_SUCCESS => {}
+                    rc => {
+                        cleanup(&streams, &events, &pins);
+                        return Err(rc_err("cuStreamCreate", rc));
+                    }
                 }
             }
         }
@@ -206,7 +312,6 @@ impl CudaVanityPipeline {
             seed_fn,
             search_fn,
             module,
-            device,
             salt: salt_buf,
             words8: words8_buf,
             lens: lens_buf,
@@ -233,13 +338,14 @@ impl CudaVanityPipeline {
             streams,
             ev_seed_done,
             ev_search_done,
-            seeds_pp: [seeds_ptr0; 2],
-            hits_pp: [hits_ptr0; 2],
-            hit_count_pp: [hit_count_ptr0; 2],
+            seed_bufs,
+            hit_bufs,
+            count_bufs,
             batch_index: 0,
             pending: None,
             pin_count,
             pin_hits,
+            device,
         })
     }
 
@@ -350,7 +456,7 @@ impl CudaVanityPipeline {
             .as_chunks::<64>()
             .0
             .iter()
-            .map(|c| unsafe { std::ptr::read(c.as_ptr() as *const GpuHit) })
+            .map(|c| hit_from_chunk(c))
             .collect();
 
         verify_hits_shared(
@@ -364,6 +470,27 @@ impl CudaVanityPipeline {
 
     pub fn hits_dropped_total(&self) -> u64 {
         self.hits_dropped_total
+    }
+
+    /// Synchronize and return the final in-flight overlapped batch.
+    ///
+    /// Call once when the search loop exits so the last batch is reported
+    /// before shutdown instead of being discarded.
+    pub fn drain(&mut self) -> Result<Vec<VanityResult>, GpuError> {
+        if !self.overlap {
+            return Ok(Vec::new());
+        }
+        if let Some(pending) = self.pending.take() {
+            check!(
+                self.device.lib,
+                cuEventSynchronize,
+                self.ev_search_done[pending.slot]
+            );
+            // SAFETY: staging filled by the async copies that precede the
+            // event we just synchronized.
+            return unsafe { self.read_and_verify_pinned(pending.slot) };
+        }
+        Ok(Vec::new())
     }
 
     /// Ping-pong overlap: enqueue seed(n) on stream A and search(n) on stream
@@ -400,7 +527,7 @@ impl CudaVanityPipeline {
         check!(
             self.device.lib,
             cuMemcpyHtoDAsync_v2,
-            self.hit_count_pp[slot],
+            self.count_bufs[slot].ptr,
             zeros.as_ptr() as *const c_void,
             16usize,
             s_seed
@@ -411,7 +538,7 @@ impl CudaVanityPipeline {
         let mut counter = counter_start;
         let mut words_ptr = self.words8.ptr;
         let mut lens_ptr = self.lens.ptr;
-        let mut seeds_ptr = self.seeds_pp[slot];
+        let mut seeds_ptr = self.seed_bufs[slot].ptr;
         let mut params_a: [*mut c_void; 5] = [
             &mut salt_ptr as *mut _ as *mut c_void,
             &mut counter as *mut _ as *mut c_void,
@@ -457,8 +584,8 @@ impl CudaVanityPipeline {
         let mut num_patterns = self.num_patterns;
         let mut icase = if self.ignore_case { 1u32 } else { 0u32 };
         let mut nidx = self.num_indices;
-        let mut hits_ptr = self.hits_pp[slot];
-        let mut hc_ptr = self.hit_count_pp[slot];
+        let mut hits_ptr = self.hit_bufs[slot].ptr;
+        let mut hc_ptr = self.count_bufs[slot].ptr;
         let mut max_hits = MAX_HITS as u32;
         let mut comb_ptr = self.comb.ptr;
         let mut params_b: [*mut c_void; 15] = [
@@ -492,7 +619,7 @@ impl CudaVanityPipeline {
             self.device.lib,
             cuMemcpyDtoHAsync_v2,
             self.pin_count[slot],
-            self.hit_count_pp[slot],
+            self.count_bufs[slot].ptr,
             16usize,
             s_search
         );
@@ -500,7 +627,7 @@ impl CudaVanityPipeline {
             self.device.lib,
             cuMemcpyDtoHAsync_v2,
             self.pin_hits[slot],
-            self.hits_pp[slot],
+            self.hit_bufs[slot].ptr,
             MAX_HITS * 64usize,
             s_search
         );
@@ -553,20 +680,12 @@ impl CudaVanityPipeline {
         std::ptr::write_bytes(self.pin_count[slot] as *mut u8, 0, 16);
         let take = (hit_count as usize).min(MAX_HITS);
         let raw = std::slice::from_raw_parts(self.pin_hits[slot] as *const u8, take * 64);
-        let mut hits = Vec::with_capacity(take);
-        for c in raw.as_chunks::<64>().0 {
-            let mut hit = GpuHit::default();
-            let bytes: &[u8; 64] = c;
-            // SAFETY: GpuHit is repr(C, align(16)), 64 bytes, plain data.
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    bytes.as_ptr(),
-                    &mut hit as *mut GpuHit as *mut u8,
-                    64,
-                )
-            };
-            hits.push(hit);
-        }
+        let hits: Vec<GpuHit> = raw
+            .as_chunks::<64>()
+            .0
+            .iter()
+            .map(|c| hit_from_chunk(c))
+            .collect();
         verify_hits_shared(
             &hits,
             &self.patterns_cpu,

@@ -103,6 +103,15 @@ impl CudaDevice {
     }
 }
 
+impl Drop for CudaDevice {
+    fn drop(&mut self) {
+        // Declared-last field of the owning structs, so buffers/streams/
+        // events have already released everything tied to this context.
+        // SAFETY: ctx came from cuCtxCreate_v2 and is destroyed once.
+        unsafe { (self.lib.cuCtxDestroy_v2)(self.ctx) };
+    }
+}
+
 pub struct CudaBuffer {
     pub ptr: CuDevicePtr,
     pub size: usize,

@@ -3,7 +3,6 @@
 use crate::verify::verify_hit_ergo_lib;
 use erg_vanity_address::Network;
 use erg_vanity_cpu::{search_counter_range, MatchType, Pattern};
-use erg_vanity_gpu::context::GpuContext;
 use erg_vanity_gpu::dispatch::AnyPipeline;
 use erg_vanity_gpu::pipeline::VanityConfig;
 use rand::RngCore;
@@ -285,7 +284,7 @@ pub fn run_search(req: SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicB
 }
 
 fn gpu_available() -> bool {
-    GpuContext::enumerate_devices()
+    erg_vanity_gpu::dispatch::enumerate_devices()
         .map(|d| !d.is_empty())
         .unwrap_or(false)
 }
@@ -409,7 +408,7 @@ enum WorkerMsg {
 fn resolve_gpu_devices(backend: &Backend) -> Result<Vec<usize>, String> {
     let devices = erg_vanity_gpu::dispatch::enumerate_devices().map_err(|e| e.to_string())?;
     if devices.is_empty() {
-        return Err("no OpenCL GPU devices found".into());
+        return Err("no GPU devices found".into());
     }
     let available: Vec<usize> = devices.iter().map(|d| d.global_idx).collect();
     match backend {
@@ -514,6 +513,33 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
                         stop.store(true, Ordering::Relaxed);
                         return;
                     }
+                }
+            }
+            // Report the final in-flight overlapped batch (CUDA path keeps
+            // one batch in flight; OpenCL returns every batch immediately).
+            match pipeline.drain() {
+                Ok(last) => {
+                    for result in last {
+                        if wtx
+                            .send(WorkerMsg::Hit(Hit {
+                                address: result.address,
+                                mnemonic: result.mnemonic,
+                                entropy: result.entropy,
+                                address_index: result.address_index,
+                                pattern_index: result.pattern_index,
+                                device_label: format!("gpu:{device_index}"),
+                            }))
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = wtx.send(WorkerMsg::Error {
+                        device: device_index,
+                        message: e.to_string(),
+                    });
                 }
             }
             let _ = wtx.send(WorkerMsg::Stats {

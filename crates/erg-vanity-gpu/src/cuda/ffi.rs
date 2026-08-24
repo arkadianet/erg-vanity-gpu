@@ -29,6 +29,7 @@ pub struct LibCuda {
     pub cuDeviceGetAttribute: unsafe extern "C" fn(*mut c_int, c_uint, CuDevice) -> CuResult,
     pub cuCtxCreate_v2: unsafe extern "C" fn(*mut CuContext, c_uint, CuDevice) -> CuResult,
     pub cuCtxSetCurrent: unsafe extern "C" fn(CuContext) -> CuResult,
+    pub cuCtxDestroy_v2: unsafe extern "C" fn(CuContext) -> CuResult,
     pub cuModuleLoadData: unsafe extern "C" fn(*mut CuModule, *const c_void) -> CuResult,
     pub cuModuleGetFunction:
         unsafe extern "C" fn(*mut CuFunction, CuModule, *const c_char) -> CuResult,
@@ -48,6 +49,8 @@ pub struct LibCuda {
     pub cuEventCreate: unsafe extern "C" fn(*mut CuEvent, c_uint) -> CuResult,
     pub cuEventRecord: unsafe extern "C" fn(CuEvent, CuStream) -> CuResult,
     pub cuEventSynchronize: unsafe extern "C" fn(CuEvent) -> CuResult,
+    pub cuEventDestroy_v2: unsafe extern "C" fn(CuEvent) -> CuResult,
+    pub cuStreamDestroy: unsafe extern "C" fn(CuStream) -> CuResult,
     pub cuEventElapsedTime: unsafe extern "C" fn(*mut f32, CuEvent, CuEvent) -> CuResult,
     pub cuLaunchKernel: unsafe extern "C" fn(
         CuFunction,
@@ -103,6 +106,7 @@ pub unsafe fn load_libcuda() -> Result<LibCuda, String> {
         cuDeviceGetAttribute: sym!("cuDeviceGetAttribute"),
         cuCtxCreate_v2: sym!("cuCtxCreate_v2"),
         cuCtxSetCurrent: sym!("cuCtxSetCurrent"),
+        cuCtxDestroy_v2: sym!("cuCtxDestroy_v2"),
         cuModuleLoadData: sym!("cuModuleLoadData"),
         cuModuleGetFunction: sym!("cuModuleGetFunction"),
         cuMemAllocHost: sym!("cuMemAllocHost_v2"),
@@ -119,6 +123,8 @@ pub unsafe fn load_libcuda() -> Result<LibCuda, String> {
         cuEventCreate: sym!("cuEventCreate"),
         cuEventRecord: sym!("cuEventRecord"),
         cuEventSynchronize: sym!("cuEventSynchronize"),
+        cuEventDestroy_v2: sym!("cuEventDestroy_v2"),
+        cuStreamDestroy: sym!("cuStreamDestroy"),
         cuEventElapsedTime: sym!("cuEventElapsedTime"),
         cuLaunchKernel: sym!("cuLaunchKernel"),
     })

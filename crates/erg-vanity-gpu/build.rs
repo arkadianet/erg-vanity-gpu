@@ -33,6 +33,10 @@ const VANITY_ORDER: &[&str] = &[
 
 fn main() {
     println!("cargo::rustc-check-cfg=cfg(no_cuda_backend)");
+    println!("cargo:rerun-if-env-changed=ERG_CUDA_DISABLE");
+    println!("cargo:rerun-if-env-changed=ERG_CUDA_NVCC");
+    println!("cargo:rerun-if-env-changed=ERG_CUDA_CCBIN");
+    println!("cargo:rerun-if-env-changed=ERG_CUDA_ARCH");
     for name in VANITY_ORDER {
         println!("cargo:rerun-if-changed={KERNEL_DIR}/{name}.cl");
     }
@@ -114,7 +118,6 @@ fn main() {
         fs::write(&flag, b"").expect("write no_cuda flag");
         println!("cargo:rustc-cfg=no_cuda_backend");
     }
-    println!("cargo:rerun-if-env-changed=ERG_CUDA_ARCH");
 }
 
 fn find_nvcc() -> Option<PathBuf> {

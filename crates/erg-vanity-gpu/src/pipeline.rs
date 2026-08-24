@@ -529,6 +529,11 @@ impl VanityPipeline {
         )
     }
 
+    /// No in-flight batches on the OpenCL path; results return per batch.
+    pub fn drain(&mut self) -> Result<Vec<VanityResult>, GpuError> {
+        Ok(Vec::new())
+    }
+
     /// Search until a match is found (blocking).
     pub fn search_blocking(&mut self) -> Result<VanityResult, GpuError> {
         loop {

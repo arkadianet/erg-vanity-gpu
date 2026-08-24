@@ -1,9 +1,8 @@
 //! Backend dispatch: OpenCL (original) or CUDA (driver API + JIT'd PTX).
 //!
 //! Selection via `ERG_BACKEND`:
-//!   - `opencl` (default): the original path, unchanged.
+//!   - `opencl` (default for `auto`, and explicit): the original path.
 //!   - `cuda`: require the CUDA backend; error if unavailable.
-//!   - `auto`: CUDA when built-in and a driver is present, else OpenCL.
 
 use crate::context::{DeviceInfo, GpuError};
 use crate::cuda::CudaVanityPipeline;
@@ -19,13 +18,9 @@ pub enum AnyPipeline {
 pub fn enumerate_devices() -> Result<Vec<DeviceInfo>, GpuError> {
     match backend_pref() {
         "cuda" => crate::cuda::CudaDevice::enumerate(),
-        _ => {
-            if crate::cuda::pipeline::CUDA_BUILT {
-                // auto: report OpenCL devices (the default path) but note
-                // CUDA availability separately in --list-devices.
-            }
-            crate::context::GpuContext::enumerate_devices()
-        }
+        // `auto` runs OpenCL; CUDA devices are listed separately by
+        // --list-devices when ERG_CUDA_* users ask for them.
+        _ => crate::context::GpuContext::enumerate_devices(),
     }
 }
 
@@ -57,15 +52,9 @@ impl AnyPipeline {
         // while it soaks (live parity today, kernel-level wins pending).
         let want_cuda = pref == "cuda";
         if want_cuda {
-            match CudaVanityPipeline::new(patterns, cfg.clone(), device_index, salt) {
-                Ok(p) => return Ok(AnyPipeline::Cuda(p)),
-                Err(e) => {
-                    if pref == "cuda" {
-                        return Err(e);
-                    }
-                    eprintln!("CUDA backend unavailable ({e}); falling back to OpenCL");
-                }
-            }
+            // Explicit cuda selection: errors propagate, no silent fallback.
+            return CudaVanityPipeline::new(patterns, cfg.clone(), device_index, salt)
+                .map(AnyPipeline::Cuda);
         }
         Ok(AnyPipeline::Ocl(VanityPipeline::new_with_device_and_salt(
             patterns,
@@ -82,6 +71,15 @@ impl AnyPipeline {
         match self {
             AnyPipeline::Ocl(p) => p.run_batch_with_counter(counter_start),
             AnyPipeline::Cuda(p) => p.run_batch_with_counter(counter_start),
+        }
+    }
+
+    /// Return the final in-flight batch (CUDA ping-pong keeps one pending;
+    /// OpenCL batches are returned immediately, so this is a no-op there).
+    pub fn drain(&mut self) -> Result<Vec<VanityResult>, GpuError> {
+        match self {
+            AnyPipeline::Ocl(p) => p.drain(),
+            AnyPipeline::Cuda(p) => p.drain(),
         }
     }
 
