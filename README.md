@@ -35,6 +35,7 @@ Run `erg-vanity` / `erg-vanity.exe` with no arguments for the GUI. Use `--no-gui
 ## Features
 
 - GPU prefix search (OpenCL); CPU fallback when no GPU is present
+- Optional NVIDIA CUDA backend on Linux (`ERG_BACKEND=cuda`), compiled from the same kernels; macOS/Windows stay OpenCL-only
 - Suffix / contains matching (`-e` / `--contains`) — CPU only
 - Desktop GUI — run `erg-vanity` with no patterns
 - `--estimate` before a long search
@@ -65,11 +66,16 @@ Binary: `./target/release/erg-vanity` (Windows: `.\target\release\erg-vanity.exe
 
 PowerShell chains commands with `;`, not `&&`.
 
+The Linux release binaries embed the optional CUDA backend. To include it
+in a from-source build, install `nvidia-cuda-toolkit` first; without nvcc
+the build still succeeds, just OpenCL-only.
+
 ## Run
 
 ```bash
 # Prefix search (GPU if available)
 ./target/release/erg-vanity 9err
+ERG_BACKEND=cuda ./target/release/erg-vanity 9err   # NVIDIA CUDA (Linux builds)
 ./target/release/erg-vanity -p 9err,9ego,9fun
 ./target/release/erg-vanity -p 9ErGo -i
 ./target/release/erg-vanity -p 9err -n 5
@@ -97,6 +103,23 @@ PowerShell chains commands with `;`, not `&&`.
 ```
 
 Default `--devices` is `auto` (GPU if present, else CPU).
+
+### CUDA backend
+
+Linux builds can embed an NVIDIA CUDA backend compiled from the **same**
+kernel sources via nvcc (one binary serves any sm_75+ GPU: GTX 16xx,
+RTX 20/30/40/50 — the driver JITs the embedded PTX on first run). It is
+opt-in; `ERG_BACKEND` defaults to OpenCL:
+
+```bash
+ERG_BACKEND=cuda ./target/release/erg-vanity 9err
+```
+
+Seed(n+1) overlaps search(n) across two streams with pinned async
+readback (`ERG_CUDA_OVERLAP=0` disables). Measured RTX 3090 at index 1:
+608-611k addr/s vs 564-587k on OpenCL (+4-8%). Hits are CPU-verified
+identically on both paths. Tunables (`ERG_CUDA_*`) and build details:
+[docs/development.md](docs/development.md).
 
 ### CLI
 
@@ -206,6 +229,9 @@ batched modular inversion and the 11-bit comb:
 | 100 | 24,184,619 | 241,846 |
 | 250 | 32,659,136 | 130,637 |
 | 500 | 36,891,126 | 73,782 |
+
+(OpenCL numbers; the optional CUDA backend measures ~4-8% faster at
+`--index 1` — see [CUDA backend](#cuda-backend).)
 
 Those points fit one line to within a percent:
 
