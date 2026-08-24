@@ -104,7 +104,15 @@ fn main() {
         .status()
         .expect("spawn nvcc");
     if !status.success() {
-        panic!("nvcc failed to compile the CUDA kernel source ({arch})");
+        // Never break the build over the optional backend: ship OpenCL-only
+        // and say why. (Old nvcc + new host gcc combos can fail here.)
+        eprintln!(
+            "cargo:warning=nvcc failed for {arch}; building without the CUDA backend \
+             (try ERG_CUDA_ARCH / ERG_CUDA_CCBIN)"
+        );
+        let flag = out_dir.join("no_cuda.flag");
+        fs::write(&flag, b"").expect("write no_cuda flag");
+        println!("cargo:rustc-cfg=no_cuda_backend");
     }
     println!("cargo:rerun-if-env-changed=ERG_CUDA_ARCH");
 }
