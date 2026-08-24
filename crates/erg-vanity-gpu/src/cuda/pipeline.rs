@@ -347,7 +347,9 @@ impl CudaVanityPipeline {
         self.hits.download(&self.device, &mut raw)?;
 
         let hits: Vec<GpuHit> = raw
-            .chunks_exact(64)
+            .as_chunks::<64>()
+            .0
+            .iter()
             .map(|c| unsafe { std::ptr::read(c.as_ptr() as *const GpuHit) })
             .collect();
 
@@ -552,9 +554,9 @@ impl CudaVanityPipeline {
         let take = (hit_count as usize).min(MAX_HITS);
         let raw = std::slice::from_raw_parts(self.pin_hits[slot] as *const u8, take * 64);
         let mut hits = Vec::with_capacity(take);
-        for c in raw.chunks_exact(64) {
+        for c in raw.as_chunks::<64>().0 {
             let mut hit = GpuHit::default();
-            let bytes: &[u8; 64] = c.try_into().unwrap();
+            let bytes: &[u8; 64] = c;
             // SAFETY: GpuHit is repr(C, align(16)), 64 bytes, plain data.
             unsafe {
                 std::ptr::copy_nonoverlapping(
