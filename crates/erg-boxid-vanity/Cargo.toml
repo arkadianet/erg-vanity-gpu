@@ -1,0 +1,13 @@
+[package]
+name = "erg-boxid-vanity"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Vanity Ergo box-ID / token-ID grinder (offline sign-and-hash search)"
+
+[dependencies]
+ergo-lib = { workspace = true }
+sigma-util = "0.18"
+serde_json = "1"
+hex = { workspace = true }
+clap = { workspace = true }
