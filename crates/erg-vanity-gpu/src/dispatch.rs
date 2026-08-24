@@ -35,7 +35,7 @@ pub fn enumerate_devices() -> Result<Vec<DeviceInfo>, GpuError> {
 /// 512k with stream overlap enabled.
 pub fn recommended_batch_size(device_index: usize) -> Result<usize, GpuError> {
     if backend_pref() == "cuda" {
-        return Ok(1 << 19); // 524,288
+        return Ok(1 << 20); // 1,048,576 - pairs best with stream overlap
     }
     Ok(crate::context::GpuContext::with_device(device_index)?.recommended_batch_size())
 }

@@ -96,7 +96,7 @@ Performance section and in the register-cap note below.
 | `ERG_BACKEND=cuda\|opencl\|auto` | GPU backend selection; `auto` (default) uses CUDA when built-in and a driver is present, else OpenCL |
 | `ERG_CUDA_ARCH=<arch>` | nvcc target for the CUDA backend (`compute_75` default, e.g. `sm_86`) |
 | `ERG_CUDA_NVCC=/path` | Explicit nvcc path for build.rs |
-| `ERG_CUDA_OVERLAP=1` | CUDA ping-pong streaming: seed(n+1) overlaps search(n); results return one batch late |
+| `ERG_CUDA_OVERLAP=0` | Disable CUDA ping-pong streaming (on by default; seed(n+1) overlaps search(n), results return one batch late) |
 
 ### CUDA backend
 

@@ -19,6 +19,10 @@ use crate::wordlist::{generate_word_lens, generate_words_data};
 use erg_vanity_cpu::MatchType;
 use std::ffi::c_void;
 
+fn search_disabled() -> bool {
+    std::env::var("ERG_NO_SEARCH").is_ok_and(|v| v == "1")
+}
+
 /// PTX produced by build.rs when nvcc was available at compile time.
 #[cfg(not(no_cuda_backend))]
 static VANITY_PTX: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vanity_cuda.ptx"));
@@ -156,7 +160,9 @@ impl CudaVanityPipeline {
         let hits_ptr0 = hits_buf.ptr;
         let hit_count_ptr0 = hit_count_buf.ptr;
 
-        let overlap = std::env::var("ERG_CUDA_OVERLAP").as_deref() == Ok("1");
+        // Ping-pong streaming is a clear win at production batch sizes; opt out
+        // with ERG_CUDA_OVERLAP=0.
+        let overlap = std::env::var("ERG_CUDA_OVERLAP").as_deref() != Ok("0");
         let mut streams = [std::ptr::null_mut(); 2];
         let mut ev_seed_done = [std::ptr::null_mut(); 2];
         let mut ev_search_done = [std::ptr::null_mut(); 2];
@@ -250,6 +256,7 @@ impl CudaVanityPipeline {
             return unsafe { self.run_batch_overlapped(counter_start) };
         }
         self.reset_hits()?;
+        let skip_search = search_disabled();
 
         let mut salt_ptr = self.salt.ptr;
         let mut counter = counter_start;
@@ -276,6 +283,12 @@ impl CudaVanityPipeline {
             }
         }
 
+        if skip_search {
+            // Seed-only diagnostic mode: no search, no readback, no event.
+            let out = Vec::new();
+            self.batch_index += 1;
+            return Ok(out);
+        }
         let mut patterns_ptr = self.patterns.ptr;
         let mut offsets_ptr = self.pattern_offsets.ptr;
         let mut plens_ptr = self.pattern_lens.ptr;
@@ -420,6 +433,7 @@ impl CudaVanityPipeline {
         );
 
         // 4) Search kernel on stream B, gated on the seed of THIS batch.
+        let skip_search = search_disabled();
         check!(
             self.device.lib,
             cuStreamWaitEvent,
@@ -427,6 +441,12 @@ impl CudaVanityPipeline {
             self.ev_seed_done[slot],
             0u32
         );
+        if skip_search {
+            // Seed-only diagnostic mode: no search, no readback, no event.
+            let out = Vec::new();
+            self.batch_index += 1;
+            return Ok(out);
+        }
         let mut patterns_ptr = self.patterns.ptr;
         let mut offsets_ptr = self.pattern_offsets.ptr;
         let mut plens_ptr = self.pattern_lens.ptr;
