@@ -26,8 +26,8 @@ pub fn enumerate_devices() -> Result<Vec<DeviceInfo>, GpuError> {
 
 /// Device-recommended batch size for the active backend.
 ///
-/// Measured optimum differs: OpenCL likes 1M work items, CUDA peaks at
-/// 512k with stream overlap enabled.
+/// Measured optimum: OpenCL likes 1M work items; CUDA uses 1M together
+/// with stream overlap (ping-pong slots), its default on that path.
 pub fn recommended_batch_size(device_index: usize) -> Result<usize, GpuError> {
     if backend_pref() == "cuda" {
         return Ok(1 << 20); // 1,048,576 - pairs best with stream overlap

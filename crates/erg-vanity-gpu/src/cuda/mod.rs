@@ -210,9 +210,14 @@ pub unsafe fn launch_on(
     stream: CuStream,
     params: &mut [*mut c_void],
 ) -> Result<(), GpuError> {
-    let lx =
-        c_uint::try_from(local.max(1)).map_err(|_| GpuError::Other("block too large".into()))?;
-    let blocks = global.div_ceil(local.max(1));
+    if local == 0 {
+        return Err(GpuError::Other(
+            "launch local size must be >= 1 (cuLaunchKernel has no automatic block size)".into(),
+        ));
+    }
+
+    let lx = c_uint::try_from(local).map_err(|_| GpuError::Other("block too large".into()))?;
+    let blocks = global.div_ceil(local);
     let gx = c_uint::try_from(blocks).map_err(|_| GpuError::Other("grid too large".into()))?;
     check!(
         dev.lib,
@@ -245,9 +250,14 @@ pub unsafe fn launch(
     local: usize,
     params: &mut [*mut c_void],
 ) -> Result<(), GpuError> {
-    let lx =
-        c_uint::try_from(local.max(1)).map_err(|_| GpuError::Other("block too large".into()))?;
-    let blocks = global.div_ceil(local.max(1));
+    if local == 0 {
+        return Err(GpuError::Other(
+            "launch local size must be >= 1 (cuLaunchKernel has no automatic block size)".into(),
+        ));
+    }
+
+    let lx = c_uint::try_from(local).map_err(|_| GpuError::Other("block too large".into()))?;
+    let blocks = global.div_ceil(local);
     let gx = c_uint::try_from(blocks).map_err(|_| GpuError::Other("grid too large".into()))?;
     check!(
         dev.lib,
