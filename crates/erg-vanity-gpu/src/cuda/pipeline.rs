@@ -239,10 +239,14 @@ impl CudaVanityPipeline {
                 // SAFETY: handles created above; freed exactly once here.
                 unsafe {
                     for &s in streams {
-                        let _ = (device.lib.cuStreamDestroy)(s);
+                        if !s.is_null() {
+                            let _ = (device.lib.cuStreamDestroy)(s);
+                        }
                     }
                     for &e in events {
-                        let _ = (device.lib.cuEventDestroy_v2)(e);
+                        if !e.is_null() {
+                            let _ = (device.lib.cuEventDestroy_v2)(e);
+                        }
                     }
                     for &p in pins {
                         if !p.is_null() {

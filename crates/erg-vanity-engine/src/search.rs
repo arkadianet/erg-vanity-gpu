@@ -482,6 +482,10 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
                 }
             };
             let _ = wtx.send(WorkerMsg::Ready);
+            // At most one WorkerMsg::Error per worker: the collector counts
+            // each error as a finished worker, so a second one would skew
+            // workers_left and can leave --duration runs never stopping.
+            let mut worker_failed = false;
             while !stop.load(Ordering::Relaxed) {
                 let counter_start = counter.fetch_add(cfg.batch_size as u64, Ordering::Relaxed);
                 let batch = match pipeline.run_batch_with_counter(counter_start) {
@@ -491,6 +495,7 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
                             device: device_index,
                             message: e.to_string(),
                         });
+                        worker_failed = true;
                         break;
                     }
                 };
@@ -536,10 +541,12 @@ fn run_gpu(req: &SearchRequest, tx: Sender<SearchEvent>, stop: Arc<AtomicBool>) 
                     }
                 }
                 Err(e) => {
-                    let _ = wtx.send(WorkerMsg::Error {
-                        device: device_index,
-                        message: e.to_string(),
-                    });
+                    if !worker_failed {
+                        let _ = wtx.send(WorkerMsg::Error {
+                            device: device_index,
+                            message: e.to_string(),
+                        });
+                    }
                 }
             }
             let _ = wtx.send(WorkerMsg::Stats {

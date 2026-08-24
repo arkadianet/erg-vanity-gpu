@@ -93,7 +93,7 @@ Performance section and in the register-cap note below.
 | `ERG_CL_MAXREG=<n>` | NVIDIA register cap (`-cl-nv-maxrregcount`); `0` or unset lets the compiler choose |
 | `ERG_RUN_GPU_TESTS=1` | Run OpenCL kernel unit tests |
 | `RUST_MIN_STACK` | Set automatically via `.cargo/config.toml` |
-| `ERG_BACKEND=cuda\|opencl\|auto` | GPU backend selection; `auto` (default) uses CUDA when built-in and a driver is present, else OpenCL |
+| `ERG_BACKEND=cuda\|opencl\|auto` | GPU backend selection; `auto` (default) stays on the OpenCL path - set `cuda` explicitly to opt in (errors if unavailable) |
 | `ERG_CUDA_ARCH=<arch>` | nvcc target for the CUDA backend (`compute_75` default, e.g. `sm_86`) |
 | `ERG_CUDA_NVCC=/path` | Explicit nvcc path for build.rs |
 | `ERG_CUDA_OVERLAP=0` | Disable CUDA ping-pong streaming (on by default; seed(n+1) overlaps search(n), results return one batch late) |
