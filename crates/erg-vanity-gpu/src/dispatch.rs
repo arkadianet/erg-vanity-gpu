@@ -29,7 +29,7 @@ pub fn enumerate_devices() -> Result<Vec<DeviceInfo>, GpuError> {
 /// Measured optimum: OpenCL likes 1M work items; CUDA uses 1M together
 /// with stream overlap (ping-pong slots), its default on that path.
 pub fn recommended_batch_size(device_index: usize) -> Result<usize, GpuError> {
-    if backend_pref() == "cuda" {
+    if cfg!(target_os = "linux") && backend_pref() == "cuda" {
         return Ok(1 << 20); // 1,048,576 - pairs best with stream overlap
     }
     Ok(crate::context::GpuContext::with_device(device_index)?.recommended_batch_size())
