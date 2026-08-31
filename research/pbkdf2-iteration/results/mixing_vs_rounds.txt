@@ -1,0 +1,13 @@
+Follow-up: 4-word mini-HMAC, Koopman / degree / invariants / Walsh vs rounds.
+
+r= 1 b=2 w= 8 deg= 1 krylov=8->  9 inv=66   walsh=1.0/256
+r= 2 b=2 w= 8 deg= 3 krylov=8-> 17 inv=7    walsh=3.2/256
+r= 3 b=2 w= 8 deg= 5 krylov=8-> 64 inv=0    walsh=22.1/256
+r= 4 b=2 w= 8 deg= 6 krylov=8-> 63 inv=0    walsh=154.2/256
+r= 6 b=2 w= 8 deg= 8 krylov=8-> 32 inv=0    walsh=238.6/256
+r= 2 b=3 w=12 deg= 5 krylov=12-> 61 inv=15   walsh=10.3/4096
+r= 3 b=3 w=12 deg= 7 krylov=12->100 inv=0    walsh=185.9/4096
+r= 4 b=3 w=12 deg=10 krylov=12->108 inv=0    walsh=2508.1/4096
+r= 2 b=4 w=16 deg= 6 krylov=16-> 57 inv=n/a  walsh=53.4/65536
+r= 3 b=4 w=16 deg=11 krylov=16-> 80 inv=n/a  walsh=2421.8/65536
+r= 4 b=4 w=16 deg=15 krylov=16-> 80 inv=n/a  walsh=56183.6/65536

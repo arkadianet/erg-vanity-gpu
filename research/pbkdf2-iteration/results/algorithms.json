@@ -1,0 +1,81 @@
+{
+  "cycle_xor": [
+    {
+      "model": "linear8",
+      "ok": true,
+      "evals_sample": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2
+      ]
+    },
+    {
+      "model": "minihmac_r4",
+      "ok": true,
+      "evals_sample": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2
+      ]
+    },
+    {
+      "model": "arxhmac_r4",
+      "ok": true,
+      "evals_sample": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2
+      ]
+    }
+  ],
+  "order2_arxhmac_r4": true,
+  "order2_linear": true,
+  "orbit_close": {
+    "w8": {
+      "closed_before_2048": 5,
+      "n_x": 5,
+      "evals": [
+        21,
+        67,
+        21,
+        68,
+        48
+      ]
+    },
+    "w16": {
+      "closed_before_2048": 0,
+      "n_x": 5,
+      "evals": [
+        2048,
+        2048,
+        2048,
+        2048,
+        2048
+      ]
+    },
+    "w32": {
+      "closed_before_2048": 0,
+      "n_x": 5,
+      "evals": [
+        2048,
+        2048,
+        2048,
+        2048,
+        2048
+      ]
+    }
+  },
+  "seconds": 0.821
+}

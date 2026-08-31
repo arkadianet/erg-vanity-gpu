@@ -1,0 +1,2011 @@
+{
+  "interpolant": {
+    "linear": {
+      "nonzero": 9,
+      "max_deg": 128,
+      "linearized_terms": 9,
+      "non_linearized": 0,
+      "support_sample": [
+        0,
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128
+      ],
+      "verified": true,
+      "G_n": {
+        "2": {
+          "nonzero": 9,
+          "max_deg": 128,
+          "linearized_terms": 9,
+          "non_linearized": 0,
+          "support_sample": [
+            0,
+            1,
+            2,
+            4,
+            8,
+            16,
+            32,
+            64,
+            128
+          ],
+          "verified": true
+        },
+        "4": {
+          "nonzero": 9,
+          "max_deg": 128,
+          "linearized_terms": 9,
+          "non_linearized": 0,
+          "support_sample": [
+            0,
+            1,
+            2,
+            4,
+            8,
+            16,
+            32,
+            64,
+            128
+          ],
+          "verified": true
+        },
+        "8": {
+          "nonzero": 9,
+          "max_deg": 128,
+          "linearized_terms": 9,
+          "non_linearized": 0,
+          "support_sample": [
+            0,
+            1,
+            2,
+            4,
+            8,
+            16,
+            32,
+            64,
+            128
+          ],
+          "verified": true
+        }
+      }
+    },
+    "quadratic": {
+      "nonzero": 37,
+      "max_deg": 192,
+      "linearized_terms": 9,
+      "non_linearized": 28,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        12,
+        16,
+        17,
+        18,
+        20,
+        24
+      ],
+      "verified": true,
+      "G_n": {
+        "2": {
+          "nonzero": 93,
+          "max_deg": 224,
+          "linearized_terms": 9,
+          "non_linearized": 84,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            16
+          ],
+          "verified": true
+        },
+        "4": {
+          "nonzero": 254,
+          "max_deg": 254,
+          "linearized_terms": 9,
+          "non_linearized": 245,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        },
+        "8": {
+          "nonzero": 256,
+          "max_deg": 255,
+          "linearized_terms": 9,
+          "non_linearized": 247,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        }
+      }
+    },
+    "hmac_r2": {
+      "nonzero": 37,
+      "max_deg": 192,
+      "linearized_terms": 9,
+      "non_linearized": 28,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        12,
+        16,
+        17,
+        18,
+        20,
+        24
+      ],
+      "verified": true,
+      "G_n": {
+        "2": {
+          "nonzero": 93,
+          "max_deg": 224,
+          "linearized_terms": 9,
+          "non_linearized": 84,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            16
+          ],
+          "verified": true
+        },
+        "4": {
+          "nonzero": 93,
+          "max_deg": 224,
+          "linearized_terms": 9,
+          "non_linearized": 84,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            16
+          ],
+          "verified": true
+        },
+        "8": {
+          "nonzero": 37,
+          "max_deg": 192,
+          "linearized_terms": 9,
+          "non_linearized": 28,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            8,
+            9,
+            10,
+            12,
+            16,
+            17,
+            18,
+            20,
+            24
+          ],
+          "verified": true
+        }
+      }
+    },
+    "hmac_r3": {
+      "nonzero": 219,
+      "max_deg": 248,
+      "linearized_terms": 9,
+      "non_linearized": 210,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "verified": true,
+      "G_n": {
+        "2": {
+          "nonzero": 218,
+          "max_deg": 248,
+          "linearized_terms": 9,
+          "non_linearized": 209,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        },
+        "4": {
+          "nonzero": 219,
+          "max_deg": 248,
+          "linearized_terms": 9,
+          "non_linearized": 210,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        },
+        "8": {
+          "nonzero": 219,
+          "max_deg": 248,
+          "linearized_terms": 9,
+          "non_linearized": 210,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        }
+      }
+    },
+    "hmac_r4": {
+      "nonzero": 245,
+      "max_deg": 252,
+      "linearized_terms": 9,
+      "non_linearized": 236,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "verified": true,
+      "G_n": {
+        "2": {
+          "nonzero": 256,
+          "max_deg": 255,
+          "linearized_terms": 9,
+          "non_linearized": 247,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        },
+        "4": {
+          "nonzero": 255,
+          "max_deg": 255,
+          "linearized_terms": 9,
+          "non_linearized": 246,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        },
+        "8": {
+          "nonzero": 255,
+          "max_deg": 255,
+          "linearized_terms": 9,
+          "non_linearized": 246,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        }
+      }
+    },
+    "hmac_r8": {
+      "nonzero": 256,
+      "max_deg": 255,
+      "linearized_terms": 9,
+      "non_linearized": 247,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "verified": true,
+      "G_n": {
+        "2": {
+          "nonzero": 255,
+          "max_deg": 255,
+          "linearized_terms": 9,
+          "non_linearized": 246,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        },
+        "4": {
+          "nonzero": 254,
+          "max_deg": 255,
+          "linearized_terms": 9,
+          "non_linearized": 245,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        },
+        "8": {
+          "nonzero": 254,
+          "max_deg": 255,
+          "linearized_terms": 9,
+          "non_linearized": 245,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        }
+      }
+    },
+    "arxch_r4": {
+      "nonzero": 254,
+      "max_deg": 255,
+      "linearized_terms": 9,
+      "non_linearized": 245,
+      "support_sample": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "verified": true,
+      "G_n": {
+        "2": {
+          "nonzero": 256,
+          "max_deg": 255,
+          "linearized_terms": 9,
+          "non_linearized": 247,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        },
+        "4": {
+          "nonzero": 256,
+          "max_deg": 255,
+          "linearized_terms": 9,
+          "non_linearized": 247,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "verified": true
+        },
+        "8": {
+          "nonzero": 255,
+          "max_deg": 255,
+          "linearized_terms": 8,
+          "non_linearized": 247,
+          "support_sample": [
+            0,
+            1,
+            2,
+            3,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16
+          ],
+          "verified": true
+        }
+      }
+    }
+  },
+  "conjugacy": {
+    "linear": {
+      "translation_deg6": {
+        "deg": 6,
+        "particular": false,
+        "nullspace_dim": 1,
+        "exists_nonconst": false,
+        "coeff": null
+      },
+      "multiply": {
+        "deg": 4,
+        "n_alpha_tried": 8,
+        "hits": [
+          {
+            "alpha": 1,
+            "dim": 1,
+            "sample": [
+              1,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "dickson": {
+        "affine_conj_to_square": false,
+        "equals_square": false
+      }
+    },
+    "quadratic": {
+      "translation_deg6": {
+        "deg": 6,
+        "particular": false,
+        "nullspace_dim": 1,
+        "exists_nonconst": false,
+        "coeff": null
+      },
+      "multiply": {
+        "deg": 4,
+        "n_alpha_tried": 8,
+        "hits": [
+          {
+            "alpha": 1,
+            "dim": 1,
+            "sample": [
+              1,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "dickson": {
+        "affine_conj_to_square": false,
+        "equals_square": false
+      }
+    },
+    "hmac_r2": {
+      "translation_deg6": {
+        "deg": 6,
+        "particular": false,
+        "nullspace_dim": 1,
+        "exists_nonconst": false,
+        "coeff": null
+      },
+      "multiply": {
+        "deg": 4,
+        "n_alpha_tried": 8,
+        "hits": [
+          {
+            "alpha": 1,
+            "dim": 1,
+            "sample": [
+              1,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "dickson": {
+        "affine_conj_to_square": false,
+        "equals_square": false
+      }
+    },
+    "hmac_r3": {
+      "translation_deg6": {
+        "deg": 6,
+        "particular": false,
+        "nullspace_dim": 1,
+        "exists_nonconst": false,
+        "coeff": null
+      },
+      "multiply": {
+        "deg": 4,
+        "n_alpha_tried": 8,
+        "hits": [
+          {
+            "alpha": 1,
+            "dim": 1,
+            "sample": [
+              1,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "dickson": {
+        "affine_conj_to_square": false,
+        "equals_square": false
+      }
+    },
+    "hmac_r4": {
+      "translation_deg6": {
+        "deg": 6,
+        "particular": false,
+        "nullspace_dim": 1,
+        "exists_nonconst": false,
+        "coeff": null
+      },
+      "multiply": {
+        "deg": 4,
+        "n_alpha_tried": 8,
+        "hits": [
+          {
+            "alpha": 1,
+            "dim": 1,
+            "sample": [
+              1,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "dickson": {
+        "affine_conj_to_square": false,
+        "equals_square": false
+      }
+    },
+    "hmac_r8": {
+      "translation_deg6": {
+        "deg": 6,
+        "particular": false,
+        "nullspace_dim": 1,
+        "exists_nonconst": false,
+        "coeff": null
+      },
+      "multiply": {
+        "deg": 4,
+        "n_alpha_tried": 8,
+        "hits": [
+          {
+            "alpha": 1,
+            "dim": 1,
+            "sample": [
+              1,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "dickson": {
+        "affine_conj_to_square": false,
+        "equals_square": false
+      }
+    },
+    "arxch_r4": {
+      "translation_deg6": {
+        "deg": 6,
+        "particular": false,
+        "nullspace_dim": 1,
+        "exists_nonconst": false,
+        "coeff": null
+      },
+      "multiply": {
+        "deg": 4,
+        "n_alpha_tried": 8,
+        "hits": [
+          {
+            "alpha": 1,
+            "dim": 1,
+            "sample": [
+              1,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "dickson": {
+        "affine_conj_to_square": false,
+        "equals_square": false
+      }
+    }
+  },
+  "ranks": {
+    "linear": {
+      "value_tensor_ranks_R": [
+        3,
+        2,
+        2
+      ],
+      "mpo_unfolding_ranks_R": [
+        2,
+        2,
+        4
+      ],
+      "mpo_gf2": [
+        2,
+        2,
+        4
+      ],
+      "Fn_value_16x16_rank": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "G8_16x16_rank": 1
+    },
+    "quadratic": {
+      "value_tensor_ranks_R": [
+        4,
+        7,
+        4
+      ],
+      "mpo_unfolding_ranks_R": [
+        16,
+        104,
+        16
+      ],
+      "mpo_gf2": [
+        16,
+        104,
+        16
+      ],
+      "Fn_value_16x16_rank": [
+        7,
+        16,
+        16,
+        16
+      ],
+      "G8_16x16_rank": 16
+    },
+    "hmac_r2": {
+      "value_tensor_ranks_R": [
+        1,
+        1,
+        4
+      ],
+      "mpo_unfolding_ranks_R": [
+        12,
+        4,
+        4
+      ],
+      "mpo_gf2": [
+        12,
+        4,
+        4
+      ],
+      "Fn_value_16x16_rank": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "G8_16x16_rank": 1
+    },
+    "hmac_r3": {
+      "value_tensor_ranks_R": [
+        1,
+        4,
+        4
+      ],
+      "mpo_unfolding_ranks_R": [
+        16,
+        34,
+        4
+      ],
+      "mpo_gf2": [
+        16,
+        34,
+        4
+      ],
+      "Fn_value_16x16_rank": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "G8_16x16_rank": 4
+    },
+    "hmac_r4": {
+      "value_tensor_ranks_R": [
+        4,
+        16,
+        4
+      ],
+      "mpo_unfolding_ranks_R": [
+        16,
+        139,
+        16
+      ],
+      "mpo_gf2": [
+        16,
+        139,
+        16
+      ],
+      "Fn_value_16x16_rank": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "G8_16x16_rank": 16
+    },
+    "hmac_r8": {
+      "value_tensor_ranks_R": [
+        4,
+        16,
+        4
+      ],
+      "mpo_unfolding_ranks_R": [
+        16,
+        87,
+        16
+      ],
+      "mpo_gf2": [
+        16,
+        87,
+        16
+      ],
+      "Fn_value_16x16_rank": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "G8_16x16_rank": 16
+    },
+    "arxch_r4": {
+      "value_tensor_ranks_R": [
+        4,
+        9,
+        4
+      ],
+      "mpo_unfolding_ranks_R": [
+        16,
+        83,
+        16
+      ],
+      "mpo_gf2": [
+        16,
+        83,
+        16
+      ],
+      "Fn_value_16x16_rank": [
+        9,
+        9,
+        9,
+        9
+      ],
+      "G8_16x16_rank": 9
+    }
+  },
+  "commute": {
+    "linear": {
+      "commuting": [
+        "xor:0=id",
+        "xor:128",
+        "add256:0",
+        "add256:128",
+        "mul_odd:1",
+        "rot:0",
+        "word_add:0"
+      ]
+    },
+    "quadratic": {
+      "commuting": [
+        "xor:0=id",
+        "add256:0",
+        "mul_odd:1",
+        "rot:0",
+        "word_add:0"
+      ]
+    },
+    "hmac_r2": {
+      "commuting": [
+        "xor:0=id",
+        "add256:0",
+        "mul_odd:1",
+        "rot:0",
+        "word_add:0"
+      ]
+    },
+    "hmac_r3": {
+      "commuting": [
+        "xor:0=id",
+        "add256:0",
+        "mul_odd:1",
+        "rot:0",
+        "word_add:0"
+      ]
+    },
+    "hmac_r4": {
+      "commuting": [
+        "xor:0=id",
+        "add256:0",
+        "mul_odd:1",
+        "rot:0",
+        "word_add:0"
+      ]
+    },
+    "hmac_r8": {
+      "commuting": [
+        "xor:0=id",
+        "add256:0",
+        "mul_odd:1",
+        "rot:0",
+        "word_add:0"
+      ]
+    },
+    "arxch_r4": {
+      "commuting": [
+        "xor:0=id",
+        "add256:0",
+        "mul_odd:1",
+        "rot:0",
+        "word_add:0"
+      ]
+    }
+  },
+  "berlekamp_gf256": {
+    "linear": {
+      "lc": [
+        3,
+        4,
+        7
+      ],
+      "same": false
+    },
+    "quadratic": {
+      "lc": [
+        29,
+        15,
+        16
+      ],
+      "same": false
+    },
+    "hmac_r2": {
+      "lc": [
+        15,
+        15,
+        15
+      ],
+      "same": true
+    },
+    "hmac_r3": {
+      "lc": [
+        31,
+        31,
+        12
+      ],
+      "same": false
+    },
+    "hmac_r4": {
+      "lc": [
+        9,
+        9,
+        9
+      ],
+      "same": true
+    },
+    "hmac_r8": {
+      "lc": [
+        3,
+        4,
+        3
+      ],
+      "same": false
+    },
+    "arxch_r4": {
+      "lc": [
+        7,
+        5,
+        8
+      ],
+      "same": false
+    }
+  },
+  "semiconjugacy": {
+    "linear": {
+      "n_1bit_quotients": 1,
+      "max_flag_height": 8,
+      "full_T_conjugacy": true,
+      "best_flag": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128
+      ],
+      "onebit_sample": [
+        1
+      ]
+    },
+    "quadratic": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": []
+    },
+    "hmac_r2": {
+      "n_1bit_quotients": 7,
+      "max_flag_height": 3,
+      "full_T_conjugacy": false,
+      "best_flag": [
+        16,
+        32,
+        73
+      ],
+      "onebit_sample": [
+        16,
+        32,
+        48,
+        73,
+        89,
+        105,
+        121
+      ]
+    },
+    "hmac_r3": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": []
+    },
+    "hmac_r4": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": []
+    },
+    "hmac_r8": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": []
+    },
+    "arxch_r4": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": []
+    }
+  },
+  "cheap_affine_conj": {
+    "linear": {
+      "n_hits": 0,
+      "hits": []
+    },
+    "quadratic": {
+      "n_hits": 0,
+      "hits": []
+    },
+    "hmac_r2": {
+      "n_hits": 0,
+      "hits": []
+    },
+    "hmac_r3": {
+      "n_hits": 0,
+      "hits": []
+    },
+    "hmac_r4": {
+      "n_hits": 0,
+      "hits": []
+    },
+    "hmac_r8": {
+      "n_hits": 0,
+      "hits": []
+    },
+    "arxch_r4": {
+      "n_hits": 0,
+      "hits": []
+    }
+  },
+  "finite_diffs": {
+    "linear": {
+      "1": {
+        "orbit_xor_diff": 3,
+        "orbit_add_diff": 2,
+        "G_xor_diff": 4,
+        "G_add_diff": 9
+      },
+      "17": {
+        "orbit_xor_diff": 4,
+        "orbit_add_diff": 5,
+        "G_xor_diff": 5,
+        "G_add_diff": 9
+      },
+      "99": {
+        "orbit_xor_diff": 7,
+        "orbit_add_diff": 13,
+        "G_xor_diff": 8,
+        "G_add_diff": 17
+      }
+    },
+    "quadratic": {
+      "1": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "17": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "99": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      }
+    },
+    "hmac_r2": {
+      "1": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "17": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "99": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      }
+    },
+    "hmac_r3": {
+      "1": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "17": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "99": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      }
+    },
+    "hmac_r4": {
+      "1": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "17": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "99": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      }
+    },
+    "hmac_r8": {
+      "1": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "17": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "99": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      }
+    },
+    "arxch_r4": {
+      "1": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "17": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      },
+      "99": {
+        "orbit_xor_diff": null,
+        "orbit_add_diff": null,
+        "G_xor_diff": null,
+        "G_add_diff": null
+      }
+    }
+  },
+  "cycles": {
+    "linear": {
+      "n_cycles": 36,
+      "cycle_lengths": [
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8
+      ],
+      "tail_nodes_approx": 0,
+      "image_size": 256,
+      "bijective": true
+    },
+    "quadratic": {
+      "n_cycles": 2,
+      "cycle_lengths": [
+        11,
+        5
+      ],
+      "tail_nodes_approx": 0,
+      "image_size": 164,
+      "bijective": false
+    },
+    "hmac_r2": {
+      "n_cycles": 2,
+      "cycle_lengths": [
+        15,
+        1
+      ],
+      "tail_nodes_approx": 2,
+      "image_size": 16,
+      "bijective": false
+    },
+    "hmac_r3": {
+      "n_cycles": 6,
+      "cycle_lengths": [
+        31,
+        12,
+        12,
+        7,
+        1,
+        1
+      ],
+      "tail_nodes_approx": 5,
+      "image_size": 64,
+      "bijective": false
+    },
+    "hmac_r4": {
+      "n_cycles": 5,
+      "cycle_lengths": [
+        9,
+        9,
+        9,
+        1,
+        1
+      ],
+      "tail_nodes_approx": 9,
+      "image_size": 110,
+      "bijective": false
+    },
+    "hmac_r8": {
+      "n_cycles": 6,
+      "cycle_lengths": [
+        2,
+        2,
+        1,
+        1,
+        1,
+        1
+      ],
+      "tail_nodes_approx": 9,
+      "image_size": 21,
+      "bijective": false
+    },
+    "arxch_r4": {
+      "n_cycles": 2,
+      "cycle_lengths": [
+        5,
+        2
+      ],
+      "tail_nodes_approx": 2,
+      "image_size": 39,
+      "bijective": false
+    }
+  },
+  "sandwich": {
+    "r2": {
+      "identity_Fn_HO_Q_HI": true,
+      "interp_HI": {
+        "nonzero": 37,
+        "max_deg": 192,
+        "linearized_terms": 9,
+        "non_linearized": 28,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          8,
+          9,
+          10,
+          12,
+          16,
+          17,
+          18,
+          20,
+          24
+        ],
+        "verified": true
+      },
+      "interp_HO": {
+        "nonzero": 37,
+        "max_deg": 192,
+        "linearized_terms": 9,
+        "non_linearized": 28,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          8,
+          9,
+          10,
+          12,
+          16,
+          17,
+          18,
+          20,
+          24
+        ],
+        "verified": true
+      },
+      "interp_Q": {
+        "nonzero": 37,
+        "max_deg": 192,
+        "linearized_terms": 9,
+        "non_linearized": 28,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          8,
+          9,
+          10,
+          12,
+          16,
+          17,
+          18,
+          20,
+          24
+        ],
+        "verified": true
+      },
+      "interp_F": {
+        "nonzero": 37,
+        "max_deg": 192,
+        "linearized_terms": 9,
+        "non_linearized": 28,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          8,
+          9,
+          10,
+          12,
+          16,
+          17,
+          18,
+          20,
+          24
+        ],
+        "verified": true
+      },
+      "deg_Q": 2,
+      "deg_F": 2,
+      "Q_eq_F": true,
+      "order_Q": null,
+      "order_F": null,
+      "im_HI": 16,
+      "im_HO": 16,
+      "im_Q": 16,
+      "im_F": 16,
+      "Q_semiconj": {
+        "n_1bit_quotients": 7,
+        "max_flag_height": 3,
+        "full_T_conjugacy": false,
+        "best_flag": [
+          16,
+          32,
+          73
+        ],
+        "onebit_sample": [
+          16,
+          32,
+          48,
+          73,
+          89,
+          105,
+          121
+        ]
+      },
+      "F_semiconj": {
+        "n_1bit_quotients": 7,
+        "max_flag_height": 3,
+        "full_T_conjugacy": false,
+        "best_flag": [
+          16,
+          32,
+          73
+        ],
+        "onebit_sample": [
+          16,
+          32,
+          48,
+          73,
+          89,
+          105,
+          121
+        ]
+      },
+      "HI_semiconj": {
+        "n_1bit_quotients": 7,
+        "max_flag_height": 3,
+        "full_T_conjugacy": false,
+        "best_flag": [
+          16,
+          32,
+          73
+        ],
+        "onebit_sample": [
+          16,
+          32,
+          48,
+          73,
+          89,
+          105,
+          121
+        ]
+      },
+      "HO_semiconj": {
+        "n_1bit_quotients": 7,
+        "max_flag_height": 3,
+        "full_T_conjugacy": false,
+        "best_flag": [
+          16,
+          32,
+          73
+        ],
+        "onebit_sample": [
+          16,
+          32,
+          48,
+          73,
+          89,
+          105,
+          121
+        ]
+      }
+    },
+    "r4": {
+      "identity_Fn_HO_Q_HI": true,
+      "interp_HI": {
+        "nonzero": 219,
+        "max_deg": 248,
+        "linearized_terms": 9,
+        "non_linearized": 210,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "interp_HO": {
+        "nonzero": 219,
+        "max_deg": 248,
+        "linearized_terms": 9,
+        "non_linearized": 210,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "interp_Q": {
+        "nonzero": 245,
+        "max_deg": 252,
+        "linearized_terms": 9,
+        "non_linearized": 236,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "interp_F": {
+        "nonzero": 245,
+        "max_deg": 252,
+        "linearized_terms": 9,
+        "non_linearized": 236,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "deg_Q": 6,
+      "deg_F": 6,
+      "Q_eq_F": true,
+      "order_Q": null,
+      "order_F": null,
+      "im_HI": 144,
+      "im_HO": 144,
+      "im_Q": 110,
+      "im_F": 110,
+      "Q_semiconj": {
+        "n_1bit_quotients": 0,
+        "max_flag_height": 0,
+        "full_T_conjugacy": false,
+        "best_flag": [],
+        "onebit_sample": []
+      },
+      "F_semiconj": {
+        "n_1bit_quotients": 0,
+        "max_flag_height": 0,
+        "full_T_conjugacy": false,
+        "best_flag": [],
+        "onebit_sample": []
+      },
+      "HI_semiconj": {
+        "n_1bit_quotients": 0,
+        "max_flag_height": 0,
+        "full_T_conjugacy": false,
+        "best_flag": [],
+        "onebit_sample": []
+      },
+      "HO_semiconj": {
+        "n_1bit_quotients": 0,
+        "max_flag_height": 0,
+        "full_T_conjugacy": false,
+        "best_flag": [],
+        "onebit_sample": []
+      }
+    },
+    "r8": {
+      "identity_Fn_HO_Q_HI": true,
+      "interp_HI": {
+        "nonzero": 255,
+        "max_deg": 255,
+        "linearized_terms": 9,
+        "non_linearized": 246,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "interp_HO": {
+        "nonzero": 255,
+        "max_deg": 255,
+        "linearized_terms": 9,
+        "non_linearized": 246,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "interp_Q": {
+        "nonzero": 256,
+        "max_deg": 255,
+        "linearized_terms": 9,
+        "non_linearized": 247,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "interp_F": {
+        "nonzero": 256,
+        "max_deg": 255,
+        "linearized_terms": 9,
+        "non_linearized": 247,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "verified": true
+      },
+      "deg_Q": 8,
+      "deg_F": 8,
+      "Q_eq_F": true,
+      "order_Q": null,
+      "order_F": null,
+      "im_HI": 34,
+      "im_HO": 34,
+      "im_Q": 21,
+      "im_F": 21,
+      "Q_semiconj": {
+        "n_1bit_quotients": 0,
+        "max_flag_height": 0,
+        "full_T_conjugacy": false,
+        "best_flag": [],
+        "onebit_sample": []
+      },
+      "F_semiconj": {
+        "n_1bit_quotients": 0,
+        "max_flag_height": 0,
+        "full_T_conjugacy": false,
+        "best_flag": [],
+        "onebit_sample": []
+      },
+      "HI_semiconj": {
+        "n_1bit_quotients": 0,
+        "max_flag_height": 0,
+        "full_T_conjugacy": false,
+        "best_flag": [],
+        "onebit_sample": []
+      },
+      "HO_semiconj": {
+        "n_1bit_quotients": 0,
+        "max_flag_height": 0,
+        "full_T_conjugacy": false,
+        "best_flag": [],
+        "onebit_sample": []
+      }
+    }
+  },
+  "seconds": 13.293
+}

@@ -1,0 +1,511 @@
+{
+  "quotients": {
+    "hmac_r2": {
+      "support2": {
+        "n_hits": 20,
+        "hits": [
+          {
+            "bits": [
+              0,
+              4
+            ],
+            "code": 3
+          },
+          {
+            "bits": [
+              0,
+              4
+            ],
+            "code": 4
+          },
+          {
+            "bits": [
+              0,
+              4
+            ],
+            "code": 7
+          },
+          {
+            "bits": [
+              0,
+              4
+            ],
+            "code": 8
+          },
+          {
+            "bits": [
+              0,
+              4
+            ],
+            "code": 11
+          },
+          {
+            "bits": [
+              0,
+              4
+            ],
+            "code": 12
+          },
+          {
+            "bits": [
+              0,
+              5
+            ],
+            "code": 1
+          },
+          {
+            "bits": [
+              0,
+              5
+            ],
+            "code": 2
+          }
+        ],
+        "stopped": true
+      },
+      "support3": {
+        "n_hits": 20,
+        "hits": [
+          {
+            "bits": [
+              0,
+              1,
+              4
+            ],
+            "code": 15
+          },
+          {
+            "bits": [
+              0,
+              1,
+              4
+            ],
+            "code": 16
+          },
+          {
+            "bits": [
+              0,
+              1,
+              4
+            ],
+            "code": 31
+          },
+          {
+            "bits": [
+              0,
+              1,
+              4
+            ],
+            "code": 32
+          },
+          {
+            "bits": [
+              0,
+              1,
+              4
+            ],
+            "code": 47
+          },
+          {
+            "bits": [
+              0,
+              1,
+              4
+            ],
+            "code": 48
+          },
+          {
+            "bits": [
+              0,
+              1,
+              4
+            ],
+            "code": 63
+          },
+          {
+            "bits": [
+              0,
+              1,
+              4
+            ],
+            "code": 64
+          }
+        ],
+        "stopped": true
+      },
+      "word_dep": {
+        "0": [
+          0,
+          1
+        ],
+        "1": [
+          0,
+          1
+        ],
+        "2": [
+          0
+        ],
+        "3": [
+          0,
+          1
+        ]
+      },
+      "avalanche": [
+        4,
+        4,
+        2,
+        4,
+        0,
+        0,
+        1,
+        2
+      ],
+      "G2048_sparsity": {
+        "nonzero": 37,
+        "max_deg": 192,
+        "linearized_terms": 9,
+        "non_linearized": 28,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          8,
+          9,
+          10,
+          12,
+          16,
+          17,
+          18,
+          20,
+          24
+        ]
+      },
+      "G2048_constant": false,
+      "G2048_nuniq": 16
+    },
+    "hmac_r3": {
+      "support2": {
+        "n_hits": 0,
+        "hits": [],
+        "stopped": false
+      },
+      "support3": {
+        "n_hits": 0,
+        "hits": [],
+        "stopped": false
+      },
+      "word_dep": {
+        "0": [
+          0,
+          1,
+          2
+        ],
+        "1": [
+          0,
+          1,
+          2
+        ],
+        "2": [
+          0,
+          1,
+          2
+        ],
+        "3": [
+          0,
+          1,
+          2
+        ]
+      },
+      "avalanche": [
+        6,
+        6,
+        6,
+        6,
+        4,
+        6,
+        5,
+        6
+      ],
+      "G2048_sparsity": {
+        "nonzero": 217,
+        "max_deg": 248,
+        "linearized_terms": 9,
+        "non_linearized": 208,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      },
+      "G2048_constant": false,
+      "G2048_nuniq": 55
+    },
+    "hmac_r4": {
+      "support2": {
+        "n_hits": 0,
+        "hits": [],
+        "stopped": false
+      },
+      "support3": {
+        "n_hits": 0,
+        "hits": [],
+        "stopped": false
+      },
+      "word_dep": {
+        "0": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "1": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "2": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "3": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "avalanche": [
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8
+      ],
+      "G2048_sparsity": {
+        "nonzero": 255,
+        "max_deg": 255,
+        "linearized_terms": 9,
+        "non_linearized": 246,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      },
+      "G2048_constant": false,
+      "G2048_nuniq": 89
+    },
+    "hmac_r8": {
+      "support2": {
+        "n_hits": 0,
+        "hits": [],
+        "stopped": false
+      },
+      "support3": {
+        "n_hits": 20,
+        "hits": [
+          {
+            "bits": [
+              0,
+              1,
+              2
+            ],
+            "code": 4
+          },
+          {
+            "bits": [
+              0,
+              1,
+              2
+            ],
+            "code": 32
+          },
+          {
+            "bits": [
+              0,
+              1,
+              2
+            ],
+            "code": 36
+          },
+          {
+            "bits": [
+              0,
+              1,
+              2
+            ],
+            "code": 219
+          },
+          {
+            "bits": [
+              0,
+              1,
+              2
+            ],
+            "code": 223
+          },
+          {
+            "bits": [
+              0,
+              1,
+              2
+            ],
+            "code": 251
+          },
+          {
+            "bits": [
+              0,
+              1,
+              6
+            ],
+            "code": 32
+          },
+          {
+            "bits": [
+              0,
+              1,
+              6
+            ],
+            "code": 223
+          }
+        ],
+        "stopped": true
+      },
+      "word_dep": {
+        "0": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "1": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "2": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "3": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "avalanche": [
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        8
+      ],
+      "G2048_sparsity": {
+        "nonzero": 254,
+        "max_deg": 255,
+        "linearized_terms": 9,
+        "non_linearized": 245,
+        "support_sample": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      },
+      "G2048_constant": false,
+      "G2048_nuniq": 14
+    }
+  },
+  "wider": {
+    "b3r3": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": [],
+      "image_size": 512,
+      "N": 4096
+    },
+    "b3r4": {
+      "n_1bit_quotients": 0,
+      "max_flag_height": 0,
+      "full_T_conjugacy": false,
+      "best_flag": [],
+      "onebit_sample": [],
+      "image_size": 1126,
+      "N": 4096
+    },
+    "b4r3": {
+      "sampled": true,
+      "n_tried": 4031,
+      "n_1bit_quotients": 0,
+      "sample": [],
+      "image_size": 4096,
+      "N": 65536
+    },
+    "b4r4": {
+      "sampled": true,
+      "n_tried": 4031,
+      "n_1bit_quotients": 0,
+      "sample": [],
+      "image_size": 12734,
+      "N": 65536
+    }
+  },
+  "seconds": 2.764
+}

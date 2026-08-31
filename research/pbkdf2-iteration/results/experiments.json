@@ -1,0 +1,3674 @@
+{
+  "linear_control": {
+    "model": "linear_w16",
+    "rows": [
+      {
+        "n": 2,
+        "equiv": true,
+        "closed_ops_est": 2048,
+        "naive_ops": 12,
+        "ratio": 170.66666666666666
+      },
+      {
+        "n": 4,
+        "equiv": true,
+        "closed_ops_est": 3072,
+        "naive_ops": 34,
+        "ratio": 90.3529411764706
+      },
+      {
+        "n": 8,
+        "equiv": true,
+        "closed_ops_est": 4096,
+        "naive_ops": 77,
+        "ratio": 53.1948051948052
+      },
+      {
+        "n": 16,
+        "equiv": true,
+        "closed_ops_est": 5120,
+        "naive_ops": 156,
+        "ratio": 32.82051282051282
+      },
+      {
+        "n": 32,
+        "equiv": true,
+        "closed_ops_est": 6144,
+        "naive_ops": 312,
+        "ratio": 19.692307692307693
+      },
+      {
+        "n": 64,
+        "equiv": true,
+        "closed_ops_est": 7168,
+        "naive_ops": 624,
+        "ratio": 11.487179487179487
+      },
+      {
+        "n": 256,
+        "equiv": true,
+        "closed_ops_est": 9216,
+        "naive_ops": 2496,
+        "ratio": 3.6923076923076925
+      },
+      {
+        "n": 1024,
+        "equiv": true,
+        "closed_ops_est": 11264,
+        "naive_ops": 9984,
+        "ratio": 1.1282051282051282
+      },
+      {
+        "n": 2048,
+        "equiv": true,
+        "closed_ops_est": 12288,
+        "naive_ops": 19968,
+        "ratio": 0.6153846153846154
+      }
+    ]
+  },
+  "semigroup_point_eval": {
+    "rows": [
+      {
+        "n": 2,
+        "F_evals_no_memo": 3,
+        "F_evals_memo": 2,
+        "note": "memoized doubling === sequential walk"
+      },
+      {
+        "n": 4,
+        "F_evals_no_memo": 8,
+        "F_evals_memo": 4,
+        "note": "memoized doubling === sequential walk"
+      },
+      {
+        "n": 8,
+        "F_evals_no_memo": 20,
+        "F_evals_memo": 8,
+        "note": "memoized doubling === sequential walk"
+      },
+      {
+        "n": 16,
+        "F_evals_no_memo": 48,
+        "F_evals_memo": 16,
+        "note": "memoized doubling === sequential walk"
+      },
+      {
+        "n": 32,
+        "F_evals_no_memo": 112,
+        "F_evals_memo": 32,
+        "note": "memoized doubling === sequential walk"
+      },
+      {
+        "n": 64,
+        "F_evals_no_memo": 256,
+        "F_evals_memo": 64,
+        "note": "memoized doubling === sequential walk"
+      },
+      {
+        "n": 128,
+        "F_evals_no_memo": 576,
+        "F_evals_memo": 128,
+        "note": "memoized doubling === sequential walk"
+      },
+      {
+        "n": 256,
+        "F_evals_no_memo": 1280,
+        "F_evals_memo": 256,
+        "note": "memoized doubling === sequential walk"
+      },
+      {
+        "n": 512,
+        "F_evals_no_memo": 2816,
+        "F_evals_memo": 512,
+        "note": "memoized doubling === sequential walk"
+      },
+      {
+        "n": 1024,
+        "F_evals_no_memo": 6144,
+        "F_evals_memo": 1024,
+        "note": "memoized doubling === sequential walk"
+      },
+      {
+        "n": 2048,
+        "F_evals_no_memo": 13312,
+        "F_evals_memo": 2048,
+        "note": "memoized doubling === sequential walk"
+      }
+    ]
+  },
+  "hmac_identities": {
+    "model": "minihmac_n4b4r4",
+    "G2_equals_F": false,
+    "G2_zero": false,
+    "G4_zero": false,
+    "G4_equals_G2": false,
+    "note": "Even-n XOR does not cancel HMAC-like F iterates"
+  },
+  "table": {
+    "linear_w8": {
+      "w": 8,
+      "note": "affine over GF(2); geometric series is O(w^3 log n)",
+      "cost_F": 2,
+      "cost_F_breakdown": {
+        "add": 0,
+        "xor": 2,
+        "and_": 0,
+        "not_": 0,
+        "rot": 0,
+        "shr": 0
+      },
+      "affine": true,
+      "tfunction": true,
+      "bitperm_tfunction": true,
+      "jacobian_constant": true,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        },
+        {
+          "n": 32,
+          "doubling_equiv": true
+        },
+        {
+          "n": 64,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 1,
+          "deg_Gn": 1,
+          "anf_Fn": 41,
+          "anf_Gn": 41,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 1,
+          "deg_Gn": 1,
+          "anf_Fn": 24,
+          "anf_Gn": 21,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 1,
+          "deg_Gn": 1,
+          "anf_Fn": 15,
+          "anf_Gn": 10,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 1,
+          "deg_Gn": 1,
+          "anf_Fn": 8,
+          "anf_Gn": 2,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 1,
+          "deg_Gn": 0,
+          "anf_Fn": 8,
+          "anf_Gn": 0,
+          "deg_cancelled": true
+        },
+        {
+          "n": 32,
+          "deg_Fn": 1,
+          "deg_Gn": 0,
+          "anf_Fn": 8,
+          "anf_Gn": 0,
+          "deg_cancelled": true
+        },
+        {
+          "n": 64,
+          "deg_Fn": 1,
+          "deg_Gn": 0,
+          "anf_Fn": 8,
+          "anf_Gn": 0,
+          "deg_cancelled": true
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 1,
+        "deg_H": 1,
+        "anf_F": 41,
+        "anf_H": 33,
+        "affine_F": true,
+        "affine_H": true
+      },
+      "cycles": {
+        "n_cycles": 36,
+        "cycle_lens": [
+          8,
+          8,
+          8,
+          8,
+          8,
+          8,
+          8,
+          8
+        ],
+        "max_cycle": 8,
+        "is_permutation": true
+      },
+      "walsh": {
+        "min": 1,
+        "max": 1,
+        "mean": 1.0,
+        "full": 256
+      },
+      "invariant_linear_forms": 1,
+      "koopman_krylov_ranks": [
+        8,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9
+      ],
+      "koopman_saturated": true,
+      "koopman_final_rank": 9,
+      "koopman_max_possible": 136,
+      "composition": {
+        "anf_F": 41,
+        "anf_F2": 24,
+        "anf_G2": 21,
+        "deg_F": 1,
+        "deg_F2": 1,
+        "deg_G2": 1
+      },
+      "affine_closed_form": [
+        {
+          "n": 2,
+          "equiv": true,
+          "closed_xor_ops_est": 512,
+          "naive_ops": 11
+        },
+        {
+          "n": 4,
+          "equiv": true,
+          "closed_xor_ops_est": 768,
+          "naive_ops": 23
+        },
+        {
+          "n": 8,
+          "equiv": true,
+          "closed_xor_ops_est": 1024,
+          "naive_ops": 46
+        },
+        {
+          "n": 16,
+          "equiv": true,
+          "closed_xor_ops_est": 1280,
+          "naive_ops": 92
+        },
+        {
+          "n": 64,
+          "equiv": true,
+          "closed_xor_ops_est": 1792,
+          "naive_ops": 368
+        },
+        {
+          "n": 256,
+          "equiv": true,
+          "closed_xor_ops_est": 2304,
+          "naive_ops": 1472
+        },
+        {
+          "n": 2048,
+          "equiv": true,
+          "closed_xor_ops_est": 3072,
+          "naive_ops": 11776
+        }
+      ],
+      "seconds": 0.064
+    },
+    "quadratic_w8": {
+      "w": 8,
+      "note": "affine + sparse ANDs",
+      "cost_F": 10,
+      "cost_F_breakdown": {
+        "add": 0,
+        "xor": 6,
+        "and_": 4,
+        "not_": 0,
+        "rot": 0,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        },
+        {
+          "n": 32,
+          "doubling_equiv": true
+        },
+        {
+          "n": 64,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 2,
+          "deg_Gn": 2,
+          "anf_Fn": 41,
+          "anf_Gn": 41,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 97,
+          "anf_Gn": 92,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 714,
+          "anf_Gn": 714,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1031,
+          "anf_Gn": 993,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1003,
+          "anf_Gn": 1056,
+          "deg_cancelled": false
+        },
+        {
+          "n": 32,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1028,
+          "anf_Gn": 1025,
+          "deg_cancelled": false
+        },
+        {
+          "n": 64,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 974,
+          "anf_Gn": 1004,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 2,
+        "deg_H": 2,
+        "anf_F": 41,
+        "anf_H": 33,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 2,
+        "cycle_lens": [
+          11,
+          5
+        ],
+        "max_cycle": 11,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 1,
+        "max": 4,
+        "mean": 2.5,
+        "full": 256
+      },
+      "invariant_linear_forms": 0,
+      "koopman_krylov_ranks": [
+        8,
+        13,
+        17,
+        21,
+        25,
+        29,
+        33,
+        37,
+        41,
+        45,
+        49,
+        53,
+        57,
+        61,
+        65,
+        69,
+        73
+      ],
+      "koopman_saturated": false,
+      "koopman_final_rank": 73,
+      "koopman_max_possible": 136,
+      "composition": {
+        "anf_F": 41,
+        "anf_F2": 97,
+        "anf_G2": 92,
+        "deg_F": 2,
+        "deg_F2": 3,
+        "deg_G2": 3
+      },
+      "affine_closed_form": null,
+      "seconds": 0.058
+    },
+    "tiny_nlr_w8": {
+      "w": 8,
+      "note": "add/shift/xor recurrence",
+      "cost_F": 4,
+      "cost_F_breakdown": {
+        "add": 2,
+        "xor": 1,
+        "and_": 0,
+        "not_": 0,
+        "rot": 1,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        },
+        {
+          "n": 32,
+          "doubling_equiv": true
+        },
+        {
+          "n": 64,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 6,
+          "deg_Gn": 6,
+          "anf_Fn": 96,
+          "anf_Gn": 96,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 6,
+          "deg_Gn": 6,
+          "anf_Fn": 213,
+          "anf_Gn": 225,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 6,
+          "deg_Gn": 6,
+          "anf_Fn": 507,
+          "anf_Gn": 504,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 937,
+          "anf_Gn": 980,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1017,
+          "anf_Gn": 1002,
+          "deg_cancelled": false
+        },
+        {
+          "n": 32,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 999,
+          "anf_Gn": 994,
+          "deg_cancelled": false
+        },
+        {
+          "n": 64,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 999,
+          "anf_Gn": 994,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 6,
+        "deg_H": 6,
+        "anf_F": 96,
+        "anf_H": 88,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 1,
+        "cycle_lens": [
+          4
+        ],
+        "max_cycle": 4,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 1,
+        "max": 64,
+        "mean": 15.875,
+        "full": 256
+      },
+      "invariant_linear_forms": 0,
+      "koopman_krylov_ranks": [
+        8,
+        14,
+        19,
+        24,
+        29,
+        34,
+        39,
+        44,
+        49,
+        54,
+        59,
+        64,
+        67,
+        68,
+        68,
+        68,
+        68
+      ],
+      "koopman_saturated": true,
+      "koopman_final_rank": 68,
+      "koopman_max_possible": 136,
+      "composition": {
+        "anf_F": 96,
+        "anf_F2": 213,
+        "anf_G2": 225,
+        "deg_F": 6,
+        "deg_F2": 6,
+        "deg_G2": 6
+      },
+      "affine_closed_form": null,
+      "seconds": 0.056
+    },
+    "arx_n4b2r2": {
+      "w": 8,
+      "note": "ARX only",
+      "cost_F": 48,
+      "cost_F_breakdown": {
+        "add": 16,
+        "xor": 16,
+        "and_": 0,
+        "not_": 0,
+        "rot": 16,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        },
+        {
+          "n": 32,
+          "doubling_equiv": true
+        },
+        {
+          "n": 64,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 924,
+          "anf_Gn": 924,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 990,
+          "anf_Gn": 1016,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1003,
+          "anf_Gn": 1072,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1081,
+          "anf_Gn": 1019,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1025,
+          "anf_Gn": 1017,
+          "deg_cancelled": false
+        },
+        {
+          "n": 32,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1043,
+          "anf_Gn": 1040,
+          "deg_cancelled": false
+        },
+        {
+          "n": 64,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1010,
+          "anf_Gn": 995,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 7,
+        "deg_H": 7,
+        "anf_F": 924,
+        "anf_H": 926,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 12,
+        "cycle_lens": [
+          67,
+          47,
+          42,
+          42,
+          18,
+          18,
+          13,
+          5
+        ],
+        "max_cycle": 67,
+        "is_permutation": true
+      },
+      "walsh": {
+        "min": 90,
+        "max": 221,
+        "mean": 187.625,
+        "full": 256
+      },
+      "invariant_linear_forms": 0,
+      "koopman_krylov_ranks": [
+        8,
+        16,
+        24,
+        32,
+        40,
+        48,
+        56,
+        64,
+        72,
+        80,
+        88,
+        96,
+        104,
+        112,
+        120,
+        128,
+        136
+      ],
+      "koopman_saturated": false,
+      "koopman_final_rank": 136,
+      "koopman_max_possible": 136,
+      "composition": {
+        "anf_F": 924,
+        "anf_F2": 990,
+        "anf_G2": 1016,
+        "deg_F": 7,
+        "deg_F2": 7,
+        "deg_G2": 7
+      },
+      "affine_closed_form": null,
+      "seconds": 0.051
+    },
+    "arx_n4b2r4": {
+      "w": 8,
+      "note": "ARX only",
+      "cost_F": 96,
+      "cost_F_breakdown": {
+        "add": 32,
+        "xor": 32,
+        "and_": 0,
+        "not_": 0,
+        "rot": 32,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        },
+        {
+          "n": 32,
+          "doubling_equiv": true
+        },
+        {
+          "n": 64,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1006,
+          "anf_Gn": 1006,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1002,
+          "anf_Gn": 1014,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1034,
+          "anf_Gn": 1022,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1026,
+          "anf_Gn": 1015,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1026,
+          "anf_Gn": 1019,
+          "deg_cancelled": false
+        },
+        {
+          "n": 32,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1035,
+          "anf_Gn": 1054,
+          "deg_cancelled": false
+        },
+        {
+          "n": 64,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1034,
+          "anf_Gn": 1044,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 7,
+        "deg_H": 7,
+        "anf_F": 1006,
+        "anf_H": 1008,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 16,
+        "cycle_lens": [
+          67,
+          47,
+          21,
+          21,
+          21,
+          21,
+          13,
+          9
+        ],
+        "max_cycle": 67,
+        "is_permutation": true
+      },
+      "walsh": {
+        "min": 221,
+        "max": 230,
+        "mean": 227.25,
+        "full": 256
+      },
+      "invariant_linear_forms": 0,
+      "koopman_krylov_ranks": [
+        8,
+        16,
+        24,
+        32,
+        40,
+        48,
+        56,
+        64,
+        72,
+        80,
+        88,
+        96,
+        104,
+        112,
+        120,
+        128,
+        136
+      ],
+      "koopman_saturated": false,
+      "koopman_final_rank": 136,
+      "koopman_max_possible": 136,
+      "composition": {
+        "anf_F": 1006,
+        "anf_F2": 1002,
+        "anf_G2": 1014,
+        "deg_F": 7,
+        "deg_F2": 7,
+        "deg_G2": 7
+      },
+      "affine_closed_form": null,
+      "seconds": 0.051
+    },
+    "arxch_n4b2r2": {
+      "w": 8,
+      "note": "ARX + Ch + Maj",
+      "cost_F": 48,
+      "cost_F_breakdown": {
+        "add": 10,
+        "xor": 14,
+        "and_": 10,
+        "not_": 2,
+        "rot": 12,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        },
+        {
+          "n": 32,
+          "doubling_equiv": true
+        },
+        {
+          "n": 64,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 6,
+          "deg_Gn": 6,
+          "anf_Fn": 204,
+          "anf_Gn": 204,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 478,
+          "anf_Gn": 472,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 492,
+          "anf_Gn": 498,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 501,
+          "anf_Gn": 507,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 503,
+          "anf_Gn": 476,
+          "deg_cancelled": false
+        },
+        {
+          "n": 32,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 499,
+          "anf_Gn": 463,
+          "deg_cancelled": false
+        },
+        {
+          "n": 64,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 493,
+          "anf_Gn": 518,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 6,
+        "deg_H": 6,
+        "anf_F": 204,
+        "anf_H": 208,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 2,
+        "cycle_lens": [
+          5,
+          3
+        ],
+        "max_cycle": 5,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 4,
+        "max": 256,
+        "mean": 108.375,
+        "full": 256
+      },
+      "invariant_linear_forms": 0,
+      "koopman_krylov_ranks": [
+        8,
+        16,
+        24,
+        32,
+        40,
+        47,
+        49,
+        49,
+        49,
+        49,
+        49,
+        49,
+        49,
+        49,
+        49,
+        49,
+        49
+      ],
+      "koopman_saturated": true,
+      "koopman_final_rank": 49,
+      "koopman_max_possible": 136,
+      "composition": {
+        "anf_F": 204,
+        "anf_F2": 478,
+        "anf_G2": 472,
+        "deg_F": 6,
+        "deg_F2": 8,
+        "deg_G2": 8
+      },
+      "affine_closed_form": null,
+      "seconds": 0.056
+    },
+    "arxch_n4b2r4": {
+      "w": 8,
+      "note": "ARX + Ch + Maj",
+      "cost_F": 96,
+      "cost_F_breakdown": {
+        "add": 20,
+        "xor": 28,
+        "and_": 20,
+        "not_": 4,
+        "rot": 24,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        },
+        {
+          "n": 32,
+          "doubling_equiv": true
+        },
+        {
+          "n": 64,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 496,
+          "anf_Gn": 496,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 538,
+          "anf_Gn": 498,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 527,
+          "anf_Gn": 503,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 527,
+          "anf_Gn": 503,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 517,
+          "anf_Gn": 531,
+          "deg_cancelled": false
+        },
+        {
+          "n": 32,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 539,
+          "anf_Gn": 525,
+          "deg_cancelled": false
+        },
+        {
+          "n": 64,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 521,
+          "anf_Gn": 485,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 8,
+        "deg_H": 8,
+        "anf_F": 496,
+        "anf_H": 498,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 2,
+        "cycle_lens": [
+          5,
+          2
+        ],
+        "max_cycle": 5,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 189,
+        "max": 256,
+        "mean": 240.375,
+        "full": 256
+      },
+      "invariant_linear_forms": 0,
+      "koopman_krylov_ranks": [
+        8,
+        16,
+        24,
+        32,
+        39,
+        40,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41,
+        41
+      ],
+      "koopman_saturated": true,
+      "koopman_final_rank": 41,
+      "koopman_max_possible": 136,
+      "composition": {
+        "anf_F": 496,
+        "anf_F2": 538,
+        "anf_G2": 498,
+        "deg_F": 8,
+        "deg_F2": 8,
+        "deg_G2": 8
+      },
+      "affine_closed_form": null,
+      "seconds": 0.058
+    },
+    "minisha_n4b2r2": {
+      "w": 8,
+      "note": "reduced SHA-512 compression, fixed IV, HMAC-like padding",
+      "cost_F": 56,
+      "cost_F_breakdown": {
+        "add": 18,
+        "xor": 14,
+        "and_": 10,
+        "not_": 2,
+        "rot": 12,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        },
+        {
+          "n": 32,
+          "doubling_equiv": true
+        },
+        {
+          "n": 64,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 2,
+          "deg_Gn": 2,
+          "anf_Fn": 13,
+          "anf_Gn": 13,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 18,
+          "anf_Gn": 19,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 32,
+          "anf_Gn": 27,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 45,
+          "anf_Gn": 33,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 32,
+          "anf_Gn": 28,
+          "deg_cancelled": false
+        },
+        {
+          "n": 32,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 45,
+          "anf_Gn": 33,
+          "deg_cancelled": false
+        },
+        {
+          "n": 64,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 32,
+          "anf_Gn": 28,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 2,
+        "deg_H": 2,
+        "anf_F": 13,
+        "anf_H": 21,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 4,
+        "cycle_lens": [
+          12,
+          2,
+          1,
+          1
+        ],
+        "max_cycle": 12,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 1,
+        "max": 4,
+        "mean": 1.75,
+        "full": 256
+      },
+      "invariant_linear_forms": 7,
+      "koopman_krylov_ranks": [
+        8,
+        11,
+        13,
+        15,
+        17,
+        18,
+        19,
+        19,
+        19,
+        19,
+        19,
+        19,
+        19,
+        19,
+        19,
+        19,
+        19
+      ],
+      "koopman_saturated": true,
+      "koopman_final_rank": 19,
+      "koopman_max_possible": 136,
+      "composition": {
+        "anf_F": 13,
+        "anf_F2": 18,
+        "anf_G2": 19,
+        "deg_F": 2,
+        "deg_F2": 3,
+        "deg_G2": 3
+      },
+      "affine_closed_form": null,
+      "seconds": 0.063
+    },
+    "minisha_n4b2r4": {
+      "w": 8,
+      "note": "reduced SHA-512 compression, fixed IV, HMAC-like padding",
+      "cost_F": 108,
+      "cost_F_breakdown": {
+        "add": 32,
+        "xor": 28,
+        "and_": 20,
+        "not_": 4,
+        "rot": 24,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        },
+        {
+          "n": 32,
+          "doubling_equiv": true
+        },
+        {
+          "n": 64,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 5,
+          "deg_Gn": 5,
+          "anf_Fn": 118,
+          "anf_Gn": 118,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 6,
+          "deg_Gn": 6,
+          "anf_Fn": 631,
+          "anf_Gn": 621,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1040,
+          "anf_Gn": 1044,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1016,
+          "anf_Gn": 1038,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1012,
+          "anf_Gn": 1003,
+          "deg_cancelled": false
+        },
+        {
+          "n": 32,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1010,
+          "anf_Gn": 1036,
+          "deg_cancelled": false
+        },
+        {
+          "n": 64,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1016,
+          "anf_Gn": 1043,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 5,
+        "deg_H": 5,
+        "anf_F": 118,
+        "anf_H": 116,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 4,
+        "cycle_lens": [
+          7,
+          3,
+          2,
+          1
+        ],
+        "max_cycle": 7,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 1,
+        "max": 93,
+        "mean": 31.25,
+        "full": 256
+      },
+      "invariant_linear_forms": 0,
+      "koopman_krylov_ranks": [
+        8,
+        15,
+        22,
+        29,
+        36,
+        43,
+        50,
+        57,
+        64,
+        71,
+        78,
+        85,
+        91,
+        95,
+        95,
+        95,
+        95
+      ],
+      "koopman_saturated": true,
+      "koopman_final_rank": 95,
+      "koopman_max_possible": 136,
+      "composition": {
+        "anf_F": 118,
+        "anf_F2": 631,
+        "anf_G2": 621,
+        "deg_F": 5,
+        "deg_F2": 6,
+        "deg_G2": 6
+      },
+      "affine_closed_form": null,
+      "seconds": 0.056
+    },
+    "minihmac_n4b2r2": {
+      "w": 8,
+      "note": "F(x)=Compress(O,pad(Compress(I,pad(x))))",
+      "cost_F": 112,
+      "cost_F_breakdown": {
+        "add": 36,
+        "xor": 28,
+        "and_": 20,
+        "not_": 4,
+        "rot": 24,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        },
+        {
+          "n": 32,
+          "doubling_equiv": true
+        },
+        {
+          "n": 64,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 25,
+          "anf_Gn": 25,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 42,
+          "anf_Gn": 43,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 53,
+          "anf_Gn": 32,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 42,
+          "anf_Gn": 41,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 53,
+          "anf_Gn": 32,
+          "deg_cancelled": false
+        },
+        {
+          "n": 32,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 42,
+          "anf_Gn": 41,
+          "deg_cancelled": false
+        },
+        {
+          "n": 64,
+          "deg_Fn": 3,
+          "deg_Gn": 3,
+          "anf_Fn": 53,
+          "anf_Gn": 32,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 3,
+        "deg_H": 3,
+        "anf_F": 25,
+        "anf_H": 25,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 6,
+        "cycle_lens": [
+          6,
+          6,
+          1,
+          1,
+          1,
+          1
+        ],
+        "max_cycle": 6,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 1,
+        "max": 10,
+        "mean": 3.25,
+        "full": 256
+      },
+      "invariant_linear_forms": 7,
+      "koopman_krylov_ranks": [
+        8,
+        12,
+        15,
+        17,
+        17,
+        17,
+        17,
+        17,
+        17,
+        17,
+        17,
+        17,
+        17,
+        17,
+        17,
+        17,
+        17
+      ],
+      "koopman_saturated": true,
+      "koopman_final_rank": 17,
+      "koopman_max_possible": 136,
+      "composition": {
+        "anf_F": 25,
+        "anf_F2": 42,
+        "anf_G2": 43,
+        "deg_F": 3,
+        "deg_F2": 3,
+        "deg_G2": 3
+      },
+      "affine_closed_form": null,
+      "seconds": 0.064
+    },
+    "minihmac_n4b2r4": {
+      "w": 8,
+      "note": "F(x)=Compress(O,pad(Compress(I,pad(x))))",
+      "cost_F": 216,
+      "cost_F_breakdown": {
+        "add": 64,
+        "xor": 56,
+        "and_": 40,
+        "not_": 8,
+        "rot": 48,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        },
+        {
+          "n": 32,
+          "doubling_equiv": true
+        },
+        {
+          "n": 64,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 6,
+          "deg_Gn": 6,
+          "anf_Fn": 659,
+          "anf_Gn": 659,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1017,
+          "anf_Gn": 996,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1070,
+          "anf_Gn": 1021,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1101,
+          "anf_Gn": 1040,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1028,
+          "anf_Gn": 1011,
+          "deg_cancelled": false
+        },
+        {
+          "n": 32,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1018,
+          "anf_Gn": 1003,
+          "deg_cancelled": false
+        },
+        {
+          "n": 64,
+          "deg_Fn": 8,
+          "deg_Gn": 8,
+          "anf_Fn": 1021,
+          "anf_Gn": 983,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 6,
+        "deg_H": 6,
+        "anf_F": 659,
+        "anf_H": 659,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 5,
+        "cycle_lens": [
+          9,
+          9,
+          9,
+          1,
+          1
+        ],
+        "max_cycle": 9,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 93,
+        "max": 208,
+        "mean": 157.625,
+        "full": 256
+      },
+      "invariant_linear_forms": 0,
+      "koopman_krylov_ranks": [
+        8,
+        16,
+        24,
+        32,
+        40,
+        48,
+        56,
+        64,
+        72,
+        75,
+        75,
+        75,
+        75,
+        75,
+        75,
+        75,
+        75
+      ],
+      "koopman_saturated": true,
+      "koopman_final_rank": 75,
+      "koopman_max_possible": 136,
+      "composition": {
+        "anf_F": 659,
+        "anf_F2": 1017,
+        "anf_G2": 996,
+        "deg_F": 6,
+        "deg_F2": 8,
+        "deg_G2": 8
+      },
+      "affine_closed_form": null,
+      "seconds": 0.058
+    },
+    "minihmac_n4b3r2": {
+      "w": 12,
+      "note": "F(x)=Compress(O,pad(Compress(I,pad(x))))",
+      "cost_F": 112,
+      "cost_F_breakdown": {
+        "add": 36,
+        "xor": 28,
+        "and_": 20,
+        "not_": 4,
+        "rot": 24,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 5,
+          "deg_Gn": 5,
+          "anf_Fn": 62,
+          "anf_Gn": 62,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 5,
+          "deg_Gn": 5,
+          "anf_Fn": 146,
+          "anf_Gn": 168,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 5,
+          "deg_Gn": 5,
+          "anf_Fn": 277,
+          "anf_Gn": 277,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 5,
+          "deg_Gn": 5,
+          "anf_Fn": 295,
+          "anf_Gn": 278,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 5,
+          "deg_Gn": 5,
+          "anf_Fn": 285,
+          "anf_Gn": 262,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 5,
+        "deg_H": 5,
+        "anf_F": 62,
+        "anf_H": 66,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 6,
+        "cycle_lens": [
+          30,
+          16,
+          13,
+          3,
+          1,
+          1
+        ],
+        "max_cycle": 30,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 1,
+        "max": 43,
+        "mean": 9.166666666666666,
+        "full": 4096
+      },
+      "invariant_linear_forms": 15,
+      "koopman_krylov_ranks": [
+        12,
+        19,
+        25,
+        31,
+        37,
+        43,
+        49,
+        55,
+        61
+      ],
+      "koopman_saturated": false,
+      "koopman_final_rank": 61,
+      "koopman_max_possible": 108,
+      "composition": {
+        "anf_F": 62,
+        "anf_F2": 146,
+        "anf_G2": 168,
+        "deg_F": 5,
+        "deg_F2": 5,
+        "deg_G2": 5
+      },
+      "affine_closed_form": null,
+      "seconds": 0.552
+    },
+    "minihmac_n4b3r4": {
+      "w": 12,
+      "note": "F(x)=Compress(O,pad(Compress(I,pad(x))))",
+      "cost_F": 216,
+      "cost_F_breakdown": {
+        "add": 64,
+        "xor": 56,
+        "and_": 40,
+        "not_": 8,
+        "rot": 48,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        },
+        {
+          "n": 16,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 10,
+          "deg_Gn": 10,
+          "anf_Fn": 12124,
+          "anf_Gn": 12124,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 12,
+          "deg_Gn": 12,
+          "anf_Fn": 24487,
+          "anf_Gn": 24533,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 12,
+          "deg_Gn": 12,
+          "anf_Fn": 24505,
+          "anf_Gn": 24533,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 12,
+          "deg_Gn": 12,
+          "anf_Fn": 24465,
+          "anf_Gn": 24735,
+          "deg_cancelled": false
+        },
+        {
+          "n": 16,
+          "deg_Fn": 12,
+          "deg_Gn": 12,
+          "anf_Fn": 24647,
+          "anf_Gn": 24699,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 10,
+        "deg_H": 10,
+        "anf_F": 12124,
+        "anf_H": 12130,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 4,
+        "cycle_lens": [
+          10,
+          5,
+          4,
+          1
+        ],
+        "max_cycle": 10,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 358,
+        "max": 3915,
+        "mean": 2523.5,
+        "full": 4096
+      },
+      "invariant_linear_forms": 0,
+      "koopman_krylov_ranks": [
+        12,
+        24,
+        36,
+        48,
+        60,
+        72,
+        84,
+        96,
+        108
+      ],
+      "koopman_saturated": false,
+      "koopman_final_rank": 108,
+      "koopman_max_possible": 108,
+      "composition": {
+        "anf_F": 12124,
+        "anf_F2": 24487,
+        "anf_G2": 24533,
+        "deg_F": 10,
+        "deg_F2": 12,
+        "deg_G2": 12
+      },
+      "affine_closed_form": null,
+      "seconds": 0.501
+    },
+    "minihmac_n4b4r4": {
+      "w": 16,
+      "note": "F(x)=Compress(O,pad(Compress(I,pad(x))))",
+      "cost_F": 216,
+      "cost_F_breakdown": {
+        "add": 64,
+        "xor": 56,
+        "and_": 40,
+        "not_": 8,
+        "rot": 48,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 15,
+          "deg_Gn": 15,
+          "anf_Fn": 394467,
+          "anf_Gn": 394467,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 16,
+          "deg_Gn": 16,
+          "anf_Fn": 524269,
+          "anf_Gn": 524156,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 16,
+          "deg_Gn": 16,
+          "anf_Fn": 524277,
+          "anf_Gn": 524127,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 16,
+          "deg_Gn": 16,
+          "anf_Fn": 523657,
+          "anf_Gn": 524118,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 15,
+        "deg_H": 15,
+        "anf_F": 394467,
+        "anf_H": 394465,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 4,
+        "cycle_lens": [
+          167,
+          5,
+          2,
+          1
+        ],
+        "max_cycle": 167,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 32002,
+        "max": 65115,
+        "mean": 56356.3125,
+        "full": 65536
+      },
+      "invariant_linear_forms": null,
+      "koopman_krylov_ranks": [
+        16,
+        32,
+        48,
+        64,
+        80
+      ],
+      "koopman_saturated": false,
+      "koopman_final_rank": 80,
+      "koopman_max_possible": 80,
+      "composition": {
+        "anf_F": 394467,
+        "anf_F2": 524269,
+        "anf_G2": 524156,
+        "deg_F": 15,
+        "deg_F2": 16,
+        "deg_G2": 16
+      },
+      "affine_closed_form": null,
+      "seconds": 9.007
+    },
+    "minihmac_n8b2r4": {
+      "w": 16,
+      "note": "F(x)=Compress(O,pad(Compress(I,pad(x))))",
+      "cost_F": 224,
+      "cost_F_breakdown": {
+        "add": 72,
+        "xor": 56,
+        "and_": 40,
+        "not_": 8,
+        "rot": 48,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 1066,
+          "anf_Gn": 1066,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 2046,
+          "anf_Gn": 2028,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 2000,
+          "anf_Gn": 2077,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 7,
+          "deg_Gn": 7,
+          "anf_Fn": 2028,
+          "anf_Gn": 2088,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 7,
+        "deg_H": 7,
+        "anf_F": 1066,
+        "anf_H": 1072,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 8,
+        "cycle_lens": [
+          161,
+          47,
+          19,
+          19,
+          5,
+          2,
+          2,
+          1
+        ],
+        "max_cycle": 161,
+        "is_permutation": false
+      },
+      "walsh": {
+        "min": 13,
+        "max": 217,
+        "mean": 138.75,
+        "full": 65536
+      },
+      "invariant_linear_forms": null,
+      "koopman_krylov_ranks": [
+        16,
+        30,
+        43,
+        56,
+        69
+      ],
+      "koopman_saturated": false,
+      "koopman_final_rank": 69,
+      "koopman_max_possible": 80,
+      "composition": {
+        "anf_F": 1066,
+        "anf_F2": 2046,
+        "anf_G2": 2028,
+        "deg_F": 7,
+        "deg_F2": 7,
+        "deg_G2": 7
+      },
+      "affine_closed_form": null,
+      "seconds": 9.183
+    },
+    "minihmac_n8b2r8": {
+      "w": 16,
+      "note": "F(x)=Compress(O,pad(Compress(I,pad(x))))",
+      "cost_F": 432,
+      "cost_F_breakdown": {
+        "add": 128,
+        "xor": 112,
+        "and_": 80,
+        "not_": 16,
+        "rot": 96,
+        "shr": 0
+      },
+      "affine": false,
+      "tfunction": false,
+      "bitperm_tfunction": false,
+      "jacobian_constant": false,
+      "doubling_equiv": [
+        {
+          "n": 1,
+          "doubling_equiv": true
+        },
+        {
+          "n": 2,
+          "doubling_equiv": true
+        },
+        {
+          "n": 4,
+          "doubling_equiv": true
+        },
+        {
+          "n": 8,
+          "doubling_equiv": true
+        }
+      ],
+      "degree": [
+        {
+          "n": 1,
+          "deg_Fn": 15,
+          "deg_Gn": 15,
+          "anf_Fn": 502629,
+          "anf_Gn": 502629,
+          "deg_cancelled": false
+        },
+        {
+          "n": 2,
+          "deg_Fn": 15,
+          "deg_Gn": 15,
+          "anf_Fn": 525291,
+          "anf_Gn": 524288,
+          "deg_cancelled": false
+        },
+        {
+          "n": 4,
+          "deg_Fn": 15,
+          "deg_Gn": 15,
+          "anf_Fn": 525136,
+          "anf_Gn": 524321,
+          "deg_cancelled": false
+        },
+        {
+          "n": 8,
+          "deg_Fn": 15,
+          "deg_Gn": 15,
+          "anf_Fn": 524625,
+          "anf_Gn": 523541,
+          "deg_cancelled": false
+        }
+      ],
+      "H_vs_F": {
+        "deg_F": 15,
+        "deg_H": 15,
+        "anf_F": 502629,
+        "anf_H": 502629,
+        "affine_F": false,
+        "affine_H": false
+      },
+      "cycles": {
+        "n_cycles": 18,
+        "cycle_lens": [
+          56307,
+          3563,
+          2141,
+          1297,
+          1297,
+          451,
+          451,
+          7
+        ],
+        "max_cycle": 56307,
+        "is_permutation": true
+      },
+      "walsh": {
+        "min": 60229,
+        "max": 65145,
+        "mean": 63921.0625,
+        "full": 65536
+      },
+      "invariant_linear_forms": null,
+      "koopman_krylov_ranks": [
+        16,
+        32,
+        48,
+        64,
+        80
+      ],
+      "koopman_saturated": false,
+      "koopman_final_rank": 80,
+      "koopman_max_possible": 80,
+      "composition": {
+        "anf_F": 502629,
+        "anf_F2": 525291,
+        "anf_G2": 524288,
+        "deg_F": 15,
+        "deg_F2": 15,
+        "deg_G2": 15
+      },
+      "affine_closed_form": null,
+      "seconds": 9.885
+    }
+  },
+  "orbit": {
+    "minihmac_n4b8r8": {
+      "w": 32,
+      "cost_F": 424,
+      "cost_growth": [
+        {
+          "n": 2,
+          "ops": 848,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 4,
+          "ops": 1696,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 8,
+          "ops": 3392,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 16,
+          "ops": 6784,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 32,
+          "ops": 13568,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 64,
+          "ops": 27136,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 128,
+          "ops": 54272,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 256,
+          "ops": 108544,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 512,
+          "ops": 217088,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 1024,
+          "ops": 434176,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 2048,
+          "ops": 868352,
+          "ops_over_nF": 1.0
+        }
+      ],
+      "linear_complexity_x0": {
+        "min": 255,
+        "max": 258,
+        "mean": 256.375,
+        "values": [
+          257,
+          256,
+          257,
+          257,
+          256,
+          256,
+          257,
+          255,
+          256,
+          256,
+          256,
+          256,
+          257,
+          256,
+          258,
+          256
+        ]
+      },
+      "linear_complexity_x1": {
+        "min": 255,
+        "max": 259,
+        "mean": 256.75
+      },
+      "lc_same_poly": false,
+      "unique_jacobians_first_24": 24,
+      "twodic_lowbit_closed": [
+        {
+          "low_bits": 1,
+          "mismatches": 2,
+          "trials": 5
+        },
+        {
+          "low_bits": 2,
+          "mismatches": 4,
+          "trials": 5
+        },
+        {
+          "low_bits": 3,
+          "mismatches": 4,
+          "trials": 5
+        },
+        {
+          "low_bits": 4,
+          "mismatches": 4,
+          "trials": 5
+        },
+        {
+          "low_bits": 5,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 6,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 7,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 8,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 9,
+          "mismatches": 2,
+          "trials": 5
+        },
+        {
+          "low_bits": 10,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 11,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 12,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 13,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 14,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 15,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 16,
+          "mismatches": 3,
+          "trials": 5
+        }
+      ],
+      "G16_zero": false,
+      "tfunction_violations_200": 95,
+      "jacobian_constant": false,
+      "seconds": 0.538
+    },
+    "minihmac_n8b8r8": {
+      "w": 64,
+      "cost_F": 432,
+      "cost_growth": [
+        {
+          "n": 2,
+          "ops": 864,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 4,
+          "ops": 1728,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 8,
+          "ops": 3456,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 16,
+          "ops": 6912,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 32,
+          "ops": 13824,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 64,
+          "ops": 27648,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 128,
+          "ops": 55296,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 256,
+          "ops": 110592,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 512,
+          "ops": 221184,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 1024,
+          "ops": 442368,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 2048,
+          "ops": 884736,
+          "ops_over_nF": 1.0
+        }
+      ],
+      "linear_complexity_x0": {
+        "min": 253,
+        "max": 258,
+        "mean": 256.0625,
+        "values": [
+          258,
+          255,
+          258,
+          257,
+          256,
+          258,
+          256,
+          253,
+          255,
+          256,
+          257,
+          254,
+          257,
+          255,
+          256,
+          256
+        ]
+      },
+      "linear_complexity_x1": {
+        "min": 255,
+        "max": 258,
+        "mean": 256.25
+      },
+      "lc_same_poly": false,
+      "unique_jacobians_first_24": 24,
+      "twodic_lowbit_closed": [
+        {
+          "low_bits": 1,
+          "mismatches": 2,
+          "trials": 5
+        },
+        {
+          "low_bits": 2,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 3,
+          "mismatches": 4,
+          "trials": 5
+        },
+        {
+          "low_bits": 4,
+          "mismatches": 4,
+          "trials": 5
+        },
+        {
+          "low_bits": 5,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 6,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 7,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 8,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 9,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 10,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 11,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 12,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 13,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 14,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 15,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 16,
+          "mismatches": 3,
+          "trials": 5
+        }
+      ],
+      "G16_zero": false,
+      "tfunction_violations_200": 89,
+      "jacobian_constant": false,
+      "seconds": 0.588
+    },
+    "minihmac_n8b8r16": {
+      "w": 64,
+      "cost_F": 848,
+      "cost_growth": [
+        {
+          "n": 2,
+          "ops": 1696,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 4,
+          "ops": 3392,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 8,
+          "ops": 6784,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 16,
+          "ops": 13568,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 32,
+          "ops": 27136,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 64,
+          "ops": 54272,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 128,
+          "ops": 108544,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 256,
+          "ops": 217088,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 512,
+          "ops": 434176,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 1024,
+          "ops": 868352,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 2048,
+          "ops": 1736704,
+          "ops_over_nF": 1.0
+        }
+      ],
+      "linear_complexity_x0": {
+        "min": 255,
+        "max": 258,
+        "mean": 256.3125,
+        "values": [
+          255,
+          255,
+          257,
+          258,
+          258,
+          256,
+          257,
+          257,
+          256,
+          257,
+          255,
+          257,
+          256,
+          255,
+          256,
+          256
+        ]
+      },
+      "linear_complexity_x1": {
+        "min": 254,
+        "max": 258,
+        "mean": 256.0
+      },
+      "lc_same_poly": false,
+      "unique_jacobians_first_24": 24,
+      "twodic_lowbit_closed": [
+        {
+          "low_bits": 1,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 2,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 3,
+          "mismatches": 4,
+          "trials": 5
+        },
+        {
+          "low_bits": 4,
+          "mismatches": 4,
+          "trials": 5
+        },
+        {
+          "low_bits": 5,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 6,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 7,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 8,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 9,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 10,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 11,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 12,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 13,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 14,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 15,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 16,
+          "mismatches": 3,
+          "trials": 5
+        }
+      ],
+      "G16_zero": false,
+      "tfunction_violations_200": 102,
+      "jacobian_constant": false,
+      "seconds": 0.885
+    },
+    "arxch_n8b8r8": {
+      "w": 64,
+      "cost_F": 192,
+      "cost_growth": [
+        {
+          "n": 2,
+          "ops": 384,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 4,
+          "ops": 768,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 8,
+          "ops": 1536,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 16,
+          "ops": 3072,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 32,
+          "ops": 6144,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 64,
+          "ops": 12288,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 128,
+          "ops": 24576,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 256,
+          "ops": 49152,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 512,
+          "ops": 98304,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 1024,
+          "ops": 196608,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 2048,
+          "ops": 393216,
+          "ops_over_nF": 1.0
+        }
+      ],
+      "linear_complexity_x0": {
+        "min": 253,
+        "max": 259,
+        "mean": 256.25,
+        "values": [
+          257,
+          256,
+          256,
+          256,
+          257,
+          256,
+          256,
+          256,
+          256,
+          253,
+          257,
+          256,
+          257,
+          256,
+          256,
+          259
+        ]
+      },
+      "linear_complexity_x1": {
+        "min": 254,
+        "max": 257,
+        "mean": 256.0
+      },
+      "lc_same_poly": false,
+      "unique_jacobians_first_24": 24,
+      "twodic_lowbit_closed": [
+        {
+          "low_bits": 1,
+          "mismatches": 2,
+          "trials": 5
+        },
+        {
+          "low_bits": 2,
+          "mismatches": 1,
+          "trials": 5
+        },
+        {
+          "low_bits": 3,
+          "mismatches": 2,
+          "trials": 5
+        },
+        {
+          "low_bits": 4,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 5,
+          "mismatches": 2,
+          "trials": 5
+        },
+        {
+          "low_bits": 6,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 7,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 8,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 9,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 10,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 11,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 12,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 13,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 14,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 15,
+          "mismatches": 3,
+          "trials": 5
+        },
+        {
+          "low_bits": 16,
+          "mismatches": 3,
+          "trials": 5
+        }
+      ],
+      "G16_zero": false,
+      "tfunction_violations_200": 85,
+      "jacobian_constant": false,
+      "seconds": 0.381
+    },
+    "tiny_nlr_w32": {
+      "w": 32,
+      "cost_F": 4,
+      "cost_growth": [
+        {
+          "n": 2,
+          "ops": 8,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 4,
+          "ops": 16,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 8,
+          "ops": 32,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 16,
+          "ops": 64,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 32,
+          "ops": 128,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 64,
+          "ops": 256,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 128,
+          "ops": 512,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 256,
+          "ops": 1024,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 512,
+          "ops": 2048,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 1024,
+          "ops": 4096,
+          "ops_over_nF": 1.0
+        },
+        {
+          "n": 2048,
+          "ops": 8192,
+          "ops_over_nF": 1.0
+        }
+      ],
+      "linear_complexity_x0": {
+        "min": 255,
+        "max": 258,
+        "mean": 256.25,
+        "values": [
+          257,
+          256,
+          256,
+          256,
+          256,
+          258,
+          256,
+          256,
+          256,
+          256,
+          256,
+          257,
+          257,
+          256,
+          256,
+          255
+        ]
+      },
+      "linear_complexity_x1": {
+        "min": 255,
+        "max": 258,
+        "mean": 256.3125
+      },
+      "lc_same_poly": false,
+      "unique_jacobians_first_24": 24,
+      "twodic_lowbit_closed": [
+        {
+          "low_bits": 1,
+          "mismatches": 1,
+          "trials": 5
+        },
+        {
+          "low_bits": 2,
+          "mismatches": 2,
+          "trials": 5
+        },
+        {
+          "low_bits": 3,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 4,
+          "mismatches": 1,
+          "trials": 5
+        },
+        {
+          "low_bits": 5,
+          "mismatches": 1,
+          "trials": 5
+        },
+        {
+          "low_bits": 6,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 7,
+          "mismatches": 2,
+          "trials": 5
+        },
+        {
+          "low_bits": 8,
+          "mismatches": 1,
+          "trials": 5
+        },
+        {
+          "low_bits": 9,
+          "mismatches": 1,
+          "trials": 5
+        },
+        {
+          "low_bits": 10,
+          "mismatches": 2,
+          "trials": 5
+        },
+        {
+          "low_bits": 11,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 12,
+          "mismatches": 1,
+          "trials": 5
+        },
+        {
+          "low_bits": 13,
+          "mismatches": 1,
+          "trials": 5
+        },
+        {
+          "low_bits": 14,
+          "mismatches": 1,
+          "trials": 5
+        },
+        {
+          "low_bits": 15,
+          "mismatches": 2,
+          "trials": 5
+        },
+        {
+          "low_bits": 16,
+          "mismatches": 1,
+          "trials": 5
+        }
+      ],
+      "G16_zero": false,
+      "tfunction_violations_200": 94,
+      "jacobian_constant": false,
+      "seconds": 0.212
+    },
+    "linear_w32": {
+      "w": 32,
+      "cost_F": 2,
+      "cost_growth": [
+        {
+          "n": 2,
+          "ops": 17,
+          "ops_over_nF": 4.25
+        },
+        {
+          "n": 4,
+          "ops": 47,
+          "ops_over_nF": 5.875
+        },
+        {
+          "n": 8,
+          "ops": 111,
+          "ops_over_nF": 6.9375
+        },
+        {
+          "n": 16,
+          "ops": 240,
+          "ops_over_nF": 7.5
+        },
+        {
+          "n": 32,
+          "ops": 488,
+          "ops_over_nF": 7.625
+        },
+        {
+          "n": 64,
+          "ops": 976,
+          "ops_over_nF": 7.625
+        },
+        {
+          "n": 128,
+          "ops": 1952,
+          "ops_over_nF": 7.625
+        },
+        {
+          "n": 256,
+          "ops": 3904,
+          "ops_over_nF": 7.625
+        },
+        {
+          "n": 512,
+          "ops": 7808,
+          "ops_over_nF": 7.625
+        },
+        {
+          "n": 1024,
+          "ops": 15616,
+          "ops_over_nF": 7.625
+        },
+        {
+          "n": 2048,
+          "ops": 31232,
+          "ops_over_nF": 7.625
+        }
+      ],
+      "linear_complexity_x0": {
+        "min": 2,
+        "max": 15,
+        "mean": 8.0,
+        "values": [
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          5,
+          8,
+          4,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ]
+      },
+      "linear_complexity_x1": {
+        "min": 2,
+        "max": 15,
+        "mean": 8.0
+      },
+      "lc_same_poly": true,
+      "unique_jacobians_first_24": 1,
+      "twodic_lowbit_closed": [
+        {
+          "low_bits": 1,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 2,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 3,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 4,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 5,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 6,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 7,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 8,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 9,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 10,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 11,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 12,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 13,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 14,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 15,
+          "mismatches": 0,
+          "trials": 5
+        },
+        {
+          "low_bits": 16,
+          "mismatches": 0,
+          "trials": 5
+        }
+      ],
+      "G16_zero": false,
+      "tfunction_violations_200": 0,
+      "jacobian_constant": true,
+      "seconds": 0.035
+    }
+  },
+  "elapsed_s": 32.562
+}

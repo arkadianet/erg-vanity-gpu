@@ -1,0 +1,930 @@
+{
+  "target": "minihmac_n4b2r4",
+  "w": 8,
+  "harness": {
+    "xor_mc0": "sat",
+    "xor_verified": true,
+    "and4_k2": "unsat",
+    "and4_k3": "sat",
+    "and4_k2_unsat": true,
+    "and4_verified": true,
+    "harness_ok": true
+  },
+  "constructive": {
+    "equiv_F": true,
+    "equiv_F2": true,
+    "equiv_G2": true,
+    "I": [
+      0,
+      3,
+      2,
+      1
+    ],
+    "O": [
+      0,
+      3,
+      2,
+      1
+    ],
+    "counts_F": {
+      "and": 46,
+      "xor": 126,
+      "not": 8,
+      "add": 64,
+      "rot": 48,
+      "shr": 0,
+      "gates": 180,
+      "weighted_arx": 466
+    },
+    "counts_G2_hashcons": {
+      "and": 92,
+      "xor": 260,
+      "not": 16,
+      "add": 128,
+      "rot": 96,
+      "shr": 0,
+      "gates": 368,
+      "weighted_arx": 940
+    },
+    "counts_two_copy": {
+      "and": 92,
+      "xor": 260,
+      "not": 16,
+      "add": 128,
+      "rot": 96,
+      "shr": 0,
+      "gates": 368,
+      "weighted_arx": 940
+    },
+    "hashcons_and_vs_two_copy": 1.0,
+    "hashcons_gates_vs_two_copy": 1.0,
+    "hashcons_weighted_vs_two_copy": 1.0,
+    "extra_ands_for_F2": 46,
+    "sharing_saved_ands": 0
+  },
+  "degrees": {
+    "F": 6,
+    "H": 6,
+    "F2": 8,
+    "G2": 8,
+    "F_bits": [
+      6,
+      6,
+      5,
+      6,
+      5,
+      6,
+      6,
+      6
+    ],
+    "H_bits": [
+      6,
+      6,
+      5,
+      6,
+      5,
+      6,
+      6,
+      6
+    ],
+    "F2_bits": [
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      7,
+      8
+    ],
+    "G2_bits": [
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      7,
+      8
+    ],
+    "G2_is_H_of_F": true
+  },
+  "identities": {
+    "G2_eq_F": false,
+    "G2_eq_F2": false,
+    "G2_eq_zero": false,
+    "G2_eq_id": false,
+    "G2_eq_F_xor_id": false,
+    "G2_affine_of_F": false,
+    "G2_affine_of_F2": false,
+    "G2_affine_of_x": false,
+    "G2_EA_of_F2": false,
+    "G2_EA_of_F": false,
+    "exists_g_F_after_g": false,
+    "exists_g_g_after_F": true,
+    "F_permutation": false,
+    "imF": 110,
+    "imG2": 89
+  },
+  "bit_stats": {
+    "F": [
+      {
+        "bit": 0,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 128,
+        "anf_terms": 98,
+        "walsh_max": 56,
+        "dist_to_affine": 100,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 1,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 120,
+        "anf_terms": 115,
+        "walsh_max": 48,
+        "dist_to_affine": 104,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 2,
+        "deg": 5,
+        "mc_deg_lb": 4,
+        "weight": 128,
+        "anf_terms": 63,
+        "walsh_max": 96,
+        "dist_to_affine": 80,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 3,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 128,
+        "anf_terms": 95,
+        "walsh_max": 48,
+        "dist_to_affine": 104,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 4,
+        "deg": 5,
+        "mc_deg_lb": 4,
+        "weight": 128,
+        "anf_terms": 41,
+        "walsh_max": 64,
+        "dist_to_affine": 96,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 5,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 128,
+        "anf_terms": 61,
+        "walsh_max": 64,
+        "dist_to_affine": 96,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 6,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 128,
+        "anf_terms": 83,
+        "walsh_max": 64,
+        "dist_to_affine": 96,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 7,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 132,
+        "anf_terms": 103,
+        "walsh_max": 40,
+        "dist_to_affine": 108,
+        "product_plus_affine": false
+      }
+    ],
+    "H": [
+      {
+        "bit": 0,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 128,
+        "anf_terms": 99,
+        "walsh_max": 56,
+        "dist_to_affine": 100,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 1,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 128,
+        "anf_terms": 116,
+        "walsh_max": 48,
+        "dist_to_affine": 104,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 2,
+        "deg": 5,
+        "mc_deg_lb": 4,
+        "weight": 128,
+        "anf_terms": 62,
+        "walsh_max": 96,
+        "dist_to_affine": 80,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 3,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 112,
+        "anf_terms": 94,
+        "walsh_max": 48,
+        "dist_to_affine": 104,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 4,
+        "deg": 5,
+        "mc_deg_lb": 4,
+        "weight": 128,
+        "anf_terms": 40,
+        "walsh_max": 64,
+        "dist_to_affine": 96,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 5,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 112,
+        "anf_terms": 60,
+        "walsh_max": 64,
+        "dist_to_affine": 96,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 6,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 128,
+        "anf_terms": 84,
+        "walsh_max": 64,
+        "dist_to_affine": 96,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 7,
+        "deg": 6,
+        "mc_deg_lb": 5,
+        "weight": 124,
+        "anf_terms": 104,
+        "walsh_max": 40,
+        "dist_to_affine": 108,
+        "product_plus_affine": false
+      }
+    ],
+    "F2": [
+      {
+        "bit": 0,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 139,
+        "anf_terms": 129,
+        "walsh_max": 54,
+        "dist_to_affine": 101,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 1,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 111,
+        "anf_terms": 141,
+        "walsh_max": 54,
+        "dist_to_affine": 101,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 2,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 105,
+        "anf_terms": 123,
+        "walsh_max": 54,
+        "dist_to_affine": 101,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 3,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 127,
+        "anf_terms": 135,
+        "walsh_max": 46,
+        "dist_to_affine": 105,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 4,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 105,
+        "anf_terms": 126,
+        "walsh_max": 54,
+        "dist_to_affine": 101,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 5,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 103,
+        "anf_terms": 118,
+        "walsh_max": 50,
+        "dist_to_affine": 103,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 6,
+        "deg": 7,
+        "mc_deg_lb": 6,
+        "weight": 116,
+        "anf_terms": 111,
+        "walsh_max": 48,
+        "dist_to_affine": 104,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 7,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 121,
+        "anf_terms": 134,
+        "walsh_max": 50,
+        "dist_to_affine": 103,
+        "product_plus_affine": false
+      }
+    ],
+    "G2": [
+      {
+        "bit": 0,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 125,
+        "anf_terms": 121,
+        "walsh_max": 42,
+        "dist_to_affine": 107,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 1,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 115,
+        "anf_terms": 120,
+        "walsh_max": 70,
+        "dist_to_affine": 93,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 2,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 125,
+        "anf_terms": 128,
+        "walsh_max": 42,
+        "dist_to_affine": 107,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 3,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 91,
+        "anf_terms": 126,
+        "walsh_max": 74,
+        "dist_to_affine": 91,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 4,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 119,
+        "anf_terms": 133,
+        "walsh_max": 54,
+        "dist_to_affine": 101,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 5,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 123,
+        "anf_terms": 117,
+        "walsh_max": 46,
+        "dist_to_affine": 105,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 6,
+        "deg": 7,
+        "mc_deg_lb": 6,
+        "weight": 124,
+        "anf_terms": 122,
+        "walsh_max": 44,
+        "dist_to_affine": 106,
+        "product_plus_affine": false
+      },
+      {
+        "bit": 7,
+        "deg": 8,
+        "mc_deg_lb": 7,
+        "weight": 147,
+        "anf_terms": 129,
+        "walsh_max": 42,
+        "dist_to_affine": 107,
+        "product_plus_affine": false
+      }
+    ]
+  },
+  "mc_vectorial": {
+    "F": {
+      "bit_degrees": [
+        6,
+        6,
+        5,
+        6,
+        5,
+        6,
+        6,
+        6
+      ],
+      "anf_terms": 659,
+      "vec_degree": 6,
+      "scan": [
+        {
+          "k": 5,
+          "status": "timeout",
+          "seconds": 20.0,
+          "xor_est": null
+        }
+      ],
+      "and_lower_bound": null,
+      "and_upper_from_sat": null,
+      "verified": null,
+      "last_status": "timeout"
+    },
+    "H": {
+      "bit_degrees": [
+        6,
+        6,
+        5,
+        6,
+        5,
+        6,
+        6,
+        6
+      ],
+      "anf_terms": 659,
+      "vec_degree": 6,
+      "scan": [
+        {
+          "k": 5,
+          "status": "timeout",
+          "seconds": 20.0,
+          "xor_est": null
+        }
+      ],
+      "and_lower_bound": null,
+      "and_upper_from_sat": null,
+      "verified": null,
+      "last_status": "timeout"
+    },
+    "F2": {
+      "bit_degrees": [
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        7,
+        8
+      ],
+      "anf_terms": 1017,
+      "vec_degree": 8,
+      "scan": [
+        {
+          "k": 7,
+          "status": "timeout",
+          "seconds": 20.0,
+          "xor_est": null
+        }
+      ],
+      "and_lower_bound": null,
+      "and_upper_from_sat": null,
+      "verified": null,
+      "last_status": "timeout"
+    },
+    "G2": {
+      "bit_degrees": [
+        8,
+        8,
+        8,
+        8,
+        8,
+        8,
+        7,
+        8
+      ],
+      "anf_terms": 996,
+      "vec_degree": 8,
+      "scan": [
+        {
+          "k": 7,
+          "status": "timeout",
+          "seconds": 20.0,
+          "xor_est": null
+        }
+      ],
+      "and_lower_bound": null,
+      "and_upper_from_sat": null,
+      "verified": null,
+      "last_status": "timeout"
+    }
+  },
+  "mc_per_bit": {
+    "F": {
+      "0": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "1": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "2": {
+        "deg": 5,
+        "k": 4,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "3": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "4": {
+        "deg": 5,
+        "k": 4,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "5": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "6": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "7": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      }
+    },
+    "H": {
+      "0": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "1": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "2": {
+        "deg": 5,
+        "k": 4,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "3": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "4": {
+        "deg": 5,
+        "k": 4,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "5": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "6": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "7": {
+        "deg": 6,
+        "k": 5,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      }
+    },
+    "F2": {
+      "0": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "1": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "2": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "3": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "4": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "5": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "6": {
+        "deg": 7,
+        "k": 6,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "7": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      }
+    },
+    "G2": {
+      "0": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "1": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "2": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "3": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "4": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "5": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "6": {
+        "deg": 7,
+        "k": 6,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      },
+      "7": {
+        "deg": 8,
+        "k": 7,
+        "status": "timeout",
+        "seconds": 15.0,
+        "verified": null,
+        "xor_est": null
+      }
+    }
+  },
+  "seconds": 561.283,
+  "robustness_constructive": [
+    {
+      "rounds": 2,
+      "seed": 21,
+      "and_F": 4,
+      "and_G2": 8,
+      "ratio": 1.0,
+      "equiv": true
+    },
+    {
+      "rounds": 2,
+      "seed": 22,
+      "and_F": 6,
+      "and_G2": 12,
+      "ratio": 1.0,
+      "equiv": true
+    },
+    {
+      "rounds": 2,
+      "seed": 99,
+      "and_F": 8,
+      "and_G2": 16,
+      "ratio": 1.0,
+      "equiv": true
+    },
+    {
+      "rounds": 3,
+      "seed": 21,
+      "and_F": 22,
+      "and_G2": 44,
+      "ratio": 1.0,
+      "equiv": true
+    },
+    {
+      "rounds": 3,
+      "seed": 22,
+      "and_F": 24,
+      "and_G2": 48,
+      "ratio": 1.0,
+      "equiv": true
+    },
+    {
+      "rounds": 3,
+      "seed": 99,
+      "and_F": 26,
+      "and_G2": 52,
+      "ratio": 1.0,
+      "equiv": true
+    },
+    {
+      "rounds": 4,
+      "seed": 21,
+      "and_F": 46,
+      "and_G2": 92,
+      "ratio": 1.0,
+      "equiv": true
+    },
+    {
+      "rounds": 4,
+      "seed": 22,
+      "and_F": 48,
+      "and_G2": 96,
+      "ratio": 1.0,
+      "equiv": true
+    },
+    {
+      "rounds": 4,
+      "seed": 99,
+      "and_F": 50,
+      "and_G2": 100,
+      "ratio": 1.0,
+      "equiv": true
+    },
+    {
+      "rounds": 8,
+      "seed": 21,
+      "and_F": 134,
+      "and_G2": 268,
+      "ratio": 1.0,
+      "equiv": true
+    },
+    {
+      "rounds": 8,
+      "seed": 22,
+      "and_F": 136,
+      "and_G2": 272,
+      "ratio": 1.0,
+      "equiv": true
+    },
+    {
+      "rounds": 8,
+      "seed": 99,
+      "and_F": 138,
+      "and_G2": 276,
+      "ratio": 1.0,
+      "equiv": true
+    }
+  ]
+}
