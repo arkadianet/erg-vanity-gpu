@@ -113,7 +113,7 @@ inline void pbkdf2_sha512_mnemonic(
         0x0000000180000000ul,
         0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul, 0ul,
         1120ul);
-    u = sha512_final_from_mid_u8(ctx.outer_h, ctx.outer_total_len, u);
+    u = sha512_hmac64(ctx.outer_h, u);
 
     ulong8 acc = u;
     for (uint iter = 1u; iter < 2048u; iter++) {

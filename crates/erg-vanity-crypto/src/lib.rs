@@ -5,11 +5,19 @@
 
 #![forbid(unsafe_code)]
 
+pub mod arx_basis;
 pub mod base58;
 pub mod blake2b;
 pub mod entropy;
 pub mod hmac;
 pub mod pbkdf2;
+pub mod pbkdf2_basis;
+pub mod pbkdf2_batch;
+pub mod pbkdf2_fast;
 pub mod secp256k1;
 pub mod sha256;
 pub mod sha512;
+pub mod sha512_algebra;
+pub mod sha512_hmac64;
+pub mod sha512_search;
+pub mod sha512_u32;

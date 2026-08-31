@@ -34,16 +34,42 @@ __constant ulong H512_INIT[8] = {
     0x1f83d9abfb41bd6bul, 0x5be0cd19137e2179ul
 };
 
-// Rotate right for 64-bit
-#define ROTR64(x, n) rotate((x), (ulong)(64ul - (n)))
+// RTX/Ampere SHF-native 64-bit rotate. Hardware SHF is 32-bit: each ROTR64
+// is two funnel shifts (lo/hi). `n` must be a literal in 1..63.
+// (lo >> n) | (hi << (32-n)) is the SHF.R pattern ptxas emits.
+inline uint shf_r32(uint lo, uint hi, uint n) {
+    return (lo >> n) | (hi << (32u - n));
+}
 
-// SHA-512 functions
-#define CH64(x, y, z)  (((x) & (y)) ^ (~(x) & (z)))
-#define MAJ64(x, y, z) (((x) & (y)) ^ ((x) & (z)) ^ ((y) & (z)))
-#define EP0_64(x)      (ROTR64(x, 28) ^ ROTR64(x, 34) ^ ROTR64(x, 39))
-#define EP1_64(x)      (ROTR64(x, 14) ^ ROTR64(x, 18) ^ ROTR64(x, 41))
-#define SIG0_64(x)     (ROTR64(x, 1) ^ ROTR64(x, 8) ^ ((x) >> 7))
-#define SIG1_64(x)     (ROTR64(x, 19) ^ ROTR64(x, 61) ^ ((x) >> 6))
+inline ulong ror64_shf(ulong x, uint n) {
+    uint2 v = as_uint2(x);
+    uint2 r;
+    if (n < 32u) {
+        r.x = shf_r32(v.x, v.y, n);
+        r.y = shf_r32(v.y, v.x, n);
+    } else {
+        uint k = n - 32u;
+        r.x = shf_r32(v.y, v.x, k);
+        r.y = shf_r32(v.x, v.y, k);
+    }
+    return as_ulong(r);
+}
+
+inline ulong shr64_shf(ulong x, uint n) {
+    uint2 v = as_uint2(x);
+    uint2 r;
+    r.x = shf_r32(v.x, v.y, n);
+    r.y = v.y >> n;
+    return as_ulong(r);
+}
+
+#define ROTR64(x, n)   ror64_shf((x), (uint)(n))
+#define CH64(x, y, z)  bitselect((z), (y), (x))
+#define MAJ64(x, y, z) bitselect((x), (y), ((x) ^ (z)))
+#define EP0_64(x)      (ror64_shf((x), 28u) ^ ror64_shf((x), 34u) ^ ror64_shf((x), 39u))
+#define EP1_64(x)      (ror64_shf((x), 14u) ^ ror64_shf((x), 18u) ^ ror64_shf((x), 41u))
+#define SIG0_64(x)     (ror64_shf((x), 1u) ^ ror64_shf((x), 8u) ^ shr64_shf((x), 7u))
+#define SIG1_64(x)     (ror64_shf((x), 19u) ^ ror64_shf((x), 61u) ^ shr64_shf((x), 6u))
 
 // Pack 8 bytes (big-endian) into a ulong
 inline ulong pack_be64(uchar b0, uchar b1, uchar b2, uchar b3,
@@ -550,8 +576,94 @@ inline ulong8 sha512_final_64_u8(__private Sha512State* state,
         w15 += SIG1_64(w13) + w8  + SIG0_64(w0); \
     } while (0)
 
-// PBKDF2 hot path: finalize from midstate + 64-byte ulong8 message.
-// 16-round blocks + batched W expand (no per-round schedule rotate).
+// HMAC-64 padded block: W[8]=PAD, W[9..14]=0, W[15]=1536 (always 1536, never (len+64)*8).
+#define SHA512_HMAC64_PAD      0x8000000000000000ul
+#define SHA512_HMAC64_LEN      1536ul
+#define SHA512_HMAC64_SIG0_PAD 0x4180000000000000ul
+#define SHA512_HMAC64_SIG1_LEN 0x00c0000000003018ul
+#define SHA512_HMAC64_SIG0_LEN 0x030aul
+#define SHA512_HMAC64_K8       0x5807aa98a3030242ul
+#define SHA512_HMAC64_K15      0xc19bf174cf692c94ul
+
+#define SHA512_EXPAND16_HMAC64() \
+    do { \
+        w0  += SIG0_64(w1); \
+        w1  += SHA512_HMAC64_SIG1_LEN + SIG0_64(w2); \
+        w2  += SIG1_64(w0) + SIG0_64(w3); \
+        w3  += SIG1_64(w1) + SIG0_64(w4); \
+        w4  += SIG1_64(w2) + SIG0_64(w5); \
+        w5  += SIG1_64(w3) + SIG0_64(w6); \
+        w6  += SIG1_64(w4) + SHA512_HMAC64_LEN + SIG0_64(w7); \
+        w7  += SIG1_64(w5) + w0 + SHA512_HMAC64_SIG0_PAD; \
+        w8  += SIG1_64(w6) + w1; \
+        w9  += SIG1_64(w7) + w2; \
+        w10 += SIG1_64(w8) + w3; \
+        w11 += SIG1_64(w9) + w4; \
+        w12 += SIG1_64(w10) + w5; \
+        w13 += SIG1_64(w11) + w6; \
+        w14 += SIG1_64(w12) + w7 + SHA512_HMAC64_SIG0_LEN; \
+        w15 += SIG1_64(w13) + w8 + SIG0_64(w0); \
+    } while (0)
+
+// First 16 rounds with padding words folded into K (rounds 8-15).
+#define SHA512_ROUNDS16_HMAC64_HEAD() \
+    do { \
+        SHA512_R(a, b, c, d, e, f, g, h, K512[0],  w0); \
+        SHA512_R(h, a, b, c, d, e, f, g, K512[1],  w1); \
+        SHA512_R(g, h, a, b, c, d, e, f, K512[2],  w2); \
+        SHA512_R(f, g, h, a, b, c, d, e, K512[3],  w3); \
+        SHA512_R(e, f, g, h, a, b, c, d, K512[4],  w4); \
+        SHA512_R(d, e, f, g, h, a, b, c, K512[5],  w5); \
+        SHA512_R(c, d, e, f, g, h, a, b, K512[6],  w6); \
+        SHA512_R(b, c, d, e, f, g, h, a, K512[7],  w7); \
+        SHA512_R(a, b, c, d, e, f, g, h, SHA512_HMAC64_K8,  0ul); \
+        SHA512_R(h, a, b, c, d, e, f, g, K512[9],  0ul); \
+        SHA512_R(g, h, a, b, c, d, e, f, K512[10], 0ul); \
+        SHA512_R(f, g, h, a, b, c, d, e, K512[11], 0ul); \
+        SHA512_R(e, f, g, h, a, b, c, d, K512[12], 0ul); \
+        SHA512_R(d, e, f, g, h, a, b, c, K512[13], 0ul); \
+        SHA512_R(c, d, e, f, g, h, a, b, K512[14], 0ul); \
+        SHA512_R(b, c, d, e, f, g, h, a, SHA512_HMAC64_K15, 0ul); \
+    } while (0)
+
+// HMAC-SHA512 of a 64-byte message from a cached ipad/opad midstate.
+// Bit-identical to sha512_final_from_mid_u8(mid, 128, msg).
+inline ulong8 sha512_hmac64(ulong8 mid, ulong8 msg) {
+    ulong w0  = msg.s0;
+    ulong w1  = msg.s1;
+    ulong w2  = msg.s2;
+    ulong w3  = msg.s3;
+    ulong w4  = msg.s4;
+    ulong w5  = msg.s5;
+    ulong w6  = msg.s6;
+    ulong w7  = msg.s7;
+    ulong w8  = SHA512_HMAC64_PAD;
+    ulong w9  = 0ul;
+    ulong w10 = 0ul;
+    ulong w11 = 0ul;
+    ulong w12 = 0ul;
+    ulong w13 = 0ul;
+    ulong w14 = 0ul;
+    ulong w15 = SHA512_HMAC64_LEN;
+
+    ulong a = mid.s0, b = mid.s1, c = mid.s2, d = mid.s3;
+    ulong e = mid.s4, f = mid.s5, g = mid.s6, h = mid.s7;
+
+    SHA512_ROUNDS16_HMAC64_HEAD();
+    SHA512_EXPAND16_HMAC64();
+    SHA512_ROUNDS16(16);
+    SHA512_EXPAND16();
+    SHA512_ROUNDS16(32);
+    SHA512_EXPAND16();
+    SHA512_ROUNDS16(48);
+    SHA512_EXPAND16();
+    SHA512_ROUNDS16(64);
+
+    return (ulong8)(mid.s0 + a, mid.s1 + b, mid.s2 + c, mid.s3 + d,
+                    mid.s4 + e, mid.s5 + f, mid.s6 + g, mid.s7 + h);
+}
+
+// Generic 64-byte finalize (variable prior length). Hot path uses sha512_hmac64.
 inline ulong8 sha512_final_from_mid_u8(ulong8 mid, ulong total_len, ulong8 msg) {
     ulong w0  = msg.s0;
     ulong w1  = msg.s1;
@@ -590,6 +702,8 @@ inline ulong8 sha512_final_from_mid_u8(ulong8 mid, ulong total_len, ulong8 msg) 
 #undef SHA512_R
 #undef SHA512_ROUNDS16
 #undef SHA512_EXPAND16
+#undef SHA512_EXPAND16_HMAC64
+#undef SHA512_ROUNDS16_HMAC64_HEAD
 
 // Finalize SHA-512 where 64-byte message is ulong8, return as ulong8.
 inline ulong8 sha512_final_from_u8(__private Sha512State* state, ulong8 msg) {

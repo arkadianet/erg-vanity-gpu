@@ -1,9 +1,14 @@
 //! PBKDF2-HMAC-SHA512 implementation (RFC 8018).
 //! This is the dominant cost in BIP39 seed derivation (2048 iterations).
+//!
+//! The production path is the specialized HMAC-64 formulation in
+//! [`crate::pbkdf2_fast`]. `derive_reference` keeps the layered HMAC loop
+//! for differential tests.
 
 #![forbid(unsafe_code)]
 
 use crate::hmac::hmac_sha512;
+use crate::pbkdf2_fast;
 
 /// HMAC-SHA512 output length.
 const HLEN: usize = 64;
@@ -14,6 +19,11 @@ const HLEN: usize = 64;
 /// F(P, S, c, i) = U1 ^ U2 ^ ... ^ Uc
 /// U1 = HMAC(P, S || INT_32_BE(i)), Uj = HMAC(P, Uj-1)
 pub fn derive(password: &[u8], salt: &[u8], iterations: u32, output: &mut [u8]) {
+    pbkdf2_fast::derive(password, salt, iterations, output);
+}
+
+/// Layered PBKDF2 → HMAC → SHA-512 (pre-research implementation).
+pub fn derive_reference(password: &[u8], salt: &[u8], iterations: u32, output: &mut [u8]) {
     assert!(iterations >= 1, "PBKDF2 iterations must be >= 1");
 
     let num_blocks = output.len().div_ceil(HLEN);
