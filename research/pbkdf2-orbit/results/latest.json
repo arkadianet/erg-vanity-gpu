@@ -1,0 +1,3233 @@
+{
+  "selfcheck": {
+    "hmac_envelope_matches_hashlib": true,
+    "bip39_vector_ok": true,
+    "sha512_F_cost": {
+      "add": 1520,
+      "xor": 1632,
+      "and": 800,
+      "not": 160,
+      "rot": 1472,
+      "shr": 256,
+      "primitives": 5840
+    },
+    "sha512_2048_budget": {
+      "F_evals": 2048,
+      "compressions": 4096,
+      "rounds": 327680,
+      "cost": {
+        "add": 3112960,
+        "xor": 3358720,
+        "and": 1638400,
+        "not": 327680,
+        "rot": 3014656,
+        "shr": 524288,
+        "primitives": 11976704
+      },
+      "sequential_depth_rounds": 327680,
+      "state_bits": 512,
+      "memory_words": 112
+    }
+  },
+  "ladder": [
+    {
+      "identity": {
+        "params": "toy8",
+        "n_samples": 256,
+        "n_iter": 8,
+        "true_identities": {},
+        "all": {
+          "F_eq_id": false,
+          "F_eq_not": false,
+          "F_xor_x_const": false,
+          "F_add_x_const": false,
+          "F_involution": false,
+          "F2_eq_id": false,
+          "F2_eq_F": false,
+          "F_xor_x_eq_F2_xor_F": false,
+          "dk_eq_xor_endpoints": false,
+          "dk_eq_x_xor_Fn": false,
+          "dk_eq_0_even_n": false,
+          "dk_eq_V_id": false,
+          "dk_eq_V_F": false,
+          "affine_gf2": false,
+          "affine_mod2w": false
+        }
+      },
+      "invariants": {
+        "params": "toy8",
+        "nullspace_dim_sample": 0,
+        "surviving_linear_invariants": 0,
+        "word_xor_invariant": false,
+        "word_xor_affine": false,
+        "per_word_closed": [
+          false
+        ],
+        "any_word_closed": false
+      },
+      "cone": {
+        "params": "toy8",
+        "skipped": "single-word toy"
+      },
+      "graph": {
+        "params": "toy8",
+        "N": 256,
+        "image": 116,
+        "image_frac": 0.4531,
+        "n_cycles": 5,
+        "cycle_len_min": 1,
+        "cycle_len_max": 12,
+        "cycle_len_median": 2,
+        "all_cycles_xor0": false,
+        "coboundary_V_exists": false,
+        "note": "coboundary V(F(x))=V(x)\u2295x would give XOR_{k=0}^{n-1} F^k(x) = V(x)\u2295V(F^n(x)). That still needs F^n; it only removes the running XOR. Existence requires every cycle XOR to vanish.",
+        "sample_rho_median": 3.0,
+        "birthday_scale": 16.0
+      },
+      "related": {
+        "params": "toy8",
+        "n_samples": 24,
+        "same_slot_relations": [
+          [
+            "F_inner.W[1]",
+            "G_inner.W[1]",
+            "eq"
+          ],
+          [
+            "F_outer.W[1]",
+            "G_outer.W[1]",
+            "eq"
+          ]
+        ],
+        "same_slot_count": 2,
+        "seam_relations": [
+          [
+            "F_outer.W[1]",
+            "G_inner.W[1]",
+            "eq"
+          ]
+        ],
+        "seam_count": 1,
+        "note": "A relation must hold for every sample. Padding schedule words W[8..15] are identical across iterations by construction.",
+        "nontrivial": []
+      }
+    },
+    {
+      "identity": {
+        "params": "toy12",
+        "n_samples": 4096,
+        "n_iter": 8,
+        "true_identities": {},
+        "all": {
+          "F_eq_id": false,
+          "F_eq_not": false,
+          "F_xor_x_const": false,
+          "F_add_x_const": false,
+          "F_involution": false,
+          "F2_eq_id": false,
+          "F2_eq_F": false,
+          "F_xor_x_eq_F2_xor_F": false,
+          "dk_eq_xor_endpoints": false,
+          "dk_eq_x_xor_Fn": false,
+          "dk_eq_0_even_n": false,
+          "dk_eq_V_id": false,
+          "dk_eq_V_F": false,
+          "affine_gf2": false,
+          "affine_mod2w": false
+        }
+      },
+      "invariants": {
+        "params": "toy12",
+        "nullspace_dim_sample": 0,
+        "surviving_linear_invariants": 0,
+        "word_xor_invariant": false,
+        "word_xor_affine": false,
+        "per_word_closed": [
+          false
+        ],
+        "any_word_closed": false
+      },
+      "cone": {
+        "params": "toy12",
+        "skipped": "single-word toy"
+      },
+      "graph": {
+        "params": "toy12",
+        "N": 4096,
+        "image": 1904,
+        "image_frac": 0.4648,
+        "n_cycles": 10,
+        "cycle_len_min": 1,
+        "cycle_len_max": 68,
+        "cycle_len_median": 2.0,
+        "all_cycles_xor0": false,
+        "coboundary_V_exists": false,
+        "note": "coboundary V(F(x))=V(x)\u2295x would give XOR_{k=0}^{n-1} F^k(x) = V(x)\u2295V(F^n(x)). That still needs F^n; it only removes the running XOR. Existence requires every cycle XOR to vanish.",
+        "sample_rho_median": 15.0,
+        "birthday_scale": 64.0
+      },
+      "related": {
+        "params": "toy12",
+        "n_samples": 24,
+        "same_slot_relations": [
+          [
+            "F_inner.W[1]",
+            "G_inner.W[1]",
+            "eq"
+          ],
+          [
+            "F_inner.W[2]",
+            "G_inner.W[2]",
+            "eq"
+          ],
+          [
+            "F_outer.W[1]",
+            "G_outer.W[1]",
+            "eq"
+          ],
+          [
+            "F_outer.W[2]",
+            "G_outer.W[2]",
+            "eq"
+          ]
+        ],
+        "same_slot_count": 4,
+        "seam_relations": [
+          [
+            "F_outer.W[1]",
+            "G_inner.W[1]",
+            "eq"
+          ],
+          [
+            "F_outer.W[2]",
+            "G_inner.W[2]",
+            "eq"
+          ]
+        ],
+        "seam_count": 2,
+        "note": "A relation must hold for every sample. Padding schedule words W[8..15] are identical across iterations by construction.",
+        "nontrivial": []
+      }
+    },
+    {
+      "identity": {
+        "params": "arx4x4r4",
+        "n_samples": 96,
+        "n_iter": 8,
+        "true_identities": {},
+        "all": {
+          "F_eq_id": false,
+          "F_eq_not": false,
+          "F_xor_x_const": false,
+          "F_add_x_const": false,
+          "F_involution": false,
+          "F2_eq_id": false,
+          "F2_eq_F": false,
+          "F_xor_x_eq_F2_xor_F": false,
+          "dk_eq_xor_endpoints": false,
+          "dk_eq_x_xor_Fn": false,
+          "dk_eq_0_even_n": false,
+          "dk_eq_V_id": false,
+          "dk_eq_V_F": false,
+          "affine_gf2": false,
+          "affine_mod2w": false
+        }
+      },
+      "invariants": {
+        "params": "arx4x4r4",
+        "nullspace_dim_sample": 0,
+        "surviving_linear_invariants": 0,
+        "word_xor_invariant": false,
+        "word_xor_affine": false,
+        "per_word_closed": [
+          false,
+          false,
+          false,
+          false
+        ],
+        "any_word_closed": false
+      },
+      "cone": {
+        "params": "arx4x4r4",
+        "inner_words_affecting_outer_W_le16": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "inner_words_affecting_outer_round0": [
+          0
+        ],
+        "inner_words_affecting_outer_out": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "can_delay_any_inner_word": true,
+        "must_materialize_full_inner_digest": true,
+        "note": "Outer round 0 uses only W[0], so later inner words do not affect the first outer round. They still all appear at the same instant (Davies-Meyer of the inner compression) and are all required before outer W[16] / the outer digest."
+      },
+      "graph": {
+        "params": "arx4x4r4",
+        "N": 65536,
+        "image": 65536,
+        "image_frac": 1.0,
+        "n_cycles": 14,
+        "cycle_len_min": 4,
+        "cycle_len_max": 28691,
+        "cycle_len_median": 1557.0,
+        "all_cycles_xor0": false,
+        "coboundary_V_exists": false,
+        "note": "coboundary V(F(x))=V(x)\u2295x would give XOR_{k=0}^{n-1} F^k(x) = V(x)\u2295V(F^n(x)). That still needs F^n; it only removes the running XOR. Existence requires every cycle XOR to vanish.",
+        "sample_rho_median": 0.0,
+        "birthday_scale": 256.0
+      },
+      "related": {
+        "params": "arx4x4r4",
+        "n_samples": 24,
+        "same_slot_relations": [
+          [
+            "F_inner.s[0,1]",
+            "G_inner.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,2]",
+            "G_inner.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,3]",
+            "G_inner.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,2]",
+            "G_inner.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,3]",
+            "G_inner.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[2,3]",
+            "G_inner.s[2,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,1]",
+            "G_outer.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_outer.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_outer.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_outer.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_outer.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_outer.s[2,3]",
+            "eq"
+          ]
+        ],
+        "same_slot_count": 12,
+        "seam_relations": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_inner.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_inner.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:a"
+          ]
+        ],
+        "seam_count": 6,
+        "note": "A relation must hold for every sample. Padding schedule words W[8..15] are identical across iterations by construction.",
+        "nontrivial": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:a"
+          ]
+        ]
+      }
+    },
+    {
+      "identity": {
+        "params": "arx4x8r4",
+        "n_samples": 96,
+        "n_iter": 8,
+        "true_identities": {},
+        "all": {
+          "F_eq_id": false,
+          "F_eq_not": false,
+          "F_xor_x_const": false,
+          "F_add_x_const": false,
+          "F_involution": false,
+          "F2_eq_id": false,
+          "F2_eq_F": false,
+          "F_xor_x_eq_F2_xor_F": false,
+          "dk_eq_xor_endpoints": false,
+          "dk_eq_x_xor_Fn": false,
+          "dk_eq_0_even_n": false,
+          "dk_eq_V_id": false,
+          "dk_eq_V_F": false,
+          "affine_gf2": false,
+          "affine_mod2w": false
+        }
+      },
+      "invariants": {
+        "params": "arx4x8r4",
+        "nullspace_dim_sample": 0,
+        "surviving_linear_invariants": 0,
+        "word_xor_invariant": false,
+        "word_xor_affine": false,
+        "per_word_closed": [
+          false,
+          false,
+          false,
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "any_word_closed": true
+      },
+      "cone": {
+        "params": "arx4x8r4",
+        "inner_words_affecting_outer_W_le16": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "inner_words_affecting_outer_round0": [
+          0
+        ],
+        "inner_words_affecting_outer_out": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "can_delay_any_inner_word": true,
+        "must_materialize_full_inner_digest": false,
+        "note": "Outer round 0 uses only W[0], so later inner words do not affect the first outer round. They still all appear at the same instant (Davies-Meyer of the inner compression) and are all required before outer W[16] / the outer digest."
+      },
+      "related": {
+        "params": "arx4x8r4",
+        "n_samples": 24,
+        "same_slot_relations": [
+          [
+            "F_inner.s[0,1]",
+            "G_inner.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,2]",
+            "G_inner.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,3]",
+            "G_inner.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,5]",
+            "G_inner.s[0,5]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,6]",
+            "G_inner.s[0,6]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,7]",
+            "G_inner.s[0,7]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,2]",
+            "G_inner.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,3]",
+            "G_inner.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,6]",
+            "G_inner.s[1,6]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,7]",
+            "G_inner.s[1,7]",
+            "eq"
+          ],
+          [
+            "F_inner.s[2,3]",
+            "G_inner.s[2,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[2,7]",
+            "G_inner.s[2,7]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,1]",
+            "G_outer.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_outer.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_outer.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,5]",
+            "G_outer.s[0,5]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,6]",
+            "G_outer.s[0,6]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,7]",
+            "G_outer.s[0,7]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_outer.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_outer.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,6]",
+            "G_outer.s[1,6]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,7]",
+            "G_outer.s[1,7]",
+            "eq"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_outer.s[2,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[2,7]",
+            "G_outer.s[2,7]",
+            "eq"
+          ]
+        ],
+        "same_slot_count": 24,
+        "seam_relations": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_inner.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,5]",
+            "G_inner.s[0,5]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[0,6]",
+            "G_inner.s[0,6]",
+            "xor_c:8"
+          ],
+          [
+            "F_outer.s[0,7]",
+            "G_inner.s[0,7]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_inner.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,6]",
+            "G_inner.s[1,6]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[1,7]",
+            "G_inner.s[1,7]",
+            "xor_c:8"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[2,7]",
+            "G_inner.s[2,7]",
+            "xor_c:2"
+          ]
+        ],
+        "seam_count": 12,
+        "note": "A relation must hold for every sample. Padding schedule words W[8..15] are identical across iterations by construction.",
+        "nontrivial": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,5]",
+            "G_inner.s[0,5]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[0,6]",
+            "G_inner.s[0,6]",
+            "xor_c:8"
+          ],
+          [
+            "F_outer.s[0,7]",
+            "G_inner.s[0,7]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[1,6]",
+            "G_inner.s[1,6]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[1,7]",
+            "G_inner.s[1,7]",
+            "xor_c:8"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[2,7]",
+            "G_inner.s[2,7]",
+            "xor_c:2"
+          ]
+        ]
+      }
+    },
+    {
+      "identity": {
+        "params": "arx8x4r4",
+        "n_samples": 96,
+        "n_iter": 8,
+        "true_identities": {},
+        "all": {
+          "F_eq_id": false,
+          "F_eq_not": false,
+          "F_xor_x_const": false,
+          "F_add_x_const": false,
+          "F_involution": false,
+          "F2_eq_id": false,
+          "F2_eq_F": false,
+          "F_xor_x_eq_F2_xor_F": false,
+          "dk_eq_xor_endpoints": false,
+          "dk_eq_x_xor_Fn": false,
+          "dk_eq_0_even_n": false,
+          "dk_eq_V_id": false,
+          "dk_eq_V_F": false,
+          "affine_gf2": false,
+          "affine_mod2w": false
+        }
+      },
+      "invariants": {
+        "params": "arx8x4r4",
+        "nullspace_dim_sample": 0,
+        "surviving_linear_invariants": 0,
+        "word_xor_invariant": false,
+        "word_xor_affine": false,
+        "per_word_closed": [
+          false,
+          false,
+          false,
+          false
+        ],
+        "any_word_closed": false
+      },
+      "cone": {
+        "params": "arx8x4r4",
+        "inner_words_affecting_outer_W_le16": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "inner_words_affecting_outer_round0": [
+          0
+        ],
+        "inner_words_affecting_outer_out": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "can_delay_any_inner_word": true,
+        "must_materialize_full_inner_digest": true,
+        "note": "Outer round 0 uses only W[0], so later inner words do not affect the first outer round. They still all appear at the same instant (Davies-Meyer of the inner compression) and are all required before outer W[16] / the outer digest."
+      },
+      "related": {
+        "params": "arx8x4r4",
+        "n_samples": 24,
+        "same_slot_relations": [
+          [
+            "F_inner.s[0,1]",
+            "G_inner.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,2]",
+            "G_inner.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,3]",
+            "G_inner.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,2]",
+            "G_inner.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,3]",
+            "G_inner.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[2,3]",
+            "G_inner.s[2,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,1]",
+            "G_outer.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_outer.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_outer.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_outer.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_outer.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_outer.s[2,3]",
+            "eq"
+          ]
+        ],
+        "same_slot_count": 12,
+        "seam_relations": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_inner.s[0,2]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_inner.s[1,3]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:ba"
+          ]
+        ],
+        "seam_count": 6,
+        "note": "A relation must hold for every sample. Padding schedule words W[8..15] are identical across iterations by construction.",
+        "nontrivial": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_inner.s[0,2]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_inner.s[1,3]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:ba"
+          ]
+        ]
+      }
+    },
+    {
+      "identity": {
+        "params": "ch4x8r4",
+        "n_samples": 96,
+        "n_iter": 8,
+        "true_identities": {},
+        "all": {
+          "F_eq_id": false,
+          "F_eq_not": false,
+          "F_xor_x_const": false,
+          "F_add_x_const": false,
+          "F_involution": false,
+          "F2_eq_id": false,
+          "F2_eq_F": false,
+          "F_xor_x_eq_F2_xor_F": false,
+          "dk_eq_xor_endpoints": false,
+          "dk_eq_x_xor_Fn": false,
+          "dk_eq_0_even_n": false,
+          "dk_eq_V_id": false,
+          "dk_eq_V_F": false,
+          "affine_gf2": false,
+          "affine_mod2w": false
+        }
+      },
+      "invariants": {
+        "params": "ch4x8r4",
+        "nullspace_dim_sample": 0,
+        "surviving_linear_invariants": 0,
+        "word_xor_invariant": false,
+        "word_xor_affine": false,
+        "per_word_closed": [
+          false,
+          false,
+          false,
+          true,
+          true,
+          true,
+          true,
+          false
+        ],
+        "any_word_closed": true
+      },
+      "cone": {
+        "params": "ch4x8r4",
+        "inner_words_affecting_outer_W_le16": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "inner_words_affecting_outer_round0": [
+          0
+        ],
+        "inner_words_affecting_outer_out": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "can_delay_any_inner_word": true,
+        "must_materialize_full_inner_digest": false,
+        "note": "Outer round 0 uses only W[0], so later inner words do not affect the first outer round. They still all appear at the same instant (Davies-Meyer of the inner compression) and are all required before outer W[16] / the outer digest."
+      },
+      "related": {
+        "params": "ch4x8r4",
+        "n_samples": 24,
+        "same_slot_relations": [
+          [
+            "F_inner.s[0,1]",
+            "G_inner.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,2]",
+            "G_inner.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,3]",
+            "G_inner.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,5]",
+            "G_inner.s[0,5]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,6]",
+            "G_inner.s[0,6]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,7]",
+            "G_inner.s[0,7]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,2]",
+            "G_inner.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,3]",
+            "G_inner.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,6]",
+            "G_inner.s[1,6]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,7]",
+            "G_inner.s[1,7]",
+            "eq"
+          ],
+          [
+            "F_inner.s[2,3]",
+            "G_inner.s[2,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[2,7]",
+            "G_inner.s[2,7]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,1]",
+            "G_outer.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_outer.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_outer.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,5]",
+            "G_outer.s[0,5]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,6]",
+            "G_outer.s[0,6]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,7]",
+            "G_outer.s[0,7]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_outer.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_outer.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,6]",
+            "G_outer.s[1,6]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,7]",
+            "G_outer.s[1,7]",
+            "eq"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_outer.s[2,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[2,7]",
+            "G_outer.s[2,7]",
+            "eq"
+          ]
+        ],
+        "same_slot_count": 24,
+        "seam_relations": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_inner.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,5]",
+            "G_inner.s[0,5]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[0,6]",
+            "G_inner.s[0,6]",
+            "xor_c:8"
+          ],
+          [
+            "F_outer.s[0,7]",
+            "G_inner.s[0,7]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_inner.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,6]",
+            "G_inner.s[1,6]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[1,7]",
+            "G_inner.s[1,7]",
+            "xor_c:8"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[2,7]",
+            "G_inner.s[2,7]",
+            "xor_c:2"
+          ]
+        ],
+        "seam_count": 12,
+        "note": "A relation must hold for every sample. Padding schedule words W[8..15] are identical across iterations by construction.",
+        "nontrivial": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,5]",
+            "G_inner.s[0,5]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[0,6]",
+            "G_inner.s[0,6]",
+            "xor_c:8"
+          ],
+          [
+            "F_outer.s[0,7]",
+            "G_inner.s[0,7]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[1,6]",
+            "G_inner.s[1,6]",
+            "xor_c:2"
+          ],
+          [
+            "F_outer.s[1,7]",
+            "G_inner.s[1,7]",
+            "xor_c:8"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[2,7]",
+            "G_inner.s[2,7]",
+            "xor_c:2"
+          ]
+        ]
+      }
+    },
+    {
+      "identity": {
+        "params": "ch8x4r8",
+        "n_samples": 96,
+        "n_iter": 8,
+        "true_identities": {},
+        "all": {
+          "F_eq_id": false,
+          "F_eq_not": false,
+          "F_xor_x_const": false,
+          "F_add_x_const": false,
+          "F_involution": false,
+          "F2_eq_id": false,
+          "F2_eq_F": false,
+          "F_xor_x_eq_F2_xor_F": false,
+          "dk_eq_xor_endpoints": false,
+          "dk_eq_x_xor_Fn": false,
+          "dk_eq_0_even_n": false,
+          "dk_eq_V_id": false,
+          "dk_eq_V_F": false,
+          "affine_gf2": false,
+          "affine_mod2w": false
+        }
+      },
+      "invariants": {
+        "params": "ch8x4r8",
+        "nullspace_dim_sample": 0,
+        "surviving_linear_invariants": 0,
+        "word_xor_invariant": false,
+        "word_xor_affine": false,
+        "per_word_closed": [
+          false,
+          false,
+          false,
+          false
+        ],
+        "any_word_closed": false
+      },
+      "cone": {
+        "params": "ch8x4r8",
+        "inner_words_affecting_outer_W_le16": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "inner_words_affecting_outer_round0": [
+          0
+        ],
+        "inner_words_affecting_outer_out": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "can_delay_any_inner_word": true,
+        "must_materialize_full_inner_digest": true,
+        "note": "Outer round 0 uses only W[0], so later inner words do not affect the first outer round. They still all appear at the same instant (Davies-Meyer of the inner compression) and are all required before outer W[16] / the outer digest."
+      },
+      "related": {
+        "params": "ch8x4r8",
+        "n_samples": 24,
+        "same_slot_relations": [
+          [
+            "F_inner.s[0,1]",
+            "G_inner.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,2]",
+            "G_inner.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,3]",
+            "G_inner.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,2]",
+            "G_inner.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,3]",
+            "G_inner.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[2,3]",
+            "G_inner.s[2,3]",
+            "eq"
+          ],
+          [
+            "F_inner.W[4]",
+            "G_inner.W[4]",
+            "eq"
+          ],
+          [
+            "F_inner.W[5]",
+            "G_inner.W[5]",
+            "eq"
+          ],
+          [
+            "F_inner.W[6]",
+            "G_inner.W[6]",
+            "eq"
+          ],
+          [
+            "F_inner.W[7]",
+            "G_inner.W[7]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,1]",
+            "G_outer.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_outer.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_outer.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_outer.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_outer.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_outer.s[2,3]",
+            "eq"
+          ],
+          [
+            "F_outer.W[4]",
+            "G_outer.W[4]",
+            "eq"
+          ],
+          [
+            "F_outer.W[5]",
+            "G_outer.W[5]",
+            "eq"
+          ],
+          [
+            "F_outer.W[6]",
+            "G_outer.W[6]",
+            "eq"
+          ],
+          [
+            "F_outer.W[7]",
+            "G_outer.W[7]",
+            "eq"
+          ]
+        ],
+        "same_slot_count": 20,
+        "seam_relations": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_inner.s[0,2]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_inner.s[1,3]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.W[4]",
+            "G_inner.W[4]",
+            "eq"
+          ],
+          [
+            "F_outer.W[5]",
+            "G_inner.W[5]",
+            "eq"
+          ],
+          [
+            "F_outer.W[6]",
+            "G_inner.W[6]",
+            "eq"
+          ],
+          [
+            "F_outer.W[7]",
+            "G_inner.W[7]",
+            "eq"
+          ]
+        ],
+        "seam_count": 10,
+        "note": "A relation must hold for every sample. Padding schedule words W[8..15] are identical across iterations by construction.",
+        "nontrivial": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_inner.s[0,2]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_inner.s[1,3]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:ba"
+          ]
+        ]
+      }
+    },
+    {
+      "identity": {
+        "params": "sha8x8r8",
+        "n_samples": 96,
+        "n_iter": 8,
+        "true_identities": {},
+        "all": {
+          "F_eq_id": false,
+          "F_eq_not": false,
+          "F_xor_x_const": false,
+          "F_add_x_const": false,
+          "F_involution": false,
+          "F2_eq_id": false,
+          "F2_eq_F": false,
+          "F_xor_x_eq_F2_xor_F": false,
+          "dk_eq_xor_endpoints": false,
+          "dk_eq_x_xor_Fn": false,
+          "dk_eq_0_even_n": false,
+          "dk_eq_V_id": false,
+          "dk_eq_V_F": false,
+          "affine_gf2": false,
+          "affine_mod2w": false
+        }
+      },
+      "invariants": {
+        "params": "sha8x8r8",
+        "nullspace_dim_sample": 0,
+        "surviving_linear_invariants": 0,
+        "word_xor_invariant": false,
+        "word_xor_affine": false,
+        "per_word_closed": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "any_word_closed": false
+      },
+      "cone": {
+        "params": "sha8x8r8",
+        "inner_words_affecting_outer_W_le16": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "inner_words_affecting_outer_round0": [
+          0
+        ],
+        "inner_words_affecting_outer_out": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "can_delay_any_inner_word": true,
+        "must_materialize_full_inner_digest": true,
+        "note": "Outer round 0 uses only W[0], so later inner words do not affect the first outer round. They still all appear at the same instant (Davies-Meyer of the inner compression) and are all required before outer W[16] / the outer digest."
+      },
+      "related": {
+        "params": "sha8x8r8",
+        "n_samples": 24,
+        "same_slot_relations": [
+          [
+            "F_inner.s[0,1]",
+            "G_inner.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,2]",
+            "G_inner.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,3]",
+            "G_inner.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,5]",
+            "G_inner.s[0,5]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,6]",
+            "G_inner.s[0,6]",
+            "eq"
+          ],
+          [
+            "F_inner.s[0,7]",
+            "G_inner.s[0,7]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,2]",
+            "G_inner.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,3]",
+            "G_inner.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,6]",
+            "G_inner.s[1,6]",
+            "eq"
+          ],
+          [
+            "F_inner.s[1,7]",
+            "G_inner.s[1,7]",
+            "eq"
+          ],
+          [
+            "F_inner.s[2,3]",
+            "G_inner.s[2,3]",
+            "eq"
+          ],
+          [
+            "F_inner.s[2,7]",
+            "G_inner.s[2,7]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,1]",
+            "G_outer.s[0,1]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_outer.s[0,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_outer.s[0,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,5]",
+            "G_outer.s[0,5]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,6]",
+            "G_outer.s[0,6]",
+            "eq"
+          ],
+          [
+            "F_outer.s[0,7]",
+            "G_outer.s[0,7]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_outer.s[1,2]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_outer.s[1,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,6]",
+            "G_outer.s[1,6]",
+            "eq"
+          ],
+          [
+            "F_outer.s[1,7]",
+            "G_outer.s[1,7]",
+            "eq"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_outer.s[2,3]",
+            "eq"
+          ],
+          [
+            "F_outer.s[2,7]",
+            "G_outer.s[2,7]",
+            "eq"
+          ]
+        ],
+        "same_slot_count": 24,
+        "seam_relations": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_inner.s[0,2]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,5]",
+            "G_inner.s[0,5]",
+            "xor_c:72"
+          ],
+          [
+            "F_outer.s[0,6]",
+            "G_inner.s[0,6]",
+            "xor_c:98"
+          ],
+          [
+            "F_outer.s[0,7]",
+            "G_inner.s[0,7]",
+            "xor_c:32"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_inner.s[1,3]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[1,6]",
+            "G_inner.s[1,6]",
+            "xor_c:72"
+          ],
+          [
+            "F_outer.s[1,7]",
+            "G_inner.s[1,7]",
+            "xor_c:98"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[2,7]",
+            "G_inner.s[2,7]",
+            "xor_c:72"
+          ]
+        ],
+        "seam_count": 12,
+        "note": "A relation must hold for every sample. Padding schedule words W[8..15] are identical across iterations by construction.",
+        "nontrivial": [
+          [
+            "F_outer.s[0,1]",
+            "G_inner.s[0,1]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[0,2]",
+            "G_inner.s[0,2]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[0,3]",
+            "G_inner.s[0,3]",
+            "xor_c:a"
+          ],
+          [
+            "F_outer.s[0,5]",
+            "G_inner.s[0,5]",
+            "xor_c:72"
+          ],
+          [
+            "F_outer.s[0,6]",
+            "G_inner.s[0,6]",
+            "xor_c:98"
+          ],
+          [
+            "F_outer.s[0,7]",
+            "G_inner.s[0,7]",
+            "xor_c:32"
+          ],
+          [
+            "F_outer.s[1,2]",
+            "G_inner.s[1,2]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[1,3]",
+            "G_inner.s[1,3]",
+            "xor_c:30"
+          ],
+          [
+            "F_outer.s[1,6]",
+            "G_inner.s[1,6]",
+            "xor_c:72"
+          ],
+          [
+            "F_outer.s[1,7]",
+            "G_inner.s[1,7]",
+            "xor_c:98"
+          ],
+          [
+            "F_outer.s[2,3]",
+            "G_inner.s[2,3]",
+            "xor_c:ba"
+          ],
+          [
+            "F_outer.s[2,7]",
+            "G_inner.s[2,7]",
+            "xor_c:72"
+          ]
+        ]
+      }
+    },
+    {
+      "identity": {
+        "params": "sha16x8r16",
+        "n_samples": 96,
+        "n_iter": 8,
+        "true_identities": {},
+        "all": {
+          "F_eq_id": false,
+          "F_eq_not": false,
+          "F_xor_x_const": false,
+          "F_add_x_const": false,
+          "F_involution": false,
+          "F2_eq_id": false,
+          "F2_eq_F": false,
+          "F_xor_x_eq_F2_xor_F": false,
+          "dk_eq_xor_endpoints": false,
+          "dk_eq_x_xor_Fn": false,
+          "dk_eq_0_even_n": false,
+          "dk_eq_V_id": false,
+          "dk_eq_V_F": false,
+          "affine_gf2": false,
+          "affine_mod2w": false
+        }
+      },
+      "invariants": {
+        "params": "sha16x8r16",
+        "nullspace_dim_sample": 32,
+        "surviving_linear_invariants": 0,
+        "word_xor_invariant": false,
+        "word_xor_affine": false,
+        "per_word_closed": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "any_word_closed": false
+      },
+      "cone": {
+        "params": "sha16x8r16",
+        "inner_words_affecting_outer_W_le16": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "inner_words_affecting_outer_round0": [
+          0
+        ],
+        "inner_words_affecting_outer_out": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "can_delay_any_inner_word": true,
+        "must_materialize_full_inner_digest": true,
+        "note": "Outer round 0 uses only W[0], so later inner words do not affect the first outer round. They still all appear at the same instant (Davies-Meyer of the inner compression) and are all required before outer W[16] / the outer digest."
+      }
+    },
+    {
+      "identity": {
+        "params": "sha64r20",
+        "n_samples": 96,
+        "n_iter": 8,
+        "true_identities": {},
+        "all": {
+          "F_eq_id": false,
+          "F_eq_not": false,
+          "F_xor_x_const": false,
+          "F_add_x_const": false,
+          "F_involution": false,
+          "F2_eq_id": false,
+          "F2_eq_F": false,
+          "F_xor_x_eq_F2_xor_F": false,
+          "dk_eq_xor_endpoints": false,
+          "dk_eq_x_xor_Fn": false,
+          "dk_eq_0_even_n": false,
+          "dk_eq_V_id": false,
+          "dk_eq_V_F": false,
+          "affine_gf2": false,
+          "affine_mod2w": false
+        }
+      },
+      "invariants": {
+        "params": "sha64r20",
+        "nullspace_dim_sample": 416,
+        "surviving_linear_invariants": 0,
+        "word_xor_invariant": false,
+        "word_xor_affine": false,
+        "per_word_closed": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "any_word_closed": false
+      },
+      "cone": {
+        "params": "sha64r20",
+        "inner_words_affecting_outer_W_le16": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "inner_words_affecting_outer_round0": [
+          0
+        ],
+        "inner_words_affecting_outer_out": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "can_delay_any_inner_word": true,
+        "must_materialize_full_inner_digest": true,
+        "note": "Outer round 0 uses only W[0], so later inner words do not affect the first outer round. They still all appear at the same instant (Davies-Meyer of the inner compression) and are all required before outer W[16] / the outer digest."
+      }
+    },
+    {
+      "identity": {
+        "params": "sha512",
+        "n_samples": 96,
+        "n_iter": 8,
+        "true_identities": {},
+        "all": {
+          "F_eq_id": false,
+          "F_eq_not": false,
+          "F_xor_x_const": false,
+          "F_add_x_const": false,
+          "F_involution": false,
+          "F2_eq_id": false,
+          "F2_eq_F": false,
+          "F_xor_x_eq_F2_xor_F": false,
+          "dk_eq_xor_endpoints": false,
+          "dk_eq_x_xor_Fn": false,
+          "dk_eq_0_even_n": false,
+          "dk_eq_V_id": false,
+          "dk_eq_V_F": false,
+          "affine_gf2": false,
+          "affine_mod2w": false
+        }
+      },
+      "invariants": {
+        "params": "sha512",
+        "nullspace_dim_sample": 416,
+        "surviving_linear_invariants": 0,
+        "word_xor_invariant": false,
+        "word_xor_affine": false,
+        "per_word_closed": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "any_word_closed": false
+      },
+      "cone": {
+        "params": "sha512",
+        "inner_words_affecting_outer_W_le16": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "inner_words_affecting_outer_round0": [
+          0
+        ],
+        "inner_words_affecting_outer_out": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "can_delay_any_inner_word": true,
+        "must_materialize_full_inner_digest": true,
+        "note": "Outer round 0 uses only W[0], so later inner words do not affect the first outer round. They still all appear at the same instant (Davies-Meyer of the inner compression) and are all required before outer W[16] / the outer digest."
+      }
+    }
+  ],
+  "symbolic": [
+    {
+      "params": "toy8",
+      "F_live": 61,
+      "F^2_live": 109,
+      "F^2_over_F": 1.7869,
+      "xor_4_live": 208,
+      "xor_4_over_nF": 0.8525,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "toy8",
+      "F_live": 61,
+      "F^4_live": 205,
+      "F^4_over_F": 3.3607,
+      "xor_8_live": 404,
+      "xor_8_over_nF": 0.8279,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "toy12",
+      "F_live": 103,
+      "F^2_live": 191,
+      "F^2_over_F": 1.8544,
+      "xor_4_live": 370,
+      "xor_4_over_nF": 0.8981,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "toy12",
+      "F_live": 103,
+      "F^4_live": 367,
+      "F^4_over_F": 3.5631,
+      "xor_8_live": 726,
+      "xor_8_over_nF": 0.8811,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "arx4x4r4",
+      "F_live": 123,
+      "F^2_live": 231,
+      "F^2_over_F": 1.878,
+      "xor_4_live": 459,
+      "xor_4_over_nF": 0.9329,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "arx4x4r4",
+      "F_live": 123,
+      "F^4_live": 447,
+      "F^4_over_F": 3.6341,
+      "xor_8_live": 907,
+      "xor_8_over_nF": 0.9217,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "arx4x8r4",
+      "F_live": 129,
+      "F^2_live": 237,
+      "F^2_over_F": 1.8372,
+      "xor_4_live": 492,
+      "xor_4_over_nF": 0.9535,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "arx4x8r4",
+      "F_live": 129,
+      "F^4_live": 453,
+      "F^4_over_F": 3.5116,
+      "xor_8_live": 976,
+      "xor_8_over_nF": 0.9457,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "arx8x4r4",
+      "F_live": 159,
+      "F^2_live": 297,
+      "F^2_over_F": 1.8679,
+      "xor_4_live": 585,
+      "xor_4_over_nF": 0.9198,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "arx8x4r4",
+      "F_live": 159,
+      "F^4_live": 573,
+      "F^4_over_F": 3.6038,
+      "xor_8_live": 1153,
+      "xor_8_over_nF": 0.9064,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "ch4x8r4",
+      "F_live": 151,
+      "F^2_live": 281,
+      "F^2_over_F": 1.8609,
+      "xor_4_live": 580,
+      "xor_4_over_nF": 0.9603,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "ch4x8r4",
+      "F_live": 151,
+      "F^4_live": 541,
+      "F^4_over_F": 3.5828,
+      "xor_8_live": 1152,
+      "xor_8_over_nF": 0.9536,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "ch8x4r8",
+      "F_live": 382,
+      "F^2_live": 738,
+      "F^2_over_F": 1.9319,
+      "xor_4_live": 1462,
+      "xor_4_over_nF": 0.9568,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "ch8x4r8",
+      "F_live": 382,
+      "F^4_live": 1450,
+      "F^4_over_F": 3.7958,
+      "xor_8_live": 2902,
+      "xor_8_over_nF": 0.9496,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "sha8x8r8",
+      "F_live": 407,
+      "F^2_live": 779,
+      "F^2_over_F": 1.914,
+      "xor_4_live": 1547,
+      "xor_4_over_nF": 0.9502,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "sha8x8r8",
+      "F_live": 407,
+      "F^4_live": 1523,
+      "F^4_over_F": 3.742,
+      "xor_8_live": 3067,
+      "xor_8_over_nF": 0.942,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    },
+    {
+      "params": "sha16x8r16",
+      "F_live": 807,
+      "F^2_live": 1567,
+      "F^2_over_F": 1.9418,
+      "xor_4_live": 3111,
+      "xor_4_over_nF": 0.9638,
+      "rewrite": "const-fold, xor/add 0, x^x, rot\u2218rot, rot distributes over xor, not\u2218not, and 0/1"
+    }
+  ],
+  "io_coupling": {
+    "I_eq_O": false,
+    "I_xor_O_constant_across_keys": false,
+    "I_minus_O_constant_across_keys": false,
+    "real_IO_identities": {},
+    "rand_IO_identities": {},
+    "extra_identities_from_real_IO": []
+  },
+  "full_related": {
+    "trials": 12,
+    "reports": [
+      {
+        "label": "Fin vs Gin (inners of F and F\u2218F)",
+        "eq_nonpad": [
+          [
+            "s",
+            0,
+            1
+          ],
+          [
+            "s",
+            0,
+            2
+          ],
+          [
+            "s",
+            0,
+            3
+          ],
+          [
+            "s",
+            0,
+            5
+          ],
+          [
+            "s",
+            0,
+            6
+          ],
+          [
+            "s",
+            0,
+            7
+          ],
+          [
+            "s",
+            1,
+            2
+          ],
+          [
+            "s",
+            1,
+            3
+          ],
+          [
+            "s",
+            1,
+            6
+          ],
+          [
+            "s",
+            1,
+            7
+          ],
+          [
+            "s",
+            2,
+            3
+          ],
+          [
+            "s",
+            2,
+            7
+          ]
+        ],
+        "eq_nonpad_count": 12,
+        "xor_const_nonzero": [],
+        "xor_const_nonzero_count": 0
+      },
+      {
+        "label": "Fout vs Gout",
+        "eq_nonpad": [
+          [
+            "s",
+            0,
+            1
+          ],
+          [
+            "s",
+            0,
+            2
+          ],
+          [
+            "s",
+            0,
+            3
+          ],
+          [
+            "s",
+            0,
+            5
+          ],
+          [
+            "s",
+            0,
+            6
+          ],
+          [
+            "s",
+            0,
+            7
+          ],
+          [
+            "s",
+            1,
+            2
+          ],
+          [
+            "s",
+            1,
+            3
+          ],
+          [
+            "s",
+            1,
+            6
+          ],
+          [
+            "s",
+            1,
+            7
+          ],
+          [
+            "s",
+            2,
+            3
+          ],
+          [
+            "s",
+            2,
+            7
+          ]
+        ],
+        "eq_nonpad_count": 12,
+        "xor_const_nonzero": [],
+        "xor_const_nonzero_count": 0
+      },
+      {
+        "label": "Fout vs Gin (seam)",
+        "eq_nonpad": [],
+        "eq_nonpad_count": 0,
+        "xor_const_nonzero": [
+          [
+            [
+              "s",
+              0,
+              1
+            ],
+            8707238033210606472
+          ],
+          [
+            [
+              "s",
+              0,
+              2
+            ],
+            111349211539677835
+          ],
+          [
+            [
+              "s",
+              0,
+              3
+            ],
+            7992924480566899413
+          ],
+          [
+            [
+              "s",
+              0,
+              5
+            ],
+            8744279982066063007
+          ],
+          [
+            [
+              "s",
+              0,
+              6
+            ],
+            7676553880802998197
+          ],
+          [
+            [
+              "s",
+              0,
+              7
+            ],
+            9569077994403506069
+          ],
+          [
+            [
+              "s",
+              1,
+              2
+            ],
+            8707238033210606472
+          ],
+          [
+            [
+              "s",
+              1,
+              3
+            ],
+            111349211539677835
+          ],
+          [
+            [
+              "s",
+              1,
+              6
+            ],
+            8744279982066063007
+          ],
+          [
+            [
+              "s",
+              1,
+              7
+            ],
+            7676553880802998197
+          ]
+        ],
+        "xor_const_nonzero_count": 12
+      }
+    ]
+  },
+  "carry_save": [
+    {
+      "params": "arx4x4r4",
+      "F_primitives": 176,
+      "optimistic_folded_I_adds": 4,
+      "relative_save": 0.022727,
+      "survives_to_sha512": false,
+      "reason": "I is constant and can be folded into K[0..7] of the outer first 8 rounds (8 adds). \u03c3 on the outer schedule still needs the resolved inner digest. This is a <0.2% exact-add save."
+    },
+    {
+      "params": "arx4x8r4",
+      "F_primitives": 184,
+      "optimistic_folded_I_adds": 8,
+      "relative_save": 0.043478,
+      "survives_to_sha512": false,
+      "reason": "I is constant and can be folded into K[0..7] of the outer first 8 rounds (8 adds). \u03c3 on the outer schedule still needs the resolved inner digest. This is a <0.2% exact-add save."
+    },
+    {
+      "params": "arx8x4r4",
+      "F_primitives": 176,
+      "optimistic_folded_I_adds": 4,
+      "relative_save": 0.022727,
+      "survives_to_sha512": false,
+      "reason": "I is constant and can be folded into K[0..7] of the outer first 8 rounds (8 adds). \u03c3 on the outer schedule still needs the resolved inner digest. This is a <0.2% exact-add save."
+    },
+    {
+      "params": "ch4x8r4",
+      "F_primitives": 224,
+      "optimistic_folded_I_adds": 8,
+      "relative_save": 0.035714,
+      "survives_to_sha512": false,
+      "reason": "I is constant and can be folded into K[0..7] of the outer first 8 rounds (8 adds). \u03c3 on the outer schedule still needs the resolved inner digest. This is a <0.2% exact-add save."
+    },
+    {
+      "params": "ch8x4r8",
+      "F_primitives": 424,
+      "optimistic_folded_I_adds": 4,
+      "relative_save": 0.009434,
+      "survives_to_sha512": false,
+      "reason": "I is constant and can be folded into K[0..7] of the outer first 8 rounds (8 adds). \u03c3 on the outer schedule still needs the resolved inner digest. This is a <0.2% exact-add save."
+    },
+    {
+      "params": "sha8x8r8",
+      "F_primitives": 432,
+      "optimistic_folded_I_adds": 8,
+      "relative_save": 0.018519,
+      "survives_to_sha512": false,
+      "reason": "I is constant and can be folded into K[0..7] of the outer first 8 rounds (8 adds). \u03c3 on the outer schedule still needs the resolved inner digest. This is a <0.2% exact-add save."
+    },
+    {
+      "params": "sha16x8r16",
+      "F_primitives": 848,
+      "optimistic_folded_I_adds": 8,
+      "relative_save": 0.009434,
+      "survives_to_sha512": false,
+      "reason": "I is constant and can be folded into K[0..7] of the outer first 8 rounds (8 adds). \u03c3 on the outer schedule still needs the resolved inner digest. This is a <0.2% exact-add save."
+    },
+    {
+      "params": "sha64r20",
+      "F_primitives": 1160,
+      "optimistic_folded_I_adds": 8,
+      "relative_save": 0.006897,
+      "survives_to_sha512": false,
+      "reason": "I is constant and can be folded into K[0..7] of the outer first 8 rounds (8 adds). \u03c3 on the outer schedule still needs the resolved inner digest. This is a <0.2% exact-add save."
+    },
+    {
+      "params": "sha512",
+      "F_primitives": 5840,
+      "optimistic_folded_I_adds": 8,
+      "relative_save": 0.00137,
+      "survives_to_sha512": false,
+      "reason": "I is constant and can be folded into K[0..7] of the outer first 8 rounds (8 adds). \u03c3 on the outer schedule still needs the resolved inner digest. This is a <0.2% exact-add save."
+    }
+  ],
+  "semigroup": [
+    {
+      "params": "arx4x4r4",
+      "action_bits": 12,
+      "n_generators": 16,
+      "monoid_size": 4001,
+      "overflow": true,
+      "generator_orders": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "collapsed": false
+    }
+  ],
+  "quadratic_invariants": [
+    {
+      "params": "toy8",
+      "ncols": 37,
+      "rank": 36,
+      "null_dim": 1,
+      "nonconstant_invariants": 0,
+      "note": "extra>0 would split the state into a conserved coordinate"
+    },
+    {
+      "params": "toy12",
+      "ncols": 79,
+      "rank": 78,
+      "null_dim": 1,
+      "nonconstant_invariants": 0,
+      "note": "extra>0 would split the state into a conserved coordinate"
+    },
+    {
+      "params": "arx4x4r4",
+      "ncols": 137,
+      "rank": 136,
+      "null_dim": 1,
+      "nonconstant_invariants": 0,
+      "note": "extra>0 would split the state into a conserved coordinate"
+    }
+  ],
+  "dk_linear_complexity": [
+    {
+      "params": "toy8",
+      "n_max": 128,
+      "trials": 4,
+      "lc_bit0": [
+        11,
+        4,
+        11,
+        12
+      ],
+      "lc_mean": 9.5,
+      "random_seq_expect": 64,
+      "note": "If lc stays << n_max/2 as width grows, DK(n) has a short linear recurrence in the iteration index. Birthday-limited orbits on tiny models inflate this; SHA-512 should sit at ~n/2."
+    },
+    {
+      "params": "toy12",
+      "n_max": 128,
+      "trials": 4,
+      "lc_bit0": [
+        21,
+        65,
+        64,
+        65
+      ],
+      "lc_mean": 53.75,
+      "random_seq_expect": 64,
+      "note": "If lc stays << n_max/2 as width grows, DK(n) has a short linear recurrence in the iteration index. Birthday-limited orbits on tiny models inflate this; SHA-512 should sit at ~n/2."
+    },
+    {
+      "params": "arx4x4r4",
+      "n_max": 128,
+      "trials": 4,
+      "lc_bit0": [
+        65,
+        64,
+        64,
+        65
+      ],
+      "lc_mean": 64.5,
+      "random_seq_expect": 64,
+      "note": "If lc stays << n_max/2 as width grows, DK(n) has a short linear recurrence in the iteration index. Birthday-limited orbits on tiny models inflate this; SHA-512 should sit at ~n/2."
+    },
+    {
+      "params": "arx4x8r4",
+      "n_max": 64,
+      "trials": 4,
+      "lc_bit0": [
+        32,
+        33,
+        32,
+        32
+      ],
+      "lc_mean": 32.25,
+      "random_seq_expect": 32,
+      "note": "If lc stays << n_max/2 as width grows, DK(n) has a short linear recurrence in the iteration index. Birthday-limited orbits on tiny models inflate this; SHA-512 should sit at ~n/2."
+    },
+    {
+      "params": "arx8x4r4",
+      "n_max": 64,
+      "trials": 4,
+      "lc_bit0": [
+        34,
+        29,
+        33,
+        33
+      ],
+      "lc_mean": 32.25,
+      "random_seq_expect": 32,
+      "note": "If lc stays << n_max/2 as width grows, DK(n) has a short linear recurrence in the iteration index. Birthday-limited orbits on tiny models inflate this; SHA-512 should sit at ~n/2."
+    },
+    {
+      "params": "ch4x8r4",
+      "n_max": 64,
+      "trials": 4,
+      "lc_bit0": [
+        31,
+        32,
+        32,
+        32
+      ],
+      "lc_mean": 31.75,
+      "random_seq_expect": 32,
+      "note": "If lc stays << n_max/2 as width grows, DK(n) has a short linear recurrence in the iteration index. Birthday-limited orbits on tiny models inflate this; SHA-512 should sit at ~n/2."
+    },
+    {
+      "params": "ch8x4r8",
+      "n_max": 64,
+      "trials": 4,
+      "lc_bit0": [
+        33,
+        30,
+        31,
+        32
+      ],
+      "lc_mean": 31.5,
+      "random_seq_expect": 32,
+      "note": "If lc stays << n_max/2 as width grows, DK(n) has a short linear recurrence in the iteration index. Birthday-limited orbits on tiny models inflate this; SHA-512 should sit at ~n/2."
+    },
+    {
+      "params": "sha8x8r8",
+      "n_max": 64,
+      "trials": 4,
+      "lc_bit0": [
+        32,
+        32,
+        32,
+        33
+      ],
+      "lc_mean": 32.25,
+      "random_seq_expect": 32,
+      "note": "If lc stays << n_max/2 as width grows, DK(n) has a short linear recurrence in the iteration index. Birthday-limited orbits on tiny models inflate this; SHA-512 should sit at ~n/2."
+    },
+    {
+      "params": "sha16x8r16",
+      "n_max": 64,
+      "trials": 4,
+      "lc_bit0": [
+        35,
+        33,
+        33,
+        34
+      ],
+      "lc_mean": 33.75,
+      "random_seq_expect": 32,
+      "note": "If lc stays << n_max/2 as width grows, DK(n) has a short linear recurrence in the iteration index. Birthday-limited orbits on tiny models inflate this; SHA-512 should sit at ~n/2."
+    }
+  ],
+  "bitblast": [
+    {
+      "params": "toy8",
+      "F_bitnodes": 528,
+      "F2_bitnodes": 1047,
+      "F2_over_F": 1.983,
+      "note": "add is xor+carry. Ratio ~2 means carries do not cancel across F\u2218F."
+    },
+    {
+      "params": "arx4x4r4",
+      "F_bitnodes": 680,
+      "F2_bitnodes": 1343,
+      "F2_over_F": 1.975,
+      "note": "add is xor+carry. Ratio ~2 means carries do not cancel across F\u2218F."
+    },
+    {
+      "params": "arx4x8r4",
+      "F_bitnodes": 717,
+      "F2_bitnodes": 1385,
+      "F2_over_F": 1.9317,
+      "note": "add is xor+carry. Ratio ~2 means carries do not cancel across F\u2218F."
+    },
+    {
+      "params": "arx8x4r4",
+      "F_bitnodes": 1755,
+      "F2_bitnodes": 3477,
+      "F2_over_F": 1.9812,
+      "note": "add is xor+carry. Ratio ~2 means carries do not cancel across F\u2218F."
+    },
+    {
+      "params": "ch4x8r4",
+      "F_bitnodes": 747,
+      "F2_bitnodes": 1447,
+      "F2_over_F": 1.9371,
+      "note": "add is xor+carry. Ratio ~2 means carries do not cancel across F\u2218F."
+    },
+    {
+      "params": "ch8x4r8",
+      "F_bitnodes": 3981,
+      "F2_bitnodes": 7929,
+      "F2_over_F": 1.9917,
+      "note": "add is xor+carry. Ratio ~2 means carries do not cancel across F\u2218F."
+    },
+    {
+      "params": "sha8x8r8",
+      "F_bitnodes": 4509,
+      "F2_bitnodes": 8953,
+      "F2_over_F": 1.9856,
+      "note": "add is xor+carry. Ratio ~2 means carries do not cancel across F\u2218F."
+    }
+  ],
+  "bdd_closure": [
+    {
+      "params": "toy8",
+      "rows": [
+        {
+          "kind": "F^1",
+          "bits": 8,
+          "per_bit": [
+            72,
+            76,
+            74,
+            74,
+            75,
+            70,
+            70,
+            71
+          ],
+          "mean": 72.75,
+          "max": 76,
+          "unique_nodes_all_bits": 407
+        },
+        {
+          "kind": "F^2",
+          "bits": 8,
+          "per_bit": [
+            73,
+            72,
+            75,
+            70,
+            74,
+            73,
+            75,
+            72
+          ],
+          "mean": 73.0,
+          "max": 75,
+          "unique_nodes_all_bits": 404
+        },
+        {
+          "kind": "DK_2",
+          "bits": 8,
+          "per_bit": [
+            74,
+            72,
+            73,
+            71,
+            72,
+            73,
+            71,
+            70
+          ],
+          "mean": 72.0,
+          "max": 74,
+          "unique_nodes_all_bits": 411
+        },
+        {
+          "kind": "F^4",
+          "bits": 8,
+          "per_bit": [
+            70,
+            74,
+            67,
+            71,
+            73,
+            75,
+            74,
+            72
+          ],
+          "mean": 72.0,
+          "max": 75,
+          "unique_nodes_all_bits": 409
+        },
+        {
+          "kind": "F^8",
+          "bits": 8,
+          "per_bit": [
+            74,
+            75,
+            72,
+            72,
+            71,
+            74,
+            68,
+            73
+          ],
+          "mean": 72.38,
+          "max": 75,
+          "unique_nodes_all_bits": 410
+        },
+        {
+          "kind": "DK_8",
+          "bits": 8,
+          "per_bit": [
+            73,
+            74,
+            72,
+            74,
+            69,
+            73,
+            70,
+            74
+          ],
+          "mean": 72.38,
+          "max": 74,
+          "unique_nodes_all_bits": 410
+        },
+        {
+          "kind": "F^16",
+          "bits": 8,
+          "per_bit": [
+            72,
+            72,
+            69,
+            71,
+            71,
+            74,
+            70,
+            74
+          ],
+          "mean": 71.62,
+          "max": 74,
+          "unique_nodes_all_bits": 398
+        },
+        {
+          "kind": "DK_16",
+          "bits": 8,
+          "per_bit": [
+            70,
+            74,
+            70,
+            71,
+            76,
+            75,
+            73,
+            73
+          ],
+          "mean": 72.75,
+          "max": 76,
+          "unique_nodes_all_bits": 418
+        }
+      ]
+    },
+    {
+      "params": "toy12",
+      "rows": [
+        {
+          "kind": "F^1",
+          "bits": 12,
+          "per_bit": [
+            725,
+            725,
+            739,
+            735,
+            732,
+            728,
+            730,
+            730,
+            735,
+            726,
+            724,
+            727
+          ],
+          "mean": 729.67,
+          "max": 739,
+          "unique_nodes_all_bits": 6310
+        },
+        {
+          "kind": "F^2",
+          "bits": 12,
+          "per_bit": [
+            730,
+            733,
+            721,
+            731,
+            738,
+            730,
+            730,
+            727,
+            730,
+            733,
+            729,
+            733
+          ],
+          "mean": 730.42,
+          "max": 738,
+          "unique_nodes_all_bits": 6311
+        },
+        {
+          "kind": "DK_2",
+          "bits": 12,
+          "per_bit": [
+            736,
+            728,
+            729,
+            730,
+            727,
+            740,
+            737,
+            738,
+            721,
+            727,
+            728,
+            728
+          ],
+          "mean": 730.75,
+          "max": 740,
+          "unique_nodes_all_bits": 6309
+        },
+        {
+          "kind": "F^4",
+          "bits": 12,
+          "per_bit": [
+            735,
+            733,
+            728,
+            736,
+            729,
+            728,
+            732,
+            726,
+            728,
+            725,
+            722,
+            725
+          ],
+          "mean": 728.92,
+          "max": 736,
+          "unique_nodes_all_bits": 6320
+        },
+        {
+          "kind": "F^8",
+          "bits": 12,
+          "per_bit": [
+            727,
+            728,
+            732,
+            723,
+            738,
+            728,
+            724,
+            732,
+            725,
+            739,
+            731,
+            733
+          ],
+          "mean": 730.0,
+          "max": 739,
+          "unique_nodes_all_bits": 6300
+        },
+        {
+          "kind": "DK_8",
+          "bits": 12,
+          "per_bit": [
+            730,
+            726,
+            735,
+            734,
+            729,
+            727,
+            727,
+            732,
+            733,
+            736,
+            732,
+            738
+          ],
+          "mean": 731.58,
+          "max": 738,
+          "unique_nodes_all_bits": 6286
+        },
+        {
+          "kind": "F^16",
+          "bits": 12,
+          "per_bit": [
+            733,
+            732,
+            730,
+            717,
+            716,
+            726,
+            729,
+            730,
+            724,
+            728,
+            726,
+            731
+          ],
+          "mean": 726.83,
+          "max": 733,
+          "unique_nodes_all_bits": 6316
+        },
+        {
+          "kind": "DK_16",
+          "bits": 12,
+          "per_bit": [
+            730,
+            731,
+            734,
+            731,
+            729,
+            723,
+            726,
+            728,
+            727,
+            721,
+            730,
+            736
+          ],
+          "mean": 728.83,
+          "max": 736,
+          "unique_nodes_all_bits": 6306
+        }
+      ]
+    },
+    {
+      "params": "arx4x4r4",
+      "rows": [
+        {
+          "kind": "F^1",
+          "bits": 16,
+          "per_bit": [
+            6619,
+            7729,
+            8293,
+            8282,
+            3278,
+            4508,
+            5623,
+            6404,
+            1759,
+            2365,
+            2459,
+            2711,
+            261,
+            469,
+            732,
+            1741
+          ],
+          "mean": 3952.06,
+          "max": 8293,
+          "unique_nodes_all_bits": 58981
+        },
+        {
+          "kind": "F^2",
+          "bits": 16,
+          "per_bit": [
+            8295,
+            8286,
+            8304,
+            8326,
+            8311,
+            8314,
+            8304,
+            8320,
+            8309,
+            8314,
+            8306,
+            8304,
+            8319,
+            8311,
+            8303,
+            8297
+          ],
+          "mean": 8307.69,
+          "max": 8326,
+          "unique_nodes_all_bits": 107102
+        },
+        {
+          "kind": "DK_2",
+          "bits": 16,
+          "per_bit": [
+            8302,
+            8283,
+            8313,
+            8317,
+            8300,
+            8300,
+            8318,
+            8310,
+            8298,
+            8314,
+            8305,
+            8292,
+            8317,
+            8311,
+            8329,
+            8304
+          ],
+          "mean": 8307.06,
+          "max": 8329,
+          "unique_nodes_all_bits": 106938
+        },
+        {
+          "kind": "F^4",
+          "bits": 16,
+          "per_bit": [
+            8307,
+            8312,
+            8302,
+            8310,
+            8295,
+            8311,
+            8318,
+            8299,
+            8323,
+            8314,
+            8282,
+            8323,
+            8292,
+            8315,
+            8294,
+            8287
+          ],
+          "mean": 8305.25,
+          "max": 8323,
+          "unique_nodes_all_bits": 107135
+        },
+        {
+          "kind": "F^8",
+          "bits": 16,
+          "per_bit": [
+            8317,
+            8327,
+            8305,
+            8309,
+            8298,
+            8293,
+            8309,
+            8296,
+            8298,
+            8298,
+            8311,
+            8298,
+            8300,
+            8291,
+            8303,
+            8319
+          ],
+          "mean": 8304.5,
+          "max": 8327,
+          "unique_nodes_all_bits": 106965
+        },
+        {
+          "kind": "DK_8",
+          "bits": 16,
+          "per_bit": [
+            8292,
+            8300,
+            8310,
+            8290,
+            8301,
+            8322,
+            8307,
+            8316,
+            8332,
+            8311,
+            8289,
+            8299,
+            8307,
+            8291,
+            8304,
+            8303
+          ],
+          "mean": 8304.62,
+          "max": 8332,
+          "unique_nodes_all_bits": 106992
+        },
+        {
+          "kind": "F^16",
+          "bits": 16,
+          "per_bit": [
+            8302,
+            8278,
+            8302,
+            8306,
+            8305,
+            8297,
+            8285,
+            8303,
+            8308,
+            8301,
+            8303,
+            8304,
+            8289,
+            8299,
+            8316,
+            8280
+          ],
+          "mean": 8298.62,
+          "max": 8316,
+          "unique_nodes_all_bits": 107035
+        },
+        {
+          "kind": "DK_16",
+          "bits": 16,
+          "per_bit": [
+            8289,
+            8322,
+            8296,
+            8303,
+            8305,
+            8296,
+            8283,
+            8321,
+            8308,
+            8304,
+            8286,
+            8314,
+            8306,
+            8296,
+            8287,
+            8311
+          ],
+          "mean": 8301.69,
+          "max": 8322,
+          "unique_nodes_all_bits": 107041
+        }
+      ]
+    }
+  ],
+  "_elapsed_s": 25.222
+}
